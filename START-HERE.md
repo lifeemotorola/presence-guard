@@ -92,11 +92,32 @@ locally): **`docs/INSTALL.md`**.
 ├─ cmake/                    obs-plugintemplate build modules
 ├─ CMakeLists.txt            ENABLE_QT + ENABLE_FRONTEND_API wired up
 ├─ CMakePresets.json         windows-x64, macos, ubuntu-x86_64 (+ *-ci) presets
-└─ buildspec.json            targets OBS 31.1.1 headers
+├─ buildspec.json            targets OBS 31.1.1 headers
+└─ local-ai-auto-frame/      the second plugin — see below
 ```
 
 Runtime cost: one 250 ms timer and two atomics. All scene switching happens on
 the Qt main thread; the audio callback never touches OBS state.
+
+## The second plugin: Local AI Auto Frame
+
+`local-ai-auto-frame/` is a **separate plugin** that happens to live in this
+repository. It is an OBS video filter that auto-frames a camera on detected
+faces, using OpenCV 4.10 + the YuNet ONNX model — all local, no cloud call.
+
+It is deliberately independent of Presence Guard:
+
+| | Presence Guard (root) | Local AI Auto Frame (`local-ai-auto-frame/`) |
+|---|---|---|
+| Targets | OBS **31.1.1** headers | OBS **33.0.1** headers |
+| Extra dependency | Qt6 | OpenCV 4.10 (fetched by CI) |
+| Build it | **Actions → Push / Pull Request / Dispatch** | **Actions → Local AI Auto Frame** |
+| Artifact | `presence-guard-<version>-windows-x64-<sha>` | `obs-local-ai-windows-x64` |
+
+Both build on pushes to `main` and on pull requests that touch their own files;
+each has its own `buildspec.json` and `CMakePresets.json`, so bumping one OBS
+version never disturbs the other. Build, install and settings for the filter are
+documented in [`local-ai-auto-frame/README.md`](local-ai-auto-frame/README.md).
 
 ## What I verified here
 

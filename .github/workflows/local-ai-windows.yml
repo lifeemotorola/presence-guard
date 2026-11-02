@@ -1,0 +1,114 @@
+name: Local AI Auto Frame
+
+run-name: Local AI Auto Frame · ${{ github.ref_name }} 🎞️
+
+# Builds the second plugin in this repository (local-ai-auto-frame/) on its own
+# so it can track a different OBS version than Presence Guard at the root.
+# Presence Guard has its own workflows (push/pull-request/dispatch).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'local-ai-auto-frame/**'
+      - '.github/workflows/local-ai-windows.yml'
+  pull_request:
+    paths:
+      - 'local-ai-auto-frame/**'
+      - '.github/workflows/local-ai-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.ref }}'
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # Every step below runs inside the plugin project, not the repository root.
+    working-directory: local-ai-auto-frame
+
+jobs:
+  windows-build:
+    name: Build for Windows 🪟
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: Set Up Environment 🔧
+        id: setup
+        shell: pwsh
+        run: |
+          # Set Up Environment 🔧
+          if ( $Env:RUNNER_DEBUG -ne $null ) {
+            Set-PSDebug -Trace 1
+          }
+
+          $BuildSpec = Get-Content -Path buildspec.json -Raw | ConvertFrom-Json
+          "pluginName=$($BuildSpec.name)" >> $env:GITHUB_OUTPUT
+          "pluginVersion=$($BuildSpec.version)" >> $env:GITHUB_OUTPUT
+
+      # The plugin links OpenCV (objdetect + dnn for the YuNet face detector).
+      # OBS's dependency bundle does not ship it, so fetch the official build.
+      - name: Install OpenCV 🧠
+        shell: pwsh
+        run: |
+          # Install OpenCV 🧠
+          $zip = "$env:RUNNER_TEMP\opencv.exe"
+          $root = "$env:RUNNER_TEMP\opencv"
+          Invoke-WebRequest -Uri 'https://github.com/opencv/opencv/releases/download/4.10.0/opencv-4.10.0-windows.exe' -OutFile $zip
+          7z x $zip "-o$root" -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Could not extract OpenCV' }
+          if (!(Test-Path "$root\opencv\build\OpenCVConfig.cmake")) { throw 'OpenCV config not found' }
+          "OpenCV_DIR=$root\opencv\build" >> $env:GITHUB_ENV
+
+      - name: Configure ⚙️
+        shell: pwsh
+        run: |
+          # Configure ⚙️ (this also downloads the OBS 33.0.1 headers, obs-deps and
+          # Qt6, then builds libobs, so the first run takes several minutes)
+          cmake --preset windows-x64 "-DOpenCV_DIR=$env:OpenCV_DIR"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build 🧱
+        shell: pwsh
+        run: |
+          # Build 🧱
+          cmake --build --preset windows-x64 --config RelWithDebInfo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Assemble Package 📦
+        shell: pwsh
+        run: |
+          # Assemble Package 📦
+          $install = "$env:RUNNER_TEMP\install"
+          cmake --install build_x64 --config RelWithDebInfo --prefix $install
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $package = "$install\${{ steps.setup.outputs.pluginName }}"
+          if (!(Test-Path "$package\bin\64bit\${{ steps.setup.outputs.pluginName }}.dll")) {
+            throw "Plugin DLL missing from $package"
+          }
+
+          # OpenCV's runtime DLLs have to travel with the plugin.
+          $opencv = Get-ChildItem "$env:OpenCV_DIR\x64\vc16\bin" -Filter 'opencv_world*.dll' |
+            Where-Object { $_.Name -notmatch 'd\.dll$' }
+          if (!$opencv) { throw 'OpenCV runtime DLL not found' }
+          $opencv | Copy-Item -Destination "$package\bin\64bit"
+
+          Copy-Item windows\Install.ps1, windows\Uninstall.ps1 $package
+
+          Get-ChildItem $package -Recurse -File |
+            ForEach-Object { $_.FullName.Replace("$install\", '') } |
+            Sort-Object |
+            Write-Host
+
+      - name: Upload Artifact 📡
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.setup.outputs.pluginName }}-windows-x64
+          path: ${{ runner.temp }}/install/${{ steps.setup.outputs.pluginName }}/
+          if-no-files-found: error
