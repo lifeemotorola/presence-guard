@@ -82,17 +82,19 @@ the Qt main thread; the audio callback never touches OBS state.
 
 ## What I verified here
 
-* `src/*.cpp` compiles clean with `-Wall -Wextra`.
+* `src/*.cpp` compiles clean with `-Wall -Wextra` (g++ 12, Qt 6.8.3).
 * `./tests/run-tests.sh` links the **real** `presence-guard.cpp` against a fake
-  libobs and drives the real poll timer: every check passes — AFK park/restore,
-  the only-while-live gate, dead air, a meter that produces no data (must *not*
-  be read as silence), operator overrides, a deleted scene, and a settings
-  save/load round trip.
-* `clang-format` and `gersemi` are clean on every file the CI format check looks
-  at, and the workflow YAML parses.
+  libobs and drives the real 250 ms poll timer: **27/27 checks pass** — AFK
+  park/restore, the only-while-live gate, dead air, a meter that produces no data
+  (must *not* be read as silence), operator overrides, a deleted scene, and a
+  settings save/load round trip.
+* `clang-format` 19 and `gersemi` are clean on every file the CI format check
+  looks at, and the workflow YAML parses.
+* The pull-request run of this repository's own CI built the plugin on the
+  Windows, macOS and Ubuntu runners and uploaded the artifacts.
 
-What I could not do: compile the Windows/MSVC binary and click through a live
-OBS here. That is exactly what the GitHub Actions run above does.
+What I could not do: run the resulting DLL inside a live OBS here. That is the
+one step left to you — step 5 above.
 
 ## Likely first two snags
 

@@ -88,10 +88,17 @@ Settings live in the current OBS profile (`basic.ini`, section
 ```
 
 The harness links the real `src/presence-guard.cpp` against a fake libobs
-(`tests/stubs`) and drives the actual 250 ms poll timer, covering: AFK
+(`tests/stubs`) and drives the actual 250 ms poll timer through 27 checks: AFK
 park/restore, the only-while-live gate, dead air, a meter that produces no data,
 operator overrides, a missing scene, and a config save/load round trip. It needs
 a C++17 compiler and Qt6 Core headers; it does not need OBS.
+
+Qt is found through `pkg-config` (`qt6-base-dev` on Debian/Ubuntu,
+`brew install qt6` on macOS), or point the script at an installation yourself:
+
+```sh
+QTDIR=$HOME/Qt/6.8.3/gcc_64 ./tests/run-tests.sh
+```
 
 ## License
 

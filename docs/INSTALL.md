@@ -121,6 +121,32 @@ default SDK.
 
 ---
 
+## Route C — build and test it on Linux
+
+The Linux build works too (the AFK rule is a no-op there, because idle time is
+only implemented for Windows and macOS, so only the dead-air rule runs).
+
+```bash
+sudo add-apt-repository --yes ppa:obsproject/obs-studio
+sudo apt update
+sudo apt install build-essential cmake ninja-build qt6-base-dev obs-studio
+
+cmake --preset ubuntu-x86_64
+cmake --build --preset ubuntu-x86_64
+sudo cmake --install build_x86_64
+```
+
+The plugin lands in `/usr/lib/<arch>-linux-gnu/obs-plugins/` with its data in
+`/usr/share/obs/obs-plugins/presence-guard/`.
+
+You do not need OBS, or a full plugin build, to run the state machine tests:
+
+```bash
+./tests/run-tests.sh            # uses pkg-config, or QTDIR=/path/to/qt6
+```
+
+---
+
 ## Troubleshooting
 
 **The dock isn't in the Docks menu.** The plugin didn't load. Check the current
