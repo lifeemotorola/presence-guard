@@ -45,11 +45,45 @@ You need CMake 3.28+ and an OpenCV 4.8+ Windows package (the official
    powershell -ExecutionPolicy Bypass -File .\Install.ps1
    ```
 
-   It copies `bin\` and `data\` to
-   `%APPDATA%\obs-studio\plugins\obs-local-ai\` and refuses to run while OBS is
-   open or if that folder already exists. `Uninstall.ps1` removes it again.
+   It installs to `C:\ProgramData\obs-studio\plugins\obs-local-ai\`:
+
+   ```
+   C:\ProgramData\obs-studio\plugins\obs-local-ai\obs-local-ai.dll
+   C:\ProgramData\obs-studio\plugins\obs-local-ai\opencv_world4100.dll
+   C:\ProgramData\obs-studio\plugins\obs-local-ai\data\face_detection_yunet_2023mar.onnx
+   C:\ProgramData\obs-studio\plugins\obs-local-ai\data\locale\en-US.ini
+   ```
+
+   On OBS **32 or older** add `-LegacyLayout`, which puts the DLL in
+   `obs-local-ai\bin\64bit\` instead — those versions only look there.
+   `Uninstall.ps1` removes either layout.
 3. Restart OBS and add the filter: right-click a camera source → **Filters** →
    **+** → **Local AI Auto Frame**.
+
+### Why the DLL is not in `%APPDATA%`
+
+OBS 33 changed plugin discovery. It scans, in this order:
+
+| Location | Layout |
+|---|---|
+| `C:\ProgramData\obs-studio\plugins\<name>\` | `<name>.dll` + `data\` (current) |
+| `C:\ProgramData\obs-studio\plugins\<name>\bin\64bit\` | any `*.dll` + `..\..\data\` (legacy) |
+| `<OBS install>\obs-plugins\64bit\` | portable / bundled plugins |
+| `%APPDATA%\obs-studio\plugins\<name>\` | **only when `OBS_PLUGINS_PATH` is set** |
+
+That last row is the trap: the per-user folder is no longer scanned on its own,
+so a plugin copied there installs silently and then does nothing — no error, no
+log line, no filter. If an older version of this package left a copy there, the
+installer now deletes it.
+
+### If the filter still doesn't appear
+
+**Help → Log Files → View Current Log** should contain a
+`[Local AI] module loaded` line from this plugin. If it doesn't, the module was
+never loaded: check that the folder is named exactly `obs-local-ai`, that the DLL
+inside has the same name, and that `opencv_world4100.dll` sits next to it. Then
+make sure the source you are adding it to is a camera/capture device (the filter
+is an async-video filter; it will not show up for sync sources).
 
 ## Settings
 

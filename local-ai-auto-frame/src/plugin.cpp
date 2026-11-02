@@ -244,5 +244,8 @@ bool obs_module_load(void)
 	info.get_properties = properties;
 	info.filter_video = video;
 	obs_register_source(&info);
+	/* Say so in obs-studio/logs: without this line a plugin that OBS never
+	 * discovered is indistinguishable from one that failed to register. */
+	blog(LOG_INFO, "[Local AI] module loaded, filter id 'local_ai_auto_frame'");
 	return true;
 }
