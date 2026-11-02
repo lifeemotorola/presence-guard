@@ -7,27 +7,24 @@ a Windows runner. Use it unless you specifically want a local toolchain.
 
 ## Route A — build it in the cloud (recommended, ~10 minutes)
 
-You need a GitHub account. Nothing else.
+You need a GitHub account. Nothing else — this repository already contains the
+workflows (`.github/workflows/`) and the build spec (`buildspec.json`) the
+runners need.
 
-### 1. Create an empty repository
+### 1. Push the repository
 
-Go to <https://github.com/new>, name it `presence-guard`, **don't** add a README
-or .gitignore, and create it.
-
-### 2. Push this folder to it
-
-In Git Bash (or PowerShell, with Git installed), from the `presence-guard`
-folder:
+In Git Bash (or PowerShell, with Git installed), from the repository root:
 
 ```bash
-git branch -M main
-git remote add origin https://github.com/YOUR-USERNAME/presence-guard.git
-git push -u origin main
+git push origin main
 ```
 
 If Git asks for a password, use a Personal Access Token
 (<https://github.com/settings/tokens> → *Fine-grained tokens* → repository
 access: *Contents: Read and write*), or use GitHub Desktop instead.
+
+To build from a branch without merging, push the branch and open a pull request
+against `main`; the pull-request run builds Windows, macOS and Ubuntu as well.
 
 ### 3. Wait for the build
 
@@ -121,6 +118,32 @@ Then restart OBS and enable the dock.
 (check `C:\Program Files (x86)\Windows Kits\10\Include\` for the version numbers
 you have). For a one-off, `cmake --preset windows-x64 -A x64` also works with the
 default SDK.
+
+---
+
+## Route C — build and test it on Linux
+
+The Linux build works too (the AFK rule is a no-op there, because idle time is
+only implemented for Windows and macOS, so only the dead-air rule runs).
+
+```bash
+sudo add-apt-repository --yes ppa:obsproject/obs-studio
+sudo apt update
+sudo apt install build-essential cmake ninja-build qt6-base-dev obs-studio
+
+cmake --preset ubuntu-x86_64
+cmake --build --preset ubuntu-x86_64
+sudo cmake --install build_x86_64
+```
+
+The plugin lands in `/usr/lib/<arch>-linux-gnu/obs-plugins/` with its data in
+`/usr/share/obs/obs-plugins/presence-guard/`.
+
+You do not need OBS, or a full plugin build, to run the state machine tests:
+
+```bash
+./tests/run-tests.sh            # uses pkg-config, or QTDIR=/path/to/qt6
+```
 
 ---
 
