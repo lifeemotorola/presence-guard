@@ -7,6 +7,7 @@
 !/cmake
 !/data
 !/docs
+!/local-ai-auto-frame
 !/src
 !/tests
 !.clang-format
