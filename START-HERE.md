@@ -17,6 +17,24 @@ profile.
 
 ---
 
+## Where is the `.dll`?
+
+**Not in the repository, and it never will be.** `presence-guard.dll` is a build
+output: it's compiled on a GitHub runner and published as a *workflow artifact*,
+which is a separate download from the source files. Browsing the **Code** tab
+will never show it. You want:
+
+**Actions → the newest run → scroll to the bottom → Artifacts**
+
+Direct link to the run that already built it:
+
+<https://github.com/lifeemotorola/presence-guard/actions/runs/41464475516>
+
+Look for `presence-guard-0.1.0-windows-x64-650635120` (587 KB). Note the
+double-zip: the artifact is a `.zip` that contains
+`presence-guard-0.1.0-windows-x64.zip`, which is what holds the `presence-guard`
+folder. Extract both.
+
 ## Get the `.dll` (no compiler needed, ~10 minutes)
 
 I can't build a Windows binary from this Linux sandbox — MSVC isn't here — so the
