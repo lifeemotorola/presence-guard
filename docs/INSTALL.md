@@ -7,27 +7,24 @@ a Windows runner. Use it unless you specifically want a local toolchain.
 
 ## Route A — build it in the cloud (recommended, ~10 minutes)
 
-You need a GitHub account. Nothing else.
+You need a GitHub account. Nothing else — this repository already contains the
+workflows (`.github/workflows/`) and the build spec (`buildspec.json`) the
+runners need.
 
-### 1. Create an empty repository
+### 1. Push the repository
 
-Go to <https://github.com/new>, name it `presence-guard`, **don't** add a README
-or .gitignore, and create it.
-
-### 2. Push this folder to it
-
-In Git Bash (or PowerShell, with Git installed), from the `presence-guard`
-folder:
+In Git Bash (or PowerShell, with Git installed), from the repository root:
 
 ```bash
-git branch -M main
-git remote add origin https://github.com/YOUR-USERNAME/presence-guard.git
-git push -u origin main
+git push origin main
 ```
 
 If Git asks for a password, use a Personal Access Token
 (<https://github.com/settings/tokens> → *Fine-grained tokens* → repository
 access: *Contents: Read and write*), or use GitHub Desktop instead.
+
+To build from a branch without merging, push the branch and open a pull request
+against `main`; the pull-request run builds Windows, macOS and Ubuntu as well.
 
 ### 3. Wait for the build
 
