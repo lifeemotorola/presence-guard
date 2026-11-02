@@ -38,13 +38,19 @@ downloads the OBS headers, prebuilt deps and Qt the first time).
 
 ### 4. Download the artifact
 
+> **The `.dll` is not in the repository.** It is a build output, so it exists
+> only as a workflow artifact on a finished Actions run — never in the **Code**
+> tab and never in a clone. Artifacts sit at the **bottom of the run summary
+> page**, under the *Artifacts* heading.
+
 On the finished run page, scroll to **Artifacts** and download
 
 ```
 presence-guard-0.1.0-windows-x64-<commit>
 ```
 
-It arrives as a `.zip`; inside it is `presence-guard-0.1.0-windows-x64.zip`.
+It arrives as a `.zip`; inside it is `presence-guard-0.1.0-windows-x64.zip` —
+that is the second zip you have to extract before you see the folder.
 
 ### 5. Install it
 
