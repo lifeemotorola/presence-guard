@@ -9,6 +9,7 @@
 !/docs
 !/local-ai-auto-frame
 !/auto-director
+!/obs-beautifier
 !/src
 !/tests
 !.clang-format
@@ -34,4 +35,5 @@
 /build_*
 /build_tests
 /auto-director/build_tests
+/obs-beautifier/build_tests
 /release
