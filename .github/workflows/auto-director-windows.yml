@@ -1,0 +1,113 @@
+name: Auto Director
+
+run-name: Auto Director · ${{ github.ref_name }} 🎬
+
+# Builds the third plugin in this repository (auto-director/) on its own so it
+# can track a different OBS version than Presence Guard at the root. Presence
+# Guard and Local AI Auto Frame have their own workflows.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'auto-director/**'
+      - '.github/workflows/auto-director-windows.yml'
+  pull_request:
+    paths:
+      - 'auto-director/**'
+      - '.github/workflows/auto-director-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.ref }}'
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # Every step below runs inside the plugin project, not the repository root.
+    working-directory: auto-director
+
+jobs:
+  policy-tests:
+    name: Policy Tests 🧪
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      # The directing policy has no libobs and no Qt dependencies, so it can be
+      # exercised directly: synthetic microphones, a fake clock, no OBS.
+      - name: Run Policy Tests 🧪
+        run: ./tests/run-tests.sh
+
+  windows-build:
+    name: Build for Windows 🪟
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: Set Up Environment 🔧
+        id: setup
+        shell: pwsh
+        run: |
+          # Set Up Environment 🔧
+          if ( $Env:RUNNER_DEBUG -ne $null ) {
+            Set-PSDebug -Trace 1
+          }
+
+          $BuildSpec = Get-Content -Path buildspec.json -Raw | ConvertFrom-Json
+          "pluginName=$($BuildSpec.name)" >> $env:GITHUB_OUTPUT
+          "pluginVersion=$($BuildSpec.version)" >> $env:GITHUB_OUTPUT
+
+      - name: Configure ⚙️
+        shell: pwsh
+        run: |
+          # Configure ⚙️ (this also downloads the OBS 33.0.1 headers, obs-deps and
+          # Qt6, then builds libobs, so the first run takes several minutes)
+          cmake --preset windows-x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build 🧱
+        shell: pwsh
+        run: |
+          # Build 🧱
+          cmake --build --preset windows-x64 --config RelWithDebInfo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Assemble Package 📦
+        shell: pwsh
+        run: |
+          # Assemble Package 📦
+          $install = "$env:RUNNER_TEMP\install"
+          cmake --install build_x64 --config RelWithDebInfo --prefix $install
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $package = "$install\${{ steps.setup.outputs.pluginName }}"
+          if (!(Test-Path "$package\bin\64bit\${{ steps.setup.outputs.pluginName }}.dll")) {
+            throw "Plugin DLL missing from $package"
+          }
+
+          # The dock's strings have to travel with the plugin or it loads with
+          # blank labels.
+          if (!(Test-Path "$package\data\locale\en-US.ini")) {
+            throw 'Locale data is missing from the package.'
+          }
+
+          Copy-Item windows\Install.ps1, windows\Uninstall.ps1 $package
+
+          Get-ChildItem $package -Recurse -File |
+            ForEach-Object { $_.FullName.Replace("$install\", '') } |
+            Sort-Object |
+            Write-Host
+
+      - name: Upload Artifact 📡
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.setup.outputs.pluginName }}-windows-x64
+          path: ${{ runner.temp }}/install/${{ steps.setup.outputs.pluginName }}/
+          if-no-files-found: error
