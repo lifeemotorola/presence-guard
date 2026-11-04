@@ -8,6 +8,7 @@
 !/data
 !/docs
 !/local-ai-auto-frame
+!/auto-director
 !/src
 !/tests
 !.clang-format
@@ -32,4 +33,5 @@
 # Exclude build output
 /build_*
 /build_tests
+/auto-director/build_tests
 /release

@@ -93,7 +93,8 @@ locally): **`docs/INSTALL.md`**.
 ├─ CMakeLists.txt            ENABLE_QT + ENABLE_FRONTEND_API wired up
 ├─ CMakePresets.json         windows-x64, macos, ubuntu-x86_64 (+ *-ci) presets
 ├─ buildspec.json            targets OBS 31.1.1 headers
-└─ local-ai-auto-frame/      the second plugin — see below
+├─ local-ai-auto-frame/      the second plugin — see below
+└─ auto-director/            the third plugin — see below
 ```
 
 Runtime cost: one 250 ms timer and two atomics. All scene switching happens on
@@ -118,6 +119,28 @@ Both build on pushes to `main` and on pull requests that touch their own files;
 each has its own `buildspec.json` and `CMakePresets.json`, so bumping one OBS
 version never disturbs the other. Build, install and settings for the filter are
 documented in [`local-ai-auto-frame/README.md`](local-ai-auto-frame/README.md).
+
+## The third plugin: Auto Director
+
+`auto-director/` is the advanced one: a dock that **runs the camera cuts while
+you talk**. Each *take* is a scene plus the microphone of the person on that
+camera; the director watches one volume meter per take and cuts to the loudest
+speaker, with a hysteresis margin so two similar microphones stop ping-ponging,
+a dwell time so a cough cannot steal the shot, an optional lobby scene after
+long silence, and a hold that always hands control back to you when you change
+the scene yourself.
+
+| | Auto Director (`auto-director/`) |
+|---|---|
+| Targets | OBS **33.0.1** headers + Qt6 |
+| Extra dependency | none |
+| Build it | **Actions → Auto Director** |
+| Artifact | `obs-auto-director-windows-x64` |
+| Tests | `./tests/run-tests.sh` — the policy runs without OBS or Qt, 39 checks |
+
+It is the only one of the three with a **dry run** mode: it logs every cut it
+would have made, with the reason, without touching the live scene. Full details
+in [`auto-director/README.md`](auto-director/README.md).
 
 ## What I verified here
 
