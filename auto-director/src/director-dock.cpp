@@ -75,6 +75,22 @@ static bool pickAudioSource(obs_scene_t *scene, obs_sceneitem_t *item, void *par
 	return (flags & OBS_SOURCE_VIDEO) == 0;
 }
 
+/* The microphone inside a scene, if it has one. */
+static std::string audioInsideScene(const std::string &sceneName)
+{
+	std::string out;
+
+	obs_source_t *scene = sceneName.empty() ? nullptr : obs_get_source_by_name(sceneName.c_str());
+	if (scene) {
+		obs_scene_t *sceneData = obs_scene_from_source(scene);
+		if (sceneData)
+			obs_scene_enum_items(sceneData, pickAudioSource, &out);
+		obs_source_release(scene);
+	}
+
+	return out;
+}
+
 DirectorDock::DirectorDock(Director *director, QWidget *parent) : QWidget(parent), director_(director)
 {
 	buildUi();
@@ -328,7 +344,8 @@ void DirectorDock::buildUi()
 			 [pushNumbers](int) { pushNumbers(); });
 
 	QObject::connect(addButton_, &QPushButton::clicked, [this]() {
-		addTake(sceneNames().value(0), QString());
+		const QString scene = sceneNames().value(0);
+		addTake(scene, QString::fromStdString(audioInsideScene(scene.toStdString())));
 		reloadTable();
 	});
 
@@ -356,14 +373,9 @@ void DirectorDock::buildUi()
 			if (already)
 				continue;
 
-			std::string audio;
-			obs_scene_t *sceneData = obs_scene_from_source(scene);
-			if (sceneData)
-				obs_scene_enum_items(sceneData, pickAudioSource, &audio);
-
 			director::Take take;
 			take.scene = sceneName;
-			take.source = audio;
+			take.source = audioInsideScene(sceneName);
 			take.enabled = true;
 			takes.push_back(take);
 		}
