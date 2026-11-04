@@ -10,6 +10,7 @@
 !/local-ai-auto-frame
 !/auto-director
 !/obs-beautifier
+!/hype-clip
 !/src
 !/tests
 !.clang-format
@@ -36,4 +37,5 @@
 /build_tests
 /auto-director/build_tests
 /obs-beautifier/build_tests
+/hype-clip/build_tests
 /release

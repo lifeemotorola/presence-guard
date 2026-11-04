@@ -95,7 +95,8 @@ locally): **`docs/INSTALL.md`**.
 ├─ buildspec.json            targets OBS 31.1.1 headers
 ├─ local-ai-auto-frame/      the second plugin — see below
 ├─ auto-director/            the third plugin — see below
-└─ obs-beautifier/           the fourth plugin — see below
+├─ obs-beautifier/           the fourth plugin — see below
+└─ hype-clip/                the fifth plugin — see below
 ```
 
 Runtime cost: one 250 ms timer and two atomics. All scene switching happens on
@@ -161,6 +162,26 @@ works on light and dark themes alike.
 | Tests | `./tests/run-tests.sh` — the look is pure C++, 91 checks |
 
 Details in [`obs-beautifier/README.md`](obs-beautifier/README.md).
+
+## The fifth plugin: Hype Clip
+
+`hype-clip/` clips your hype moments before you can reach for the hotkey. It
+listens to every audio source, keeps a running baseline of how loud the stream
+normally is, and asks OBS's replay buffer for a clip when something is loud, loud
+*for this stream*, and stays that way — so a gunfight does not clip itself twenty
+times, but the scream does. A big **Clip that** button and hotkey cover the rest,
+and every clip lands in the dock with its score, a copy-path button and a
+delete-file button.
+
+| | Hype Clip (`hype-clip/`) |
+|---|---|
+| Targets | OBS **33.0.1** headers + Qt6 |
+| Needs | the replay buffer on (Settings → Output) |
+| Build it | **Actions → Hype Clip** |
+| Artifact | `obs-hype-clip-windows-x64` |
+| Tests | `./tests/run-tests.sh` — the detector is pure C++, 46 checks |
+
+Details in [`hype-clip/README.md`](hype-clip/README.md).
 
 ## What I verified here
 
