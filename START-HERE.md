@@ -94,7 +94,8 @@ locally): **`docs/INSTALL.md`**.
 ├─ CMakePresets.json         windows-x64, macos, ubuntu-x86_64 (+ *-ci) presets
 ├─ buildspec.json            targets OBS 31.1.1 headers
 ├─ local-ai-auto-frame/      the second plugin — see below
-└─ auto-director/            the third plugin — see below
+├─ auto-director/            the third plugin — see below
+└─ obs-beautifier/           the fourth plugin — see below
 ```
 
 Runtime cost: one 250 ms timer and two atomics. All scene switching happens on
@@ -141,6 +142,25 @@ the scene yourself.
 It is the only one of the three with a **dry run** mode: it logs every cut it
 would have made, with the reason, without touching the live scene. Full details
 in [`auto-director/README.md`](auto-director/README.md).
+
+## The fourth plugin: OBS Beautifier
+
+`obs-beautifier/` changes how OBS itself looks. It generates a Qt stylesheet and
+appends it to the one your active theme installed - accent colour, corner
+radius, density, font size and a few details - so the theme keeps working
+underneath and **Revert** (or unloading the module) restores OBS exactly. Every
+colour is derived from OBS's own palette and checked for WCAG contrast, so it
+works on light and dark themes alike.
+
+| | OBS Beautifier (`obs-beautifier/`) |
+|---|---|
+| Targets | OBS **33.0.1** headers + Qt6 |
+| Extra dependency | none |
+| Build it | **Actions → OBS Beautifier** |
+| Artifact | `obs-beautifier-windows-x64` |
+| Tests | `./tests/run-tests.sh` — the look is pure C++, 91 checks |
+
+Details in [`obs-beautifier/README.md`](obs-beautifier/README.md).
 
 ## What I verified here
 
