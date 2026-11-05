@@ -96,7 +96,8 @@ locally): **`docs/INSTALL.md`**.
 ├─ local-ai-auto-frame/      the second plugin — see below
 ├─ auto-director/            the third plugin — see below
 ├─ obs-beautifier/           the fourth plugin — see below
-└─ hype-clip/                the fifth plugin — see below
+├─ hype-clip/                the fifth plugin — see below
+└─ auto-scene/               the sixth plugin — see below
 ```
 
 Runtime cost: one 250 ms timer and two atomics. All scene switching happens on
@@ -182,6 +183,28 @@ delete-file button.
 | Tests | `./tests/run-tests.sh` — the detector is pure C++, 46 checks |
 
 Details in [`hype-clip/README.md`](hype-clip/README.md).
+
+## The sixth plugin: Auto Scene Adjust
+
+`auto-scene/` puts scenes back the way they should be. It measures every source
+in the scene against the canvas and says what is wrong — off canvas, cut off,
+tiny, stretched, rotated, locked — then fixes it: **Fit** (all of it visible),
+**Fill** (covers the frame), **Centre** (its own size again) or **Stretch**.
+
+Adopted sources are placed again by themselves when the canvas changes size
+(16:9 → 9:16 is the classic disaster, and every scene is fixed, not just the one
+on screen) or when a browser source comes back at another resolution. Three
+layout presets — grid, side by side, main + cam — with one step of undo.
+
+| | Auto Scene Adjust (`auto-scene/`) |
+|---|---|
+| Targets | OBS **33.0.1** headers + Qt6 |
+| Changes | ordinary OBS transforms: nothing hidden in the scene collection |
+| Build it | **Actions → Auto Scene Adjust** |
+| Artifact | `obs-auto-scene-windows-x64` |
+| Tests | `./tests/run-tests.sh` — the geometry is pure C++, 120 checks |
+
+Details in [`auto-scene/README.md`](auto-scene/README.md).
 
 ## What I verified here
 
