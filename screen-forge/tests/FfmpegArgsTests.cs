@@ -105,7 +105,7 @@ public class FfmpegArgsTests
 
         string qsv = Join(FfmpegArgs.Encoder(Request(EncoderKind.Qsv, fps: 30)));
         Assert.Contains("-c:v h264_qsv", qsv);
-        Assert.Contains("-pix_fmt nv12", qsv, "Quick Sync wants nv12");
+        Assert.True(qsv.Contains("-pix_fmt nv12"), "Quick Sync wants nv12");
     }
 
     [Fact]

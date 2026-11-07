@@ -33,7 +33,7 @@ public class PresetsTests
     [Fact]
     public void TinyAndEnormousAreasStayInsideSaneLimits()
     {
-        Assert.Equal(1200, Presets.BitrateKbps(320, 240, 15, QualityPreset.Low), "never below watchable");
+        Assert.True(Presets.BitrateKbps(320, 240, 15, QualityPreset.Low) == 1200, "never below watchable");
         Assert.True(Presets.BitrateKbps(7680, 4320, 144, QualityPreset.Maximum) <= 80000, "never absurd");
     }
 

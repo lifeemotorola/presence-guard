@@ -47,9 +47,9 @@ Encoders:
         var available = EncoderProbe.Parse(Sample);
         List<string> candidates = EncoderProbe.Candidates(EncoderKind.Auto, available);
 
-        Assert.Equal(FfmpegArgs.EncoderNvenc, candidates[0], "an NVIDIA card is the best default");
+        Assert.True(candidates[0] == FfmpegArgs.EncoderNvenc, "an NVIDIA card is the best default");
         Assert.Contains(FfmpegArgs.EncoderX264, candidates);
-        Assert.Equal(FfmpegArgs.EncoderX264, candidates[candidates.Count - 1], "software is the last resort");
+        Assert.True(candidates[candidates.Count - 1] == FfmpegArgs.EncoderX264, "software is the last resort");
     }
 
     [Fact]
