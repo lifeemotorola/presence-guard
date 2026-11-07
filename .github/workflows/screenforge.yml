@@ -43,7 +43,54 @@ jobs:
       # file that opens and plays badly — the kind of bug nobody notices until
       # the recording that mattered. These tests are the cheap place to catch it.
       - name: Run Logic Tests 🧪
-        run: dotnet test screen-forge/tests/ScreenForge.Tests.csproj --configuration Release --logger "console;verbosity=normal"
+        id: tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet test screen-forge/tests/ScreenForge.Tests.csproj \
+            --configuration Release \
+            --nologo \
+            --logger "console;verbosity=normal" \
+            --logger "trx;LogFileName=results.trx" \
+            --results-directory "$RUNNER_TEMP/results" 2>&1 | tee "$RUNNER_TEMP/tests.log"
+
+      # A failing test run prints the reason in the middle of four hundred lines
+      # of build output, and GitHub hides the log behind a click. These turn each
+      # test run that fails into one annotation per failure, on the run summary.
+      - name: Explain Failures 📣
+        if: steps.tests.outcome == 'failure'
+        shell: bash
+        run: |
+          trx="$RUNNER_TEMP/results/results.trx"
+
+          if [ ! -f "$trx" ]; then
+            echo "::error::No test results file — the project did not build. Last lines:"
+            tail -20 "$RUNNER_TEMP/tests.log"
+            exit 1
+          fi
+
+          python3 - "$trx" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          namespace = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          root = ET.parse(sys.argv[1]).getroot()
+
+          failures = 0
+          for result in root.iterfind(".//t:UnitTestResult", namespace):
+              if result.get("outcome") != "Failed":
+                  continue
+              failures += 1
+              message = result.find(".//t:Message", namespace)
+              text = " ".join((message.text or "").split())[:350] if message is not None else ""
+              name = (result.get("testName") or "").split(".")[-1]
+              print(f"::error title={name}::{text}")
+
+          print(f"::error::{failures} test(s) failed — the command lines or the numbers are wrong, not the runner.")
+          PY
+
+          exit 1
 
   build:
     name: Build Windows App 🧱
