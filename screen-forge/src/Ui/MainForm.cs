@@ -1,6 +1,6 @@
 /*
 ScreenForge
-Copyright (C) 2026 Presence Guard contributors
+Copyright (C) 2026 Emmanuel Suah
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -59,6 +59,8 @@ public partial class MainForm : Form
             "settings.json");
 
         settings = SettingsStore.Load(settingsPath, DefaultOutputFolder());
+
+        FitToScreen();
 
         LoadSettingsIntoUi();
         RefreshSources();
@@ -131,9 +133,32 @@ public partial class MainForm : Form
     {
         Shown += (_, _) =>
         {
+            RelayoutCards();
+
             if (string.IsNullOrEmpty(ffmpegPath))
                 WarnAboutFfmpeg();
         };
+
+        Resize += (_, _) => RelayoutCards();
+    }
+
+    /// <summary>
+    /// Opens at a size that fits the screen it was launched on. The old fixed
+    /// 980×780 window did not fit a 1366×768 laptop once Windows scaled the UI
+    /// to 125%, and the bottom of the window is where the buttons were.
+    /// </summary>
+    private void FitToScreen()
+    {
+        Rectangle area = Screen.PrimaryScreen != null
+            ? Screen.PrimaryScreen.WorkingArea
+            : new Rectangle(0, 0, 1280, 800);
+
+        int width = Math.Min(1080, Math.Max(840, area.Width - 80));
+        int height = Math.Min(820, Math.Max(560, area.Height - 80));
+
+        MinimumSize = new Size(Math.Min(840, width), Math.Min(560, height));
+        ClientSize = new Size(width, height);
+        StartPosition = FormStartPosition.CenterScreen;
     }
 
     private static string DefaultOutputFolder()
@@ -646,10 +671,8 @@ public partial class MainForm : Form
 
     private void SetRecordingUi(bool recording)
     {
-        btnRecord.Text = recording ? "■  Stop and save" : "●  Record";
-        btnRecord.BackColor = recording ? Theme.Danger : Theme.Accent;
-        btnRecord.ForeColor = recording ? Color.White : Color.FromArgb(26, 22, 12);
-        btnRecord.Width = 170;
+        btnRecord.Text = recording ? "■   Stop and save" : "●   Record";
+        btnRecord.Tone = recording ? ButtonTone.Danger : ButtonTone.Primary;
         btnRecord.Enabled = true;
 
         btnPause.Enabled = recording;
@@ -684,7 +707,12 @@ public partial class MainForm : Form
         if (session == null)
         {
             if (lblTimer.Text != "00:00:00" && !busy)
+            {
                 lblTimer.Text = "00:00:00";
+                lblTimer.ForeColor = Theme.Muted;
+                lblEstimate.Text = "";
+            }
+
             return;
         }
 
@@ -700,7 +728,7 @@ public partial class MainForm : Form
         long estimate = Presets.EstimatedBytes(bitrate, elapsed, settings.RecordSystem || settings.RecordMicrophone);
 
         lblTimer.ForeColor = session.Paused ? Theme.Accent : Theme.Text;
-        lblTimer.Text = Clock(elapsed) + (session.Paused ? "  paused" : "  ≈ " + Megabytes(estimate));
+        lblEstimate.Text = session.Paused ? "paused" : "≈ " + Megabytes(estimate);
 
         if (tray != null)
             tray.Text = $"ScreenForge — {(session.Paused ? "paused" : "recording")} {Clock(elapsed)}";

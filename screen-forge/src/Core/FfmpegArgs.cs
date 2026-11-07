@@ -1,6 +1,6 @@
 /*
 ScreenForge
-Copyright (C) 2026 Presence Guard contributors
+Copyright (C) 2026 Emmanuel Suah
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

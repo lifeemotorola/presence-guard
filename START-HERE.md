@@ -236,6 +236,7 @@ asking OBS to get out of the way.
 | | ScreenForge (`screen-forge/`) |
 |---|---|
 | Where | **Actions → ScreenForge** → artifact `screenforge-windows-x64` |
+| Publisher | **Emmanuel Suah** (shows up in the exe's file properties) |
 | Needs | Windows 10/11 x64, and **`ffmpeg.exe` next to the exe** (link below) |
 | Install | none — unzip twice, drop `ffmpeg.exe` beside `ScreenForge.exe`, run it |
 | Hotkeys | **Ctrl+Shift+F9** start/stop, **Ctrl+Shift+F10** pause |
