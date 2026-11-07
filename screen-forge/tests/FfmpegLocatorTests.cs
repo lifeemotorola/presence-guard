@@ -6,10 +6,16 @@ namespace ScreenForge.Tests;
 
 public class FfmpegLocatorTests
 {
-    /* The locator joins folder names with the platform's own separator, so the
-     * expectations have to as well — otherwise these tests only pass on Windows,
-     * and they run on Linux. */
-    private static string Exe(string folder) => Path.Combine(folder, FfmpegLocator.ExecutableName);
+    /* The locator builds its paths with Path.Combine, and on the Linux runner a
+     * backslash is just a character in a folder name. Mirroring the joins keeps
+     * these tests about the search order instead of about the separator. */
+    private static string Exe(params string[] parts)
+    {
+        var all = new string[parts.Length + 1];
+        parts.CopyTo(all, 0);
+        all[parts.Length] = FfmpegLocator.ExecutableName;
+        return Path.Combine(all);
+    }
 
     [Fact]
     public void TheShippedCopyIsLookedForFirst()
@@ -17,22 +23,22 @@ public class FfmpegLocatorTests
         var candidates = FfmpegLocator.Candidates(@"C:\Apps\ScreenForge", @"C:\Users\me\AppData", @"C:\Tools");
 
         Assert.Equal(Exe(@"C:\Apps\ScreenForge"), candidates[0]);
-        Assert.Contains(Exe(@"C:\Apps\ScreenForge\ffmpeg"), candidates);
-        Assert.Contains(Exe(@"C:\Apps\ScreenForge\bin"), candidates);
-        Assert.Contains(Exe(@"C:\Users\me\AppData\ffmpeg"), candidates);
+        Assert.Contains(Exe(@"C:\Apps\ScreenForge", "ffmpeg"), candidates);
+        Assert.Contains(Exe(@"C:\Apps\ScreenForge", "bin"), candidates);
+        Assert.Contains(Exe(@"C:\Users\me\AppData", "ffmpeg"), candidates);
         Assert.Contains(Exe(@"C:\Tools"), candidates);
     }
 
     [Fact]
     public void PathEntriesAreIncludedButNotDuplicated()
     {
-        string separator = Path.PathSeparator.ToString();
-        string path = string.Join(separator, new[] { @"C:\Apps\ScreenForge", @"C:\Tools", "", @"C:\Tools" });
+        string folder = Path.Combine(Path.GetTempPath(), "screenforge-on-path");
+        string path = string.Join(Path.PathSeparator.ToString(), new[] { folder, folder, "" });
 
-        var candidates = FfmpegLocator.Candidates(@"C:\Apps\ScreenForge", null, path);
+        var candidates = FfmpegLocator.Candidates(null, null, path);
 
-        int occurrences = candidates.FindAll(candidate => candidate == Exe(@"C:\Tools")).Count;
-        Assert.Equal(1, occurrences);
+        Assert.Single(candidates);
+        Assert.Equal(Exe(folder), candidates[0]);
     }
 
     [Fact]
