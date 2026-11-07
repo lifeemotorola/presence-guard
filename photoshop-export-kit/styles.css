@@ -1,0 +1,114 @@
+/*
+Export Kit for Photoshop
+Copyright (C) 2026 Presence Guard contributors
+
+Deliberately plain: Photoshop's own colours come through the host theme, and
+nothing here is fixed to a light or dark palette, so the panel looks at home in
+all four Photoshop themes.
+*/
+
+#root {
+	display: flex;
+	flex-direction: column;
+	padding: 10px;
+	font-size: 12px;
+	gap: 10px;
+}
+
+header {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.title {
+	font-size: 14px;
+	font-weight: bold;
+}
+
+.muted {
+	opacity: 0.7;
+}
+
+.section-title {
+	font-size: 10px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	opacity: 0.6;
+	margin-bottom: 4px;
+}
+
+/* slots ------------------------------------------------------------------ */
+
+.group-title {
+	margin: 6px 0 2px 0;
+	font-size: 11px;
+	opacity: 0.75;
+}
+
+.slot-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 1px 0;
+}
+
+.slot-size {
+	font-variant-numeric: tabular-nums;
+	opacity: 0.6;
+	font-size: 11px;
+}
+
+/* options ---------------------------------------------------------------- */
+
+.options {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.notes {
+	margin-top: 6px;
+	color: #d8a24a;
+	font-size: 11px;
+}
+
+/* results ---------------------------------------------------------------- */
+
+.actions {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.result {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 8px;
+	padding: 2px 0;
+	border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+	font-size: 11px;
+}
+
+.result .name {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.result .detail {
+	opacity: 0.65;
+	font-variant-numeric: tabular-nums;
+}
+
+.result.failed .name {
+	color: #d46a6a;
+}

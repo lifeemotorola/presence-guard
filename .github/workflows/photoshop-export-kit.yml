@@ -1,0 +1,112 @@
+name: Export Kit
+
+run-name: Export Kit · ${{ github.ref_name }} 🖼️
+
+# The Photoshop plugin in this repository (photoshop-export-kit/). It has no
+# compiler and no build: it is a folder of HTML and JavaScript, so the work here
+# is running the logic tests and handing back a clean, loadable copy of the
+# plugin folder.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'photoshop-export-kit/**'
+      - '.github/workflows/photoshop-export-kit.yml'
+  pull_request:
+    paths:
+      - 'photoshop-export-kit/**'
+      - '.github/workflows/photoshop-export-kit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.ref }}'
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: photoshop-export-kit
+
+jobs:
+  logic-tests:
+    name: Logic Tests 🧪
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: Set Up Node 🔧
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # The export arithmetic and the crop chooser have no Photoshop in them, so
+      # they run here: document sizes, slot geometry, crop offsets, file names.
+      - name: Run Logic Tests 🧪
+        run: npm test
+
+      # A manifest that does not parse is a plugin that will not load, and the
+      # Developer Tool's error message is not helpful about which line.
+      - name: Check the Manifest 📋
+        run: |
+          node -e '
+            const fs = require("fs");
+            const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+
+            const fail = (message) => { console.error(message); process.exit(1); };
+
+            if (manifest.manifestVersion !== 5) fail("manifestVersion must be 5");
+            if (!manifest.id) fail("the plugin needs an id");
+            if (!manifest.main) fail("the plugin needs a main entry");
+            if (!fs.existsSync(manifest.main)) fail(`main points at a missing file: ${manifest.main}`);
+
+            const hosts = Array.isArray(manifest.host) ? manifest.host : [manifest.host];
+            const photoshop = hosts.find((host) => host && host.app === "PS");
+            if (!photoshop) fail("the plugin does not declare Photoshop as its host");
+            if (!photoshop.minVersion) fail("the Photoshop host needs a minVersion");
+
+            const entrypoints = manifest.entrypoints || [];
+            if (!entrypoints.some((entry) => entry.type === "panel"))
+              fail("the plugin needs a panel entry point");
+
+            for (const icon of manifest.icons || [])
+              if (!fs.existsSync(icon.path)) fail(`icon missing: ${icon.path}`);
+
+            for (const script of ["src/panel.js", "src/core.js", "src/smartcrop.js", "src/photoshop.js"])
+              if (!fs.existsSync(script)) fail(`script missing: ${script}`);
+
+            console.log(`ok: ${manifest.name} ${manifest.version}, Photoshop ${photoshop.minVersion}+`);
+          '
+
+  package:
+    name: Package Plugin 📦
+    runs-on: ubuntu-24.04
+    needs: logic-tests
+    timeout-minutes: 10
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      # Only what Photoshop reads. The tests and package.json stay in the
+      # repository; they have no business inside a plugin bundle.
+      - name: Assemble 📦
+        run: |
+          set -euo pipefail
+          target="${RUNNER_TEMP}/plugin"
+          mkdir -p "$target"
+
+          cp manifest.json index.html styles.css "$target/"
+          cp -r src icons "$target/"
+
+          echo "package contents:"
+          find "$target" -type f | sed "s|$target/||" | sort
+
+      - name: Upload Artifact 📡
+        uses: actions/upload-artifact@v4
+        with:
+          name: photoshop-export-kit-plugin
+          path: ${{ runner.temp }}/plugin/
+          if-no-files-found: error
