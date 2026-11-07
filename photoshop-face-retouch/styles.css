@@ -1,0 +1,312 @@
+/*
+Face Retouch for Photoshop
+Copyright (C) 2026 Emmanuel Suah
+
+A dark studio panel: charcoal surfaces, one amber accent, and the numbers that
+matter set large. Photoshop's own controls (the sliders, the buttons) keep their
+native look — anything that has to feel like Photoshop still does; everything
+that does not have a native equivalent is drawn here.
+
+Colours are written out rather than kept in variables: this file has to render
+in UXP, and a custom property that a given build ignores would leave the panel
+with no colours at all.
+*/
+
+#root {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 14px 12px 16px 12px;
+	background: #12161d;
+	color: #e9eef5;
+	font-size: 12px;
+}
+
+.small {
+	font-size: 11px;
+}
+
+.muted {
+	color: #8b96a6;
+}
+
+.mono {
+	font-family: "Source Code Pro", monospace;
+	font-size: 11px;
+	color: #c8d2df;
+}
+
+.label {
+	font-size: 10px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: #7f8b9c;
+}
+
+.row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.between {
+	justify-content: space-between;
+}
+
+.spaced {
+	margin-top: 10px;
+}
+
+/* header ------------------------------------------------------------------ */
+
+.brand {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding-bottom: 2px;
+}
+
+.mark {
+	width: 30px;
+	height: 30px;
+	border-radius: 9px;
+	background: #1e2732;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.ring {
+	width: 13px;
+	height: 13px;
+	border-radius: 7px;
+	border: 2px solid #f2b23e;
+}
+
+.titles {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.title {
+	font-size: 15px;
+	font-weight: bold;
+	letter-spacing: 0.01em;
+}
+
+/* blocks ------------------------------------------------------------------ */
+
+.block {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px;
+	border-radius: 10px;
+	background: #181e27;
+	border: 1px solid #262f3b;
+}
+
+/* presets ----------------------------------------------------------------- */
+
+.chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.chip {
+	padding: 5px 10px;
+	border-radius: 20px;
+	border: 1px solid #2b3542;
+	background: #1f2732;
+	color: #cdd6e1;
+	font-size: 11px;
+	cursor: pointer;
+}
+
+.chip:hover {
+	background: #26303d;
+	color: #ffffff;
+}
+
+.chip.selected {
+	border-color: #f2b23e;
+	background: #33280f;
+	color: #ffd483;
+}
+
+.blurb {
+	font-size: 11px;
+	color: #8b96a6;
+	min-height: 28px;
+}
+
+/* sliders ----------------------------------------------------------------- */
+
+.read {
+	font-size: 11px;
+	color: #ffd483;
+	font-variant-numeric: tabular-nums;
+}
+
+sp-slider {
+	width: 100%;
+}
+
+/* toggles ----------------------------------------------------------------- */
+
+.toggles {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.toggle {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	padding: 5px 4px;
+	border-radius: 7px;
+	cursor: pointer;
+}
+
+.toggle:hover {
+	background: #1f2732;
+}
+
+.switch {
+	width: 30px;
+	height: 17px;
+	border-radius: 9px;
+	background: #2b3542;
+	border: 1px solid #35404f;
+	position: relative;
+	flex-shrink: 0;
+}
+
+.switch .knob {
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 11px;
+	height: 11px;
+	border-radius: 6px;
+	background: #8b96a6;
+}
+
+.toggle.on .switch {
+	background: #4a3a12;
+	border-color: #f2b23e;
+}
+
+.toggle.on .switch .knob {
+	left: 15px;
+	background: #f2b23e;
+}
+
+.toggle.off .text-block {
+	opacity: 0.5;
+}
+
+.text-block {
+	display: flex;
+	flex-direction: column;
+	gap: 0px;
+}
+
+.t-title {
+	font-size: 12px;
+}
+
+.t-note {
+	font-size: 10px;
+	color: #7f8b9c;
+}
+
+/* preview + actions ------------------------------------------------------- */
+
+.preview-block {
+	padding: 8px 10px;
+}
+
+.preview {
+	font-size: 11px;
+	color: #9aa6b6;
+	font-variant-numeric: tabular-nums;
+}
+
+.actions {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+sp-button {
+	width: 100%;
+}
+
+.status {
+	font-size: 11px;
+	color: #8b96a6;
+	min-height: 15px;
+}
+
+.status.good {
+	color: #4ed18e;
+}
+
+.status.bad {
+	color: #e2574c;
+}
+
+/* report ------------------------------------------------------------------ */
+
+.report {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.report-row {
+	display: flex;
+	align-items: baseline;
+	gap: 7px;
+	font-size: 11px;
+	padding: 3px 2px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.report-name {
+	flex: 1;
+	color: #cdd6e1;
+}
+
+.report-note {
+	color: #7f8b9c;
+	font-size: 10px;
+}
+
+.dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 3px;
+	background: #4ed18e;
+	flex-shrink: 0;
+}
+
+.report-row.failed .dot {
+	background: #e2574c;
+}
+
+.report-row.failed .report-name {
+	color: #e2574c;
+}
+
+.note {
+	font-size: 10px;
+	color: #6f7b8b;
+	line-height: 1.45;
+	padding-top: 2px;
+	border-top: 1px solid #232c37;
+}

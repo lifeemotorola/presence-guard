@@ -1,0 +1,9 @@
+{
+  "name": "photoshop-face-retouch",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Portrait retouching as a layer stack: a UXP plugin for Photoshop.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
