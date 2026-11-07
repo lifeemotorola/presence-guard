@@ -206,6 +206,24 @@ layout presets — grid, side by side, main + cam — with one step of undo.
 
 Details in [`auto-scene/README.md`](auto-scene/README.md).
 
+## The Photoshop plugin: Export Kit
+
+`photoshop-export-kit/` is the odd one out here, on purpose: a **Photoshop UXP
+plugin**, not an OBS one. One document in, ten ready-to-publish files out —
+YouTube thumbnail, Shorts/TikTok cover, Instagram post, X post, banners, Twitch
+panels — each cropped the way that size needs, with a smart crop that finds the
+busy part of the picture instead of cutting a face in half, and an honest note
+before export when the source is too small to fill a slot.
+
+| | Export Kit (`photoshop-export-kit/`) |
+|---|---|
+| Host | Photoshop **23.3+** (UXP, not the C++ SDK) |
+| Load it | the free **UXP Developer Tool**, once |
+| Get it | **Actions → Export Kit** → artifact `photoshop-export-kit-plugin` |
+| Tests | `npm test` — 28 checks, no Photoshop needed |
+
+Details in [`photoshop-export-kit/README.md`](photoshop-export-kit/README.md).
+
 ## What I verified here
 
 * `src/*.cpp` compiles clean with `-Wall -Wextra` (g++ 12, Qt 6.8.3).

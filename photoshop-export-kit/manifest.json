@@ -1,0 +1,41 @@
+{
+	"manifestVersion": 5,
+	"id": "com.presenceguard.exportkit",
+	"name": "Export Kit",
+	"version": "1.0.0",
+	"main": "index.html",
+	"host": [
+		{
+			"app": "PS",
+			"minVersion": "23.3.0"
+		}
+	],
+	"entrypoints": [
+		{
+			"type": "panel",
+			"id": "exportKitPanel",
+			"label": {
+				"default": "Export Kit"
+			}
+		},
+		{
+			"type": "command",
+			"id": "exportKitAll",
+			"label": {
+				"default": "Export Kit: export every size"
+			}
+		}
+	],
+	"icons": [
+		{
+			"width": 48,
+			"height": 48,
+			"path": "icons/export-kit.png",
+			"scale": [1, 2],
+			"theme": ["darkest", "dark", "light", "lightest"]
+		}
+	],
+	"requiredPermissions": {
+		"localFileSystem": "fullAccess"
+	}
+}

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Export Kit</title>
+		<link rel="stylesheet" href="styles.css" />
+	</head>
+	<body>
+		<div id="root">
+			<header>
+				<div class="title">Export Kit</div>
+				<div id="doc-line" class="muted">Open a document</div>
+			</header>
+
+			<section>
+				<div class="section-title">Sizes</div>
+				<div id="slots"></div>
+				<div id="notes" class="notes"></div>
+			</section>
+
+			<section class="options">
+				<div class="section-title">Options</div>
+				<sp-dropdown id="quality" value="10">
+					<sp-menu slot="options">
+						<sp-menu-item value="8">JPEG quality: standard (8)</sp-menu-item>
+						<sp-menu-item value="10" selected>JPEG quality: high (10)</sp-menu-item>
+						<sp-menu-item value="12">JPEG quality: maximum (12)</sp-menu-item>
+					</sp-menu>
+				</sp-dropdown>
+				<sp-checkbox id="sharpen">Sharpen after resizing</sp-checkbox>
+				<sp-checkbox id="smartcrop" checked>Find the subject when cropping</sp-checkbox>
+			</section>
+
+			<section>
+				<div class="section-title">Destination</div>
+				<div class="row">
+					<sp-button id="choose-folder" variant="secondary">Choose folder…</sp-button>
+					<span id="folder-line" class="muted">No folder chosen</span>
+				</div>
+			</section>
+
+			<section class="actions">
+				<sp-button id="export" variant="cta">Export everything</sp-button>
+				<div id="status" class="muted"></div>
+			</section>
+
+			<section id="results"></section>
+		</div>
+
+		<script src="src/panel.js"></script>
+	</body>
+</html>
