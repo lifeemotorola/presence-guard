@@ -375,19 +375,19 @@ public partial class MainForm
     {
         Card card = NewCard("Picture");
 
-        cboFps = MakeCombo(96);
+        cboFps = MakeCombo(90);
         foreach (int fps in Presets.SupportedFps)
             cboFps.Items.Add(fps);
         cboFps.SelectedItem = 60;
         cboFps.SelectedIndexChanged += (_, _) => UpdateSummary();
 
-        cboQuality = MakeCombo(240);
+        cboQuality = MakeCombo(210);
         foreach (QualityPreset quality in Enum.GetValues<QualityPreset>())
             cboQuality.Items.Add(Presets.Describe(quality));
         cboQuality.SelectedIndex = (int)QualityPreset.High;
         cboQuality.SelectedIndexChanged += (_, _) => UpdateSummary();
 
-        cboEncoder = MakeCombo(230);
+        cboEncoder = MakeCombo(200);
         cboEncoder.Items.AddRange(new object[]
         {
             "Automatic (recommended)",
@@ -403,9 +403,9 @@ public partial class MainForm
         chkDuplication = MakeToggle("Desktop duplication (one full display only)", false, 340);
         chkDuplication.CheckedChanged += (_, _) => UpdateSummary();
 
-        AddField(card, "Frames per second", cboFps, 96);
-        AddField(card, "Quality", cboQuality, 240);
-        AddField(card, "Encoder", cboEncoder, 230);
+        AddField(card, "Frames per second", cboFps, 90);
+        AddField(card, "Quality", cboQuality, 210);
+        AddField(card, "Encoder", cboEncoder, 200);
         AddField(card, null, chkCursor, 230, 10, 10);
         AddField(card, null, chkDuplication, 340, 4, 0);
 

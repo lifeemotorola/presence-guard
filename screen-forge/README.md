@@ -56,6 +56,11 @@ Alternatively drop `ffmpeg.exe` anywhere on your `PATH`, or in
 
 ## The window
 
+![The ScreenForge window](docs/ui.png)
+
+*A drawing of the layout, not a screenshot — every position in it comes from the
+same numbers the window uses. There is no Windows desktop here to photograph.*
+
 Three bands, and none of them can be pushed off the screen:
 
 | | |
