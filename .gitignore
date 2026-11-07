@@ -13,6 +13,7 @@
 !/hype-clip
 !/auto-scene
 !/photoshop-export-kit
+!/screen-forge
 !/src
 !/tests
 !.clang-format
@@ -42,3 +43,9 @@
 /hype-clip/build_tests
 /auto-scene/build_tests
 /release
+
+# ScreenForge build output (the artifact is built in CI)
+/screen-forge/src/bin/
+/screen-forge/src/obj/
+/screen-forge/tests/bin/
+/screen-forge/tests/obj/

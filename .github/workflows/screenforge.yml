@@ -1,0 +1,106 @@
+name: ScreenForge
+
+run-name: ScreenForge · ${{ github.ref_name }} 🎬
+
+# The screen recorder in this repository (screen-forge/). Two jobs, because the
+# two halves fail in different ways: the command lines and the file naming are
+# platform neutral and are tested on Linux in seconds, while the window itself
+# is WinForms and can only be compiled on Windows.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'screen-forge/**'
+      - '.github/workflows/screenforge.yml'
+  pull_request:
+    paths:
+      - 'screen-forge/**'
+      - '.github/workflows/screenforge.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  logic-tests:
+    name: Logic Tests 🧪
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: Set Up .NET 🔧
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # A wrong bitrate, an odd frame size or a mangled concat path produces a
+      # file that opens and plays badly — the kind of bug nobody notices until
+      # the recording that mattered. These tests are the cheap place to catch it.
+      - name: Run Logic Tests 🧪
+        run: dotnet test screen-forge/tests/ScreenForge.Tests.csproj --configuration Release --logger "console;verbosity=normal"
+
+  build:
+    name: Build Windows App 🧱
+    runs-on: windows-latest
+    needs: logic-tests
+    timeout-minutes: 30
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: Set Up .NET 🔧
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish 🧱
+        shell: pwsh
+        run: |
+          dotnet publish screen-forge/src/ScreenForge.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            --output dist
+
+          Copy-Item screen-forge/README.md dist/README.md
+          Get-ChildItem dist | Format-Table Name, Length
+
+          if (-not (Test-Path dist/ScreenForge.exe)) {
+            Write-Error "the build produced no ScreenForge.exe"
+            exit 1
+          }
+
+      # The user's half of the deal: ffmpeg is not in this repository (it is
+      # 80 MB of somebody else's binary), so the artifact says where to put it.
+      - name: Add the ffmpeg note 📝
+        shell: pwsh
+        run: |
+          @'
+          ScreenForge records through ffmpeg.
+
+          FFMPEG IS NOT INCLUDED IN THIS ZIP.
+
+          Put ffmpeg.exe in this same folder, next to ScreenForge.exe:
+
+              1. Download ffmpeg-release-essentials.zip from https://www.gyan.dev/ffmpeg/builds/
+              2. Open the zip, go into bin/ and copy ffmpeg.exe
+              3. Paste it here, next to ScreenForge.exe
+              4. Start ScreenForge.exe
+
+          Any ffmpeg.exe from 2023 or later works. If you would rather not move
+          files around, put ffmpeg.exe on your PATH instead — ScreenForge looks
+          next to itself first, then %APPDATA%\ffmpeg, then PATH.
+          '@ | Set-Content dist/PUT-FFMPEG-HERE.txt -Encoding UTF8
+
+      - name: Upload Artifact 📡
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenforge-windows-x64
+          path: dist/
+          if-no-files-found: error

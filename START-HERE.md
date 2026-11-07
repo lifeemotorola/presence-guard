@@ -224,6 +224,30 @@ before export when the source is too small to fill a slot.
 
 Details in [`photoshop-export-kit/README.md`](photoshop-export-kit/README.md).
 
+## The screen recorder: ScreenForge
+
+`screen-forge/` is not an OBS plugin — it is a **standalone Windows 11 app**. One
+button records a display, a window, or a rectangle you drag on the desktop, with
+system sound and your microphone mixed at the end. This one is C# / .NET 8
+WinForms, because a recorder has to own its own hotkeys, its own tray icon and
+its own capture rectangle, and doing that as an OBS plugin would have meant
+asking OBS to get out of the way.
+
+| | ScreenForge (`screen-forge/`) |
+|---|---|
+| Where | **Actions → ScreenForge** → artifact `screenforge-windows-x64` |
+| Needs | Windows 10/11 x64, and **`ffmpeg.exe` next to the exe** (link below) |
+| Install | none — unzip twice, drop `ffmpeg.exe` beside `ScreenForge.exe`, run it |
+| Hotkeys | **Ctrl+Shift+F9** start/stop, **Ctrl+Shift+F10** pause |
+| Tests | `dotnet test` — 59 logic checks, run on Linux in CI |
+
+The one file I cannot put in a repository: get `ffmpeg-release-essentials.zip`
+from <https://www.gyan.dev/ffmpeg/builds/>, copy `bin/ffmpeg.exe`, paste it next
+to `ScreenForge.exe`. The app says so on startup if it is missing, and it also
+accepts `%APPDATA%\ffmpeg\ffmpeg.exe` or anything on `PATH`.
+
+Details in [`screen-forge/README.md`](screen-forge/README.md).
+
 ## What I verified here
 
 * `src/*.cpp` compiles clean with `-Wall -Wextra` (g++ 12, Qt 6.8.3).
