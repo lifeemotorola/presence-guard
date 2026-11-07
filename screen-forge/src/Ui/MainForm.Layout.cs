@@ -1,6 +1,6 @@
 /*
 ScreenForge
-Copyright (C) 2026 Presence Guard contributors
+Copyright (C) 2026 Emmanuel Suah
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -9,6 +9,7 @@ the Free Software Foundation; either version 2 of the License, or
 */
 
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 using ScreenForge.Core;
@@ -17,36 +18,50 @@ namespace ScreenForge.Ui;
 
 public partial class MainForm
 {
+    private readonly List<Card> cards = new();
+
+    private Panel scrollHost;
+    private FlowLayoutPanel stack;
+    private bool relayouting;
+
     private ComboBox cboSource;
     private ComboBox cboSourceDetail;
-    private Button btnPickRegion;
-    private Button btnRefreshSources;
+    private AccentButton btnPickRegion;
+    private AccentButton btnRefreshSources;
 
     private ComboBox cboFps;
     private ComboBox cboQuality;
     private ComboBox cboEncoder;
-    private CheckBox chkCursor;
-    private CheckBox chkDuplication;
+    private ToggleSwitch chkCursor;
+    private ToggleSwitch chkDuplication;
 
-    private CheckBox chkSystem;
+    private ToggleSwitch chkSystem;
     private NumericUpDown numSystemGain;
-    private CheckBox chkMicrophone;
+    private ToggleSwitch chkMicrophone;
     private ComboBox cboMicrophone;
     private NumericUpDown numMicGain;
 
     private TextBox txtFolder;
-    private Button btnBrowse;
+    private AccentButton btnBrowse;
     private TextBox txtPattern;
     private ComboBox cboCountdown;
-    private CheckBox chkHide;
+    private ToggleSwitch chkHide;
 
-    private Button btnRecord;
-    private Button btnPause;
-    private Button btnOpenFolder;
+    private AccentButton btnRecord;
+    private AccentButton btnPause;
+    private AccentButton btnOpenFolder;
     private Label lblTimer;
+    private Label lblEstimate;
     private Label lblStatus;
     private RichTextBox txtLog;
 
+    /// <summary>
+    /// The window is three bands: a header that is always whole, a middle that
+    /// scrolls on the left and grows on the right, and a footer that is always
+    /// visible. Nothing can be pushed off the bottom, at any window size or any
+    /// display scaling — which is what a fixed-height form with AutoSize rows
+    /// eventually does.
+    /// </summary>
     private void BuildUi()
     {
         SuspendLayout();
@@ -56,32 +71,30 @@ public partial class MainForm
         BackColor = Theme.Back;
         ForeColor = Theme.Text;
         Font = Theme.Body;
-        MinimumSize = new Size(900, 700);
-        ClientSize = new Size(980, 780);
         StartPosition = FormStartPosition.CenterScreen;
+        MinimumSize = new Size(900, 600);
+        ClientSize = new Size(1060, 780);
         DoubleBuffered = true;
+        KeyPreview = true;
 
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5,
-            Padding = new Padding(18, 14, 18, 12),
+            RowCount = 3,
             BackColor = Theme.Back,
+            Margin = new Padding(0),
+            Padding = new Padding(0),
         };
 
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         root.Controls.Add(BuildHeader(), 0, 0);
-        root.Controls.Add(BuildSettings(), 0, 1);
-        root.Controls.Add(BuildLog(), 0, 2);
-        root.Controls.Add(BuildButtons(), 0, 3);
-        root.Controls.Add(BuildStatus(), 0, 4);
+        root.Controls.Add(BuildContent(), 0, 1);
+        root.Controls.Add(BuildFooter(), 0, 2);
 
         Controls.Add(root);
 
@@ -91,17 +104,35 @@ public partial class MainForm
 
     private Control BuildHeader()
     {
-        var panel = new FlowLayoutPanel
+        var header = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 3,
+            RowCount = 1,
+            BackColor = Theme.Back,
+            Padding = new Padding(22, 18, 22, 12),
+            Margin = new Padding(0),
+        };
+
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 56));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        var mark = new BrandMark { Anchor = AnchorStyles.Top | AnchorStyles.Left, Margin = new Padding(0, 2, 0, 0) };
+
+        var titles = new FlowLayoutPanel
         {
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Dock = DockStyle.Fill,
-            Margin = new Padding(0, 0, 0, 10),
+            BackColor = Theme.Back,
+            Margin = new Padding(0),
         };
 
-        panel.Controls.Add(new Label
+        titles.Controls.Add(new Label
         {
             Text = "ScreenForge",
             Font = Theme.Heading,
@@ -110,81 +141,239 @@ public partial class MainForm
             Margin = new Padding(0),
         });
 
-        panel.Controls.Add(new Label
+        titles.Controls.Add(new Label
         {
-            Text = "Records a display, a window, or a rectangle you draw — with system sound and your microphone — and saves a normal MP4.",
+            Text = "Record a display, a window, or a region you draw — with sound — and get an ordinary MP4.",
             Font = Theme.Small,
             ForeColor = Theme.Muted,
             AutoSize = true,
-            Margin = new Padding(0, 2, 0, 0),
+            Margin = new Padding(0, 1, 0, 0),
         });
 
-        return panel;
+        var byline = new Label
+        {
+            Text = "by Emmanuel Suah  ·  v1.0",
+            Font = Theme.Small,
+            ForeColor = Theme.Muted,
+            AutoSize = true,
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            Margin = new Padding(0, 8, 0, 0),
+            TextAlign = ContentAlignment.MiddleRight,
+        };
+
+        header.Controls.Add(mark, 0, 0);
+        header.Controls.Add(titles, 1, 0);
+        header.Controls.Add(byline, 2, 0);
+
+        return header;
     }
 
-    private Control BuildSettings()
+    private Control BuildContent()
     {
-        var grid = new TableLayoutPanel
+        var content = new TableLayoutPanel
         {
+            Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 3,
+            RowCount = 1,
+            BackColor = Theme.Back,
+            Padding = new Padding(22, 0, 22, 0),
+            Margin = new Padding(0),
+        };
+
+        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
+        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
+        content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        content.Controls.Add(BuildSettingsColumn(), 0, 0);
+        content.Controls.Add(BuildSessionColumn(), 1, 0);
+
+        return content;
+    }
+
+    private Control BuildSettingsColumn()
+    {
+        var column = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Theme.Back,
+            Margin = new Padding(0, 0, 10, 10),
+        };
+
+        scrollHost = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Theme.Back,
+            AutoScroll = true,
+            Margin = new Padding(0),
+        };
+
+        stack = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Dock = DockStyle.Top,
-            Margin = new Padding(0, 0, 0, 6),
+            BackColor = Theme.Back,
+            Margin = new Padding(0),
+            Padding = new Padding(0),
         };
 
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        stack.Controls.Add(BuildSourceCard());
+        stack.Controls.Add(BuildVideoCard());
+        stack.Controls.Add(BuildAudioCard());
+        stack.Controls.Add(BuildOutputCard());
 
-        Control source = BuildSourceGroup();
-        grid.Controls.Add(source, 0, 0);
-        grid.SetColumnSpan(source, 2);
+        scrollHost.Controls.Add(stack);
+        scrollHost.Resize += (_, _) => RelayoutCards();
+        column.Controls.Add(scrollHost);
 
-        grid.Controls.Add(BuildVideoGroup(), 0, 1);
-        grid.Controls.Add(BuildAudioGroup(), 1, 1);
-
-        Control output = BuildOutputGroup();
-        grid.Controls.Add(output, 0, 2);
-        grid.SetColumnSpan(output, 2);
-
-        return grid;
+        return column;
     }
 
-    private GroupBox BuildSourceGroup()
+    private Control BuildSessionColumn()
     {
-        GroupBox group = Group("What to record");
+        var column = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = Theme.Back,
+            Margin = new Padding(10, 0, 0, 10),
+        };
+
+        column.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        column.RowStyles.Add(new RowStyle(SizeType.Absolute, 188));
+        column.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        column.Controls.Add(BuildSessionCard(), 0, 0);
+        column.Controls.Add(BuildLogCard(), 0, 1);
+
+        return column;
+    }
+
+    private Control BuildSessionCard()
+    {
+        var card = new Card("Session", autoFit: false)
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 0, 12),
+        };
+
+        var grid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 2,
+            BackColor = Theme.Panel,
+            Margin = new Padding(0),
+        };
+
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        lblTimer = new Label
+        {
+            Text = "00:00:00",
+            Font = Theme.Timer,
+            ForeColor = Theme.Muted,
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            BackColor = Theme.Panel,
+            Margin = new Padding(0),
+        };
+
+        lblEstimate = new Label
+        {
+            Text = "",
+            Font = Theme.Small,
+            ForeColor = Theme.Muted,
+            AutoSize = true,
+            Anchor = AnchorStyles.Right,
+            TextAlign = ContentAlignment.MiddleRight,
+            BackColor = Theme.Panel,
+            Margin = new Padding(8, 0, 0, 0),
+        };
+
+        lblStatus = new Label
+        {
+            Text = "Ready.",
+            Font = Theme.Small,
+            ForeColor = Theme.Muted,
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.TopLeft,
+            BackColor = Theme.Panel,
+            Margin = new Padding(0),
+        };
+
+        grid.Controls.Add(lblTimer, 0, 0);
+        grid.Controls.Add(lblEstimate, 1, 0);
+        grid.Controls.Add(lblStatus, 0, 1);
+        grid.SetColumnSpan(lblStatus, 2);
+
+        card.Controls.Add(grid);
+        return card;
+    }
+
+    private Control BuildLogCard()
+    {
+        var card = new Card("Log", autoFit: false)
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0),
+            MinimumSize = new Size(0, 120),
+        };
+
+        txtLog = new RichTextBox
+        {
+            Dock = DockStyle.Fill,
+            ReadOnly = true,
+            BackColor = Theme.Panel,
+            ForeColor = Theme.Muted,
+            BorderStyle = BorderStyle.None,
+            Font = Theme.Mono,
+            DetectUrls = false,
+            ScrollBars = RichTextBoxScrollBars.Vertical,
+            Margin = new Padding(0),
+        };
+
+        card.Controls.Add(txtLog);
+        return card;
+    }
+
+    private Card BuildSourceCard()
+    {
+        Card card = NewCard("What to record");
 
         cboSource = MakeCombo(150);
         cboSource.Items.AddRange(new object[] { "Whole display", "One window", "A region I draw" });
         cboSource.SelectedIndex = 0;
         cboSource.SelectedIndexChanged += (_, _) => OnSourceKindChanged();
 
-        cboSourceDetail = MakeCombo(370);
+        cboSourceDetail = MakeCombo(330);
         cboSourceDetail.SelectedIndexChanged += (_, _) => UpdateSummary();
 
-        btnPickRegion = Theme.MakeGhostButton("Draw region…");
-        btnPickRegion.Width = 130;
+        btnPickRegion = new AccentButton("Draw region…", ButtonTone.Ghost) { Width = 132, Height = 30 };
         btnPickRegion.Click += async (_, _) => await PickRegionAsync();
 
-        btnRefreshSources = Theme.MakeGhostButton("Refresh");
-        btnRefreshSources.Width = 90;
+        btnRefreshSources = new AccentButton("Refresh", ButtonTone.Ghost) { Width = 96, Height = 30 };
         btnRefreshSources.Click += (_, _) => RefreshSources();
 
-        AddField(group, "Source", cboSource, 150);
-        AddField(group, "Which one", cboSourceDetail, 370);
-        AddField(group, "", btnPickRegion, 130);
-        AddField(group, "", btnRefreshSources, 90);
+        AddField(card, "Source", cboSource, 150);
+        AddField(card, "Which one", cboSourceDetail, 330);
+        AddField(card, null, btnPickRegion, 132, 18, 12);
+        AddField(card, null, btnRefreshSources, 96, 18, 0);
 
-        return group;
+        return card;
     }
 
-    private GroupBox BuildVideoGroup()
+    private Card BuildVideoCard()
     {
-        GroupBox group = Group("Picture");
+        Card card = NewCard("Picture");
 
         cboFps = MakeCombo(96);
         foreach (int fps in Presets.SupportedFps)
@@ -192,13 +381,13 @@ public partial class MainForm
         cboFps.SelectedItem = 60;
         cboFps.SelectedIndexChanged += (_, _) => UpdateSummary();
 
-        cboQuality = MakeCombo(220);
+        cboQuality = MakeCombo(240);
         foreach (QualityPreset quality in Enum.GetValues<QualityPreset>())
             cboQuality.Items.Add(Presets.Describe(quality));
         cboQuality.SelectedIndex = (int)QualityPreset.High;
         cboQuality.SelectedIndexChanged += (_, _) => UpdateSummary();
 
-        cboEncoder = MakeCombo(210);
+        cboEncoder = MakeCombo(230);
         cboEncoder.Items.AddRange(new object[]
         {
             "Automatic (recommended)",
@@ -210,218 +399,206 @@ public partial class MainForm
         cboEncoder.SelectedIndex = 0;
         cboEncoder.SelectedIndexChanged += (_, _) => UpdateSummary();
 
-        chkCursor = MakeCheck("Draw the mouse pointer", true);
-        chkDuplication = MakeCheck("Use desktop duplication (full display only)", false);
+        chkCursor = MakeToggle("Draw the mouse pointer", true, 230);
+        chkDuplication = MakeToggle("Desktop duplication (one full display only)", false, 340);
         chkDuplication.CheckedChanged += (_, _) => UpdateSummary();
 
-        AddField(group, "Frames per second", cboFps, 96);
-        AddField(group, "Quality", cboQuality, 220);
-        AddField(group, "Encoder", cboEncoder, 210);
-        AddField(group, "", chkCursor, 240);
-        AddField(group, "", chkDuplication, 300);
+        AddField(card, "Frames per second", cboFps, 96);
+        AddField(card, "Quality", cboQuality, 240);
+        AddField(card, "Encoder", cboEncoder, 230);
+        AddField(card, null, chkCursor, 230, 10, 10);
+        AddField(card, null, chkDuplication, 340, 4, 0);
 
-        return group;
+        return card;
     }
 
-    private GroupBox BuildAudioGroup()
+    private Card BuildAudioCard()
     {
-        GroupBox group = Group("Sound");
+        Card card = NewCard("Sound");
 
-        chkSystem = MakeCheck("System sound (what you hear)", true);
+        chkSystem = MakeToggle("System sound — what you hear", true, 260);
         chkSystem.CheckedChanged += (_, _) => UpdateSummary();
 
-        numSystemGain = MakeNumber(0, 200, 100);
+        numSystemGain = MakeNumber(0, 200, 100, 74);
         numSystemGain.ValueChanged += (_, _) => UpdateSummary();
 
-        chkMicrophone = MakeCheck("Microphone", false);
+        chkMicrophone = MakeToggle("Microphone", false, 150);
         chkMicrophone.CheckedChanged += (_, _) => OnMicrophoneToggled();
 
-        cboMicrophone = MakeCombo(260);
+        cboMicrophone = MakeCombo(300);
         cboMicrophone.SelectedIndexChanged += (_, _) => UpdateSummary();
 
-        numMicGain = MakeNumber(0, 200, 100);
+        numMicGain = MakeNumber(0, 200, 100, 74);
         numMicGain.ValueChanged += (_, _) => UpdateSummary();
 
-        AddField(group, "", chkSystem, 220);
-        AddField(group, "Volume %", numSystemGain, 70);
-        AddField(group, "", chkMicrophone, 120);
-        AddField(group, "Device", cboMicrophone, 260);
-        AddField(group, "Volume %", numMicGain, 70);
+        AddField(card, null, chkSystem, 260, 6, 10);
+        AddField(card, "Volume %", numSystemGain, 74, 0, 0);
+        AddField(card, null, chkMicrophone, 150, 14, 10);
+        AddField(card, "Device", cboMicrophone, 300, 0, 0);
+        AddField(card, "Volume %", numMicGain, 74, 0, 0);
 
-        return group;
+        return card;
     }
 
-    private GroupBox BuildOutputGroup()
+    private Card BuildOutputCard()
     {
-        GroupBox group = Group("Where it goes");
+        Card card = NewCard("Where it goes");
 
-        txtFolder = new TextBox { Width = 360, Text = "" };
+        txtFolder = new TextBox { Width = 330, Text = "", Margin = new Padding(0) };
         txtFolder.TextChanged += (_, _) => UpdateSummary();
 
-        btnBrowse = Theme.MakeGhostButton("Browse…");
-        btnBrowse.Width = 90;
+        btnBrowse = new AccentButton("Browse…", ButtonTone.Ghost) { Width = 96, Height = 30 };
         btnBrowse.Click += (_, _) => BrowseFolder();
 
-        txtPattern = new TextBox { Width = 240, Text = FileNamer.DefaultPattern };
+        txtPattern = new TextBox { Width = 230, Text = FileNamer.DefaultPattern, Margin = new Padding(0) };
         txtPattern.TextChanged += (_, _) => UpdateSummary();
 
-        cboCountdown = MakeCombo(96);
+        cboCountdown = MakeCombo(90);
         for (int i = 0; i <= 10; i++)
             cboCountdown.Items.Add(i);
         cboCountdown.SelectedItem = 3;
         cboCountdown.SelectedIndexChanged += (_, _) => UpdateSummary();
 
-        chkHide = MakeCheck("Hide this window while recording", true);
+        chkHide = MakeToggle("Hide this window while recording", true, 290);
 
-        AddField(group, "Folder", txtFolder, 360);
-        AddField(group, "", btnBrowse, 90);
-        AddField(group, "File name", txtPattern, 240);
-        AddField(group, "Countdown (s)", cboCountdown, 96);
-        AddField(group, "", chkHide, 250);
+        AddField(card, "Folder", txtFolder, 330);
+        AddField(card, null, btnBrowse, 96, 18, 12);
+        AddField(card, "File name", txtPattern, 230);
+        AddField(card, "Countdown (s)", cboCountdown, 90);
+        AddField(card, null, chkHide, 290, 12, 0);
 
-        return group;
+        return card;
     }
 
-    private Control BuildLog()
+    private Control BuildFooter()
     {
-        var panel = new Panel
+        var footer = new Panel
         {
-            Dock = DockStyle.Fill,
-            BackColor = Theme.Panel,
-            Padding = new Padding(10, 8, 10, 8),
-            Margin = new Padding(0, 8, 0, 8),
-            MinimumSize = new Size(0, 120),
+            Dock = DockStyle.Bottom,
+            Height = 96,
+            BackColor = Theme.Back,
+            Padding = new Padding(22, 14, 22, 14),
+            Margin = new Padding(0),
         };
 
-        txtLog = new RichTextBox
+        var rail = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ReadOnly = true,
-            Font = Theme.Mono,
-            BackColor = Theme.Panel,
-            ForeColor = Theme.Muted,
-            BorderStyle = BorderStyle.None,
-            DetectUrls = false,
-            ScrollBars = RichTextBoxScrollBars.Vertical,
-        };
-
-        panel.Controls.Add(txtLog);
-        return panel;
-    }
-
-    private Control BuildButtons()
-    {
-        var row = new TableLayoutPanel
-        {
             ColumnCount = 4,
             RowCount = 1,
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = new Padding(0, 4, 0, 4),
+            BackColor = Theme.Back,
+            Margin = new Padding(0),
         };
 
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+        rail.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+        rail.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
+        rail.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        rail.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
 
-        btnRecord = Theme.MakeButton("●  Record", Theme.Accent);
-        btnRecord.Width = 170;
-        btnRecord.Height = 46;
+        btnRecord = new AccentButton("●   Record", ButtonTone.Primary)
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 10, 0),
+        };
         btnRecord.Click += async (_, _) => await OnRecordClickedAsync();
 
-        btnPause = Theme.MakeButton("Pause", Theme.Field);
-        btnPause.ForeColor = Theme.Text;
-        btnPause.Width = 120;
-        btnPause.Height = 46;
-        btnPause.Enabled = false;
+        btnPause = new AccentButton("Pause", ButtonTone.Ghost)
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 10, 0),
+            Enabled = false,
+        };
         btnPause.Click += async (_, _) => await OnPauseClickedAsync();
 
-        lblTimer = new Label
+        var hint = new Label
         {
-            Text = "00:00:00",
-            Font = Theme.Timer,
+            Text = "Ctrl+Shift+F9  start / stop      Ctrl+Shift+F10  pause / resume",
+            Font = Theme.Small,
             ForeColor = Theme.Muted,
-            AutoSize = true,
-            Margin = new Padding(14, 6, 0, 0),
+            AutoSize = false,
+            Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
+            BackColor = Theme.Back,
+            Margin = new Padding(6, 0, 6, 0),
         };
 
-        btnOpenFolder = Theme.MakeGhostButton("Open folder");
-        btnOpenFolder.Width = 110;
-        btnOpenFolder.Height = 30;
-        btnOpenFolder.Margin = new Padding(0, 8, 0, 0);
+        btnOpenFolder = new AccentButton("Open folder", ButtonTone.Ghost)
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0),
+        };
         btnOpenFolder.Click += (_, _) => OpenOutputFolder();
 
-        row.Controls.Add(btnRecord, 0, 0);
-        row.Controls.Add(btnPause, 1, 0);
-        row.Controls.Add(lblTimer, 2, 0);
-        row.Controls.Add(btnOpenFolder, 3, 0);
+        rail.Controls.Add(btnRecord, 0, 0);
+        rail.Controls.Add(btnPause, 1, 0);
+        rail.Controls.Add(hint, 2, 0);
+        rail.Controls.Add(btnOpenFolder, 3, 0);
 
-        return row;
+        var line = new Hairline { Dock = DockStyle.Top };
+
+        footer.Controls.Add(rail);
+        footer.Controls.Add(line);
+
+        return footer;
     }
 
-    private Control BuildStatus()
+    // ------------------------------------------------------------- helpers
+
+    private Card NewCard(string title)
     {
-        lblStatus = new Label
+        var card = new Card(title)
         {
-            Text = "Ready.",
-            ForeColor = Theme.Muted,
-            Font = Theme.Small,
-            AutoSize = false,
-            Height = 34,
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Margin = new Padding(0),
+            Dock = DockStyle.None,
+            Width = 460,
+            Height = 120,
         };
 
-        return lblStatus;
+        cards.Add(card);
+        return card;
     }
 
-    private static GroupBox Group(string title)
+    /// <summary>
+    /// Every card is as tall as what is inside it, measured after the width is
+    /// known — wrapping changes the height, so the width has to be decided first.
+    /// </summary>
+    public void RelayoutCards()
     {
-        var group = new GroupBox
-        {
-            Text = title,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Dock = DockStyle.Fill,
-            Padding = new Padding(10, 6, 10, 10),
-            Margin = new Padding(4, 0, 4, 8),
-            BackColor = Theme.Panel,
-            ForeColor = Theme.Muted,
-        };
-
-        var flow = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = true,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Dock = DockStyle.Top,
-            BackColor = Theme.Panel,
-            Margin = new Padding(0),
-        };
-
-        group.Controls.Add(flow);
-        return group;
-    }
-
-    private static void AddField(GroupBox group, string caption, Control control, int width)
-    {
-        var flow = group.Controls[0] as FlowLayoutPanel;
-        if (flow == null)
+        if (relayouting || scrollHost == null || stack == null)
             return;
 
+        relayouting = true;
+
+        try
+        {
+            int width = stack.ClientSize.Width - 2;
+            if (width < 240)
+                width = Math.Max(240, scrollHost.ClientSize.Width - 24);
+
+            foreach (Card card in cards)
+            {
+                card.Width = width;
+                card.FitToContent();
+            }
+
+            stack.PerformLayout();
+        }
+        finally
+        {
+            relayouting = false;
+        }
+    }
+
+    private static void AddField(Card card, string caption, Control control, int width, int topPad = 0, int rightPad = 14)
+    {
         var cell = new FlowLayoutPanel
         {
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = new Padding(0, 0, 14, 6),
             BackColor = Theme.Panel,
+            Margin = new Padding(0, 0, rightPad, 8),
+            Padding = new Padding(0, topPad, 0, 0),
         };
 
         if (!string.IsNullOrEmpty(caption))
@@ -432,7 +609,8 @@ public partial class MainForm
                 Font = Theme.Small,
                 ForeColor = Theme.Muted,
                 AutoSize = true,
-                Margin = new Padding(0, 0, 0, 2),
+                Margin = new Padding(0, 0, 0, 3),
+                BackColor = Theme.Panel,
             });
         }
 
@@ -440,7 +618,7 @@ public partial class MainForm
         control.Margin = new Padding(0);
         cell.Controls.Add(control);
 
-        flow.Controls.Add(cell);
+        card.Body.Controls.Add(cell);
     }
 
     private static ComboBox MakeCombo(int width) => new()
@@ -451,21 +629,18 @@ public partial class MainForm
         ForeColor = Theme.Text,
         FlatStyle = FlatStyle.Flat,
         Font = Theme.Body,
+        Margin = new Padding(0),
     };
 
-    private static CheckBox MakeCheck(string text, bool value) => new()
+    private static ToggleSwitch MakeToggle(string text, bool value, int width) => new(text, value)
     {
-        Text = text,
-        Checked = value,
-        AutoSize = true,
-        ForeColor = Theme.Text,
-        Font = Theme.Body,
-        Margin = new Padding(0, 6, 0, 0),
+        Width = width,
+        Margin = new Padding(0),
     };
 
-    private static NumericUpDown MakeNumber(decimal min, decimal max, decimal value) => new()
+    private static NumericUpDown MakeNumber(decimal min, decimal max, decimal value, int width) => new()
     {
-        Width = 70,
+        Width = width,
         Minimum = min,
         Maximum = max,
         Value = value,
@@ -474,5 +649,6 @@ public partial class MainForm
         ForeColor = Theme.Text,
         BorderStyle = BorderStyle.FixedSingle,
         Font = Theme.Body,
+        Margin = new Padding(0),
     };
 }

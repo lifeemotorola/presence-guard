@@ -2,6 +2,10 @@
 
 A screen recorder for Windows 11 that does the boring parts properly.
 
+Built by **Emmanuel Suah** — that name is the app's publisher in the exe's file
+properties, in the header of the window, and in the copyright of every source
+file.
+
 One button. It records a display, a window, or a rectangle you draw; it records
 what you hear and what you say, mixed with separate volume faders; and it hands
 you a normal MP4 that plays anywhere. No watermark, no account, no "upgrade to
@@ -49,6 +53,25 @@ binary of somebody else's work inside a git repository is not something I do.
 Alternatively drop `ffmpeg.exe` anywhere on your `PATH`, or in
 `%APPDATA%\ffmpeg\`. The app looks next to itself first, then
 `%APPDATA%\ffmpeg`, then `PATH`, and tells you in the log which copy it chose.
+
+## The window
+
+Three bands, and none of them can be pushed off the screen:
+
+| | |
+|---|---|
+| **Header** | the name, what the app does, and who made it |
+| **Middle** | settings cards on the left (they scroll if the window is short), a big timer and the log on the right |
+| **Footer** | Record / Pause / Open folder, always visible, with the hotkeys printed next to them |
+
+The footer is a fixed band rather than the last row of a stack, and the settings
+column scrolls, so a 1366×768 laptop at 125% scaling shows exactly the same
+things as a 4K desktop. Cards measure themselves from their contents after the
+width is known — nothing is positioned by a hand-counted pixel offset.
+
+Everything that draws itself (buttons, switches, cards, the record dot) is
+painted in one file, `src/Ui/Controls.cs`, so the whole app shares a palette
+instead of mixing themed controls with recoloured stock ones.
 
 ## What it does
 
