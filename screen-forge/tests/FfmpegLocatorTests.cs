@@ -20,13 +20,18 @@ public class FfmpegLocatorTests
     [Fact]
     public void TheShippedCopyIsLookedForFirst()
     {
-        var candidates = FfmpegLocator.Candidates(@"C:\Apps\ScreenForge", @"C:\Users\me\AppData", @"C:\Tools");
+        /* The PATH string is split on the separator, and on the Linux runner the
+         * separator is a colon — so a Windows "C:\Tools" would be split into "C"
+         * and "\Tools" before the locator ever saw it. Plain folder names keep
+         * the test about the search order. */
+        var candidates = FfmpegLocator.Candidates(@"C:\Apps\ScreenForge", @"C:\Users\me\AppData", "tools");
 
         Assert.Equal(Exe(@"C:\Apps\ScreenForge"), candidates[0]);
         Assert.Contains(Exe(@"C:\Apps\ScreenForge", "ffmpeg"), candidates);
         Assert.Contains(Exe(@"C:\Apps\ScreenForge", "bin"), candidates);
         Assert.Contains(Exe(@"C:\Users\me\AppData", "ffmpeg"), candidates);
-        Assert.Contains(Exe(@"C:\Tools"), candidates);
+        Assert.Contains(Exe("tools"), candidates);
+        Assert.Equal(candidates.Count - 1, candidates.IndexOf(Exe("tools")));
     }
 
     [Fact]
