@@ -1,0 +1,85 @@
+name: Face Retouch
+
+run-name: Face Retouch · ${{ github.ref_name }} 💄
+
+# The portrait plugin in this repository (photoshop-face-retouch/). Like the
+# export kit it has no compiler — it is a folder of HTML and JavaScript — so the
+# work here is running the retouch arithmetic, proving the manifest is loadable,
+# and handing back the plugin folder exactly as Photoshop wants it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'photoshop-face-retouch/**'
+      - '.github/workflows/face-retouch.yml'
+  pull_request:
+    paths:
+      - 'photoshop-face-retouch/**'
+      - '.github/workflows/face-retouch.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.ref }}'
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: photoshop-face-retouch
+
+jobs:
+  logic-tests:
+    name: Retouch Maths 🧪
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: Set Up Node 🔧
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Radii, opacity, document scaling, the layer order and the descriptors
+      # have no Photoshop in them, so they run here in seconds.
+      - name: Run Logic Tests 🧪
+        run: npm test
+
+      # The manifest, the icon sizes and the files the page loads are checked in
+      # tests/manifest.test.js, so the same answers come out of `npm test` on a
+      # laptop — with a line number — and out of this job.
+      - name: Check the Manifest 📋
+        run: npm test -- --test-name-pattern="manifest|entry points|icons|file the panel"
+
+  package:
+    name: Package Plugin 📦
+    runs-on: ubuntu-24.04
+    needs: logic-tests
+    timeout-minutes: 10
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      # Only what Photoshop reads. Tests, package.json and the drawn panel stay
+      # in the repository; they have no business inside a plugin bundle.
+      - name: Assemble 📦
+        run: |
+          set -euo pipefail
+          target="${RUNNER_TEMP}/plugin"
+          mkdir -p "$target"
+
+          cp manifest.json index.html styles.css "$target/"
+          cp -r src icons "$target/"
+
+          echo "package contents:"
+          find "$target" -type f | sed "s|$target/||" | sort
+
+      - name: Upload Artifact 📡
+        uses: actions/upload-artifact@v4
+        with:
+          name: photoshop-face-retouch-plugin
+          path: ${{ runner.temp }}/plugin/
+          if-no-files-found: error

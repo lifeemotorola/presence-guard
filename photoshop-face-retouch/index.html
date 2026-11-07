@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Face Retouch</title>
+		<link rel="stylesheet" href="styles.css" />
+	</head>
+	<body>
+		<div id="root">
+			<header class="brand">
+				<div class="mark"><div class="ring"></div></div>
+				<div class="titles">
+					<div class="title">Face Retouch</div>
+					<div id="doc-line" class="muted small">Open a photo to start</div>
+				</div>
+			</header>
+
+			<section class="block">
+				<div class="label">Look</div>
+				<div id="presets" class="chips"></div>
+				<div id="blurb" class="blurb"></div>
+			</section>
+
+			<section class="block">
+				<div class="row between">
+					<div class="label">Strength</div>
+					<div id="strength-read" class="read">60</div>
+				</div>
+				<sp-slider id="strength" min="0" max="100" step="5" value="60"></sp-slider>
+
+				<div class="row between spaced">
+					<div class="label">Texture</div>
+					<div id="texture-read" class="read">50</div>
+				</div>
+				<sp-slider id="texture" min="0" max="100" step="5" value="50"></sp-slider>
+			</section>
+
+			<section class="block">
+				<div class="label">Layers</div>
+				<div id="toggles" class="toggles"></div>
+			</section>
+
+			<section class="block preview-block">
+				<div id="preview" class="preview">—</div>
+			</section>
+
+			<section class="actions">
+				<sp-button id="apply" variant="cta">Retouch the face</sp-button>
+				<div class="row">
+					<sp-button id="compare" variant="secondary">Compare</sp-button>
+					<sp-button id="remove" variant="secondary">Remove</sp-button>
+				</div>
+				<div id="status" class="status"></div>
+			</section>
+
+			<section id="report" class="report"></section>
+
+			<footer class="note">
+				Builds layers named <span class="mono">FR · …</span> — your photo is never flattened. With a
+				selection active, the blur and the high pass only happen inside it.
+			</footer>
+		</div>
+
+		<script src="src/panel.js"></script>
+	</body>
+</html>

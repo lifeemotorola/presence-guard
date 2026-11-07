@@ -224,6 +224,29 @@ before export when the source is too small to fill a slot.
 
 Details in [`photoshop-export-kit/README.md`](photoshop-export-kit/README.md).
 
+## The portrait retoucher: Face Retouch
+
+`photoshop-face-retouch/` is the second Photoshop UXP plugin here. One press
+builds six named adjustment layers above the photo — skin evened in **Colour** so
+the pores survive, shadows lifted, warmth put back, texture restored on top — all
+inside one group you can toggle off to compare and delete to undo. Nothing is
+flattened and the background layer is never touched.
+
+| | Face Retouch (`photoshop-face-retouch/`) |
+|---|---|
+| Host | Photoshop **2023 (24.0)+** (UXP, not the C++ SDK) |
+| Load it | the free **UXP Developer Tool** → Add Plugin → `manifest.json` → Load |
+| Get it | **Actions → Face Retouch** → artifact `photoshop-face-retouch-plugin` |
+| Presets | Natural, Soft, Glamour, Editorial, Studio — plus Strength and Texture |
+| Tests | `npm test` — 31 checks, no Photoshop needed |
+
+What it does not do, on purpose: it does not find the face and it does not reshape
+it. UXP has no landmark detection, and a guessed jaw warp on somebody's portrait is
+worse than no feature at all. Shape work stays where it belongs — Liquify or Puppet
+Warp on a smart object; the README has the four-click version.
+
+Details in [`photoshop-face-retouch/README.md`](photoshop-face-retouch/README.md).
+
 ## The screen recorder: ScreenForge
 
 `screen-forge/` is not an OBS plugin — it is a **standalone Windows 11 app**. One
@@ -261,6 +284,9 @@ Details in [`screen-forge/README.md`](screen-forge/README.md).
   looks at, and the workflow YAML parses.
 * The pull-request run of this repository's own CI built the plugin on the
   Windows, macOS and Ubuntu runners and uploaded the artifacts.
+* `photoshop-face-retouch`: `npm test` passes 31/31 here, and the workflow also
+  proves the manifest loads, the icons are the sizes it claims, and every file
+  the panel loads is in the folder.
 
 What I could not do: run the resulting DLL inside a live OBS here. That is the
 one step left to you — step 5 above.

@@ -1,0 +1,65 @@
+{
+	"manifestVersion": 5,
+	"id": "com.presenceguard.faceretouch",
+	"name": "Face Retouch",
+	"version": "1.0.0",
+	"main": "index.html",
+	"host": [
+		{
+			"app": "PS",
+			"minVersion": "24.0.0"
+		}
+	],
+	"entrypoints": [
+		{
+			"type": "panel",
+			"id": "faceRetouchPanel",
+			"label": {
+				"default": "Face Retouch"
+			},
+			"minimumSize": {
+				"width": 300,
+				"height": 420
+			},
+			"maximumSize": {
+				"width": 2000,
+				"height": 2000
+			},
+			"preferredDockedSize": {
+				"width": 320,
+				"height": 700
+			},
+			"preferredFloatingSize": {
+				"width": 320,
+				"height": 700
+			}
+		},
+		{
+			"type": "command",
+			"id": "faceRetouchApply",
+			"label": {
+				"default": "Face Retouch: retouch the active photo"
+			}
+		}
+	],
+	"icons": [
+		{
+			"width": 48,
+			"height": 48,
+			"path": "icons/face-retouch.png",
+			"scale": [
+				1,
+				2
+			],
+			"theme": [
+				"darkest",
+				"dark",
+				"light",
+				"lightest"
+			]
+		}
+	],
+	"requiredPermissions": {
+		"localFileSystem": "fullAccess"
+	}
+}
