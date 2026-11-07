@@ -99,12 +99,6 @@ public static class Theme
                 list.BorderStyle = BorderStyle.None;
                 break;
 
-            case CheckedListBox checkedList:
-                checkedList.BackColor = Field;
-                checkedList.ForeColor = Text;
-                checkedList.BorderStyle = BorderStyle.None;
-                break;
-
             case Panel panel:
                 panel.BackColor = panel.BackColor == Control.DefaultBackColor ? Panel : panel.BackColor;
                 break;
