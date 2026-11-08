@@ -188,7 +188,7 @@ jobs:
         shell: bash
         run: |
           for job in 128696779034 128696778999; do
-            if ! gh api "repos/${GITHUB_REPOSITORY}/actions/jobs/${job}/logs" > "${RUNNER_TEMP}/${job}.log" 2> "${RUNNER_TEMP}/diagnostic-error"; then
+            if ! gh api --allow-escape-sequences "repos/${GITHUB_REPOSITORY}/actions/jobs/${job}/logs" > "${RUNNER_TEMP}/${job}.log" 2> "${RUNNER_TEMP}/diagnostic-error"; then
               while IFS= read -r line; do echo "::error title=Cannot read job $job::${line}"; done < "${RUNNER_TEMP}/diagnostic-error"
               exit 1
             fi
