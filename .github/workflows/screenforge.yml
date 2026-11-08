@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: '${{ github.workflow }} @ ${{ github.ref }} @ ${{ github.sha }}'
+  group: 'screenforge-${{ github.ref }}'
   cancel-in-progress: true
 
 jobs:
@@ -174,61 +174,3 @@ jobs:
           name: screenforge-windows-x64
           path: dist/
           if-no-files-found: error
-
-  diagnose-repository-builds:
-    name: Diagnose repository builds (temporary)
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    permissions:
-      actions: read
-    steps:
-      - name: Summarize previous failed build logs
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          for job in 128696779034 128696778999; do
-            if ! gh api --allow-escape-sequences "repos/${GITHUB_REPOSITORY}/actions/jobs/${job}/logs" > "${RUNNER_TEMP}/${job}.log" 2> "${RUNNER_TEMP}/diagnostic-error"; then
-              while IFS= read -r line; do echo "::error title=Cannot read job $job::${line}"; done < "${RUNNER_TEMP}/diagnostic-error"
-              exit 1
-            fi
-          done
-          python3 - <<'PY'
-          import os, re
-          from pathlib import Path
-          for job in ('128696779034', '128696778999'):
-              lines = Path(os.environ['RUNNER_TEMP'], f'{job}.log').read_text(errors='replace').splitlines()
-              important = [l for l in lines if re.search(r'error|failed|failure|fatal|exception', l, re.I)]
-              text = '\n'.join((important[-20:] + ['--- LAST LINES ---'] + lines[-20:]))
-              safe = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-              print(f'::notice title=Job {job}::{safe}')
-          PY
-
-  diagnose-release-download:
-    name: Diagnose dependency downloads (temporary)
-    if: github.event_name == 'pull_request'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-2022, macos-15]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Probe upstream release asset
-        shell: bash
-        run: |
-          python - <<'PY'
-          import os, sys, urllib.request, urllib.error, urllib.parse
-          system = os.environ['RUNNER_OS']
-          name = 'windows-deps-2025-07-11-x64.zip' if system == 'Windows' else 'macos-deps-2025-07-11-universal.tar.xz'
-          url = 'https://github.com/obsproject/obs-deps/releases/download/2025-07-11/' + name
-          for label, suffix in [('standard', ''), ('fresh', '?probe=' + os.environ['GITHUB_RUN_ID'])]:
-              try:
-                  with urllib.request.urlopen(urllib.request.Request(url + suffix, method='HEAD'), timeout=90) as response:
-                      result = f'HTTP {response.status}, host {urllib.parse.urlsplit(response.url).hostname}'
-              except urllib.error.HTTPError as error:
-                  body = error.read(300).decode('utf-8', 'replace').replace('\n', ' ')
-                  result = f'HTTP {error.code}, host {urllib.parse.urlsplit(error.url).hostname}, {body}'
-              except Exception as error:
-                  result = f'{type(error).__name__}: {error}'
-              print(f'::notice title={system} {label} dependency probe::{result}')
-          PY
