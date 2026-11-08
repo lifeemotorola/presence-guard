@@ -203,3 +203,32 @@ jobs:
               safe = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
               print(f'::notice title=Job {job}::{safe}')
           PY
+
+  diagnose-release-download:
+    name: Diagnose dependency downloads (temporary)
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Probe upstream release asset
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, sys, urllib.request, urllib.error, urllib.parse
+          system = os.environ['RUNNER_OS']
+          name = 'windows-deps-2025-07-11-x64.zip' if system == 'Windows' else 'macos-deps-2025-07-11-universal.tar.xz'
+          url = 'https://github.com/obsproject/obs-deps/releases/download/2025-07-11/' + name
+          for label, suffix in [('standard', ''), ('fresh', '?probe=' + os.environ['GITHUB_RUN_ID'])]:
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(url + suffix, method='HEAD'), timeout=90) as response:
+                      result = f'HTTP {response.status}, host {urllib.parse.urlsplit(response.url).hostname}'
+              except urllib.error.HTTPError as error:
+                  body = error.read(300).decode('utf-8', 'replace').replace('\n', ' ')
+                  result = f'HTTP {error.code}, host {urllib.parse.urlsplit(error.url).hostname}, {body}'
+              except Exception as error:
+                  result = f'{type(error).__name__}: {error}'
+              print(f'::notice title={system} {label} dependency probe::{result}')
+          PY
