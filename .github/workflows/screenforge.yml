@@ -117,7 +117,17 @@ jobs:
 
       - name: Test native click indicators 🖱️
         shell: pwsh
-        run: dotnet run --project screen-forge/windows-tests/ClickSmoke.csproj --configuration Release
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP "click-smoke.log"
+          dotnet run --project screen-forge/windows-tests/ClickSmoke.csproj --configuration Release 2>&1 | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Get-Content $log | Select-Object -Last 25 | ForEach-Object {
+              $line = $_.ToString().Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=Click indicator smoke test::$line"
+            }
+            exit $code
+          }
 
       - name: Publish 🧱
         shell: pwsh
