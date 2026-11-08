@@ -2,9 +2,10 @@
 
 A screen recorder for Windows 11 that does the boring parts properly.
 
-Built by **Emmanuel Suah** — that name is the app's publisher in the exe's file
-properties, in the header of the window, and in the copyright of every source
-file.
+Built by **Emmanuel Suah** — that name appears in the exe's company/file
+metadata, in the header of the window, and in the source-file copyright. The
+current executable is **not digitally signed**; file metadata is not a verified
+publisher identity.
 
 One button. It records a display, a window, or a rectangle you draw; it records
 what you hear and what you say, mixed with separate volume faders; and it hands
@@ -35,9 +36,39 @@ screen-forge/
 The exe is self-contained: no .NET runtime to install, nothing to register,
 nothing in Program Files. A folder on the desktop is fine.
 
-It is unsigned, so SmartScreen will say "Windows protected your PC" the first
-time — **More info → Run anyway**. That is what unsigned means; there is no
-certificate in this repository's budget.
+### SmartScreen and verifying your download
+
+The current build is **unsigned**. Windows SmartScreen may show **Windows
+protected your PC** and **Unknown publisher**. An Authenticode signature from a
+trusted code-signing certificate can establish publisher identity; SmartScreen
+may still warn about signed software that has not established reputation. The
+company name in file properties does not provide a signature.
+
+Before deciding whether to run the app:
+
+1. Download `screenforge-windows-x64` from a successful **main** run of this
+   repository's **ScreenForge** workflow. Extract it to a new folder.
+2. On that same Actions run, find **ScreenForge.exe SHA-256** in the **Build
+   Windows App** job summary. It is also included in `SHA256SUMS.txt` inside the
+   downloaded artifact, but compare with the run summary, not only the file in
+   the download.
+3. Open PowerShell in the extracted folder (enter `powershell` in File
+   Explorer's address bar), then run:
+
+   ```powershell
+   Get-FileHash .\ScreenForge.exe -Algorithm SHA256
+   ```
+
+   The hash must match that run's published hash (ignoring letter case). If it
+   does not match, do not run the file. Different runs can have different hashes.
+4. You can also right-click the file and scan it with Microsoft Defender.
+   A matching hash only proves the file matches that Actions build; it does not
+   prove the program is safe, malware-free, or digitally signed.
+
+If you trust the repository and its build and decide to run the verified file,
+choose **More info → Run anyway** on the SmartScreen warning. Otherwise, cancel.
+Do not disable SmartScreen or antivirus globally. Older artifacts without an exe
+hash can instead be checked against the artifact ZIP digest on the Actions run.
 
 ### The one file you have to fetch
 
