@@ -84,7 +84,7 @@ public partial class MainForm : Form
         heartbeat.Start();
 
         CreateTray();
-        AppendLog("ScreenForge 1.0 — press Ctrl+Shift+F9 to start or stop.");
+        AppendLog("ScreenForge 1.0.1 — press Ctrl+Shift+F9 to start or stop.");
         AppendLog(hotkeys.Status);
         UpdateSummary();
     }
@@ -542,13 +542,22 @@ public partial class MainForm : Form
 
         if (settings.CountdownSeconds > 0)
         {
-            using var countdown = new CountdownForm(settings.CountdownSeconds, target, displays);
-            countdown.ShowDialog(this);
-
-            if (countdown.Cancelled)
+            // A hotkey pressed during the modal countdown must not start a
+            // second countdown or create a second capture session.
+            busy = true;
+            try
             {
-                lblStatus.Text = "Cancelled.";
-                return;
+                using var countdown = new CountdownForm(settings.CountdownSeconds, target, displays);
+                countdown.ShowDialog(this);
+                if (countdown.Cancelled)
+                {
+                    lblStatus.Text = "Cancelled.";
+                    return;
+                }
+            }
+            finally
+            {
+                busy = false;
             }
         }
 
@@ -564,7 +573,6 @@ public partial class MainForm : Form
         try
         {
             created = await RecordingSession.CreateAsync(ffmpegPath, settings, target, outputPath, AppendLog);
-            created.CaptureLost += OnCaptureLost;
             await Task.Run(() => created.Start());
 
             session = created;
@@ -623,7 +631,8 @@ public partial class MainForm : Form
 
         try
         {
-            result = await finishing.StopAsync();
+            // StopTake waits for ffmpeg and audio devices. Keep the UI responsive.
+            result = await Task.Run(() => finishing.StopAsync());
         }
         catch (Exception ex)
         {
@@ -673,7 +682,8 @@ public partial class MainForm : Form
         else
         {
             AppendLog("recording failed: " + result.Message);
-            Warn("The recording could not be finished.\n\n" + result.Message +
+            Warn((lost == null ? "The recording could not be finished." : "The recording stopped unexpectedly.\n\n" + lost) +
+                 "\n\n" + result.Message +
                  (string.IsNullOrEmpty(result.LogPath) ? "" : $"\n\nDetails: {result.LogPath}"));
         }
     }
@@ -693,23 +703,9 @@ public partial class MainForm : Form
             _ = StartRecordingAsync();
     }
 
-    /// <summary>
-    /// ffmpeg stopped by itself. Stop the session the way the button would, so the
-    /// takes are muxed and whatever was captured is saved, and remember the reason
-    /// for the dialog that follows.
-    /// </summary>
-    private void OnCaptureLost(string reason)
+    private void HandleCaptureFailure(string reason)
     {
-        if (IsDisposed || Disposing)
-            return;
-
-        if (InvokeRequired)
-        {
-            BeginInvoke(new Action<string>(OnCaptureLost), reason);
-            return;
-        }
-
-        if (session == null)
+        if (session == null || busy)
             return;
 
         lostCaptureReason = reason;
@@ -769,6 +765,14 @@ public partial class MainForm : Form
                 lblEstimate.Text = "";
             }
 
+            return;
+        }
+
+        // A dead ffmpeg must not leave a running timer over a frozen file.
+        // Skip transitional states such as pause/stop, which intentionally end it.
+        if (!busy && session.TryGetCaptureFailure(out string reason))
+        {
+            HandleCaptureFailure(reason);
             return;
         }
 

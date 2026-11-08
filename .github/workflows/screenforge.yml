@@ -39,13 +39,18 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      # A wrong bitrate, an odd frame size or a mangled concat path produces a
-      # file that opens and plays badly — the kind of bug nobody notices until
-      # the recording that mattered. These tests are the cheap place to catch it.
+      # In addition to pure logic, synthetic-media tests run the real ffmpeg mux
+      # so an audio stream cannot silently shorten the output video.
+      - name: Check ffmpeg is available 🎞️
+        shell: bash
+        run: ffmpeg -version
+
       - name: Run Logic Tests 🧪
         id: tests
         continue-on-error: true
         shell: bash
+        env:
+          SCREENFORGE_FFMPEG: ffmpeg
         run: |
           set -o pipefail
           dotnet test screen-forge/tests/ScreenForge.Tests.csproj \

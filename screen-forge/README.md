@@ -122,28 +122,29 @@ stream untouched, and writes the final file with `+faststart`. Pauses become
 separate takes joined by the concat demuxer, so the timer jumps the way you
 expect instead of recording an hour of a frozen screen.
 
-### Why the soundtrack is padded with silence
+### Short recordings and quiet audio
 
-WASAPI loopback hands over packets only while the playback device is playing
-something. A quiet desktop — the normal state of a screen recording — therefore
-leaves a WAV that ends at the last sound it heard. Anything that then assumes
-"the sound is as long as the picture" cuts the recording to that length, which is
-how recordings used to come out a few seconds long no matter how long you
-recorded.
+A previous muxing command could shorten the **saved video** to the length of a
+shorter audio track. This can happen with WASAPI loopback: an idle playback
+device may deliver no audio packets. The 1.0.1 build addresses that in two ways:
 
-Three things stop that now:
+* Missing audio intervals are filled according to a monotonic clock when another
+  packet arrives, and trailing silence is filled when capture stops. Empty device
+  callbacks do not count as packets. Timing is approximate, not sample-accurate.
+* The mux pads the audio and stops at the end of the picture. A missing or
+  header-only audio file is left out instead of cutting the picture short.
 
-* ScreenForge writes silence into the gap whenever the device has been quiet for
-  a tick, so the WAV stays as long as the take and later sound still lands where
-  it happened.
-* The mux appends `apad` to the soundtrack, which makes `-shortest` mean "the
-  picture ends", not "the sound ends".
-* An audio file too small to hold anything is left out of the mix instead of
-  being handed to ffmpeg.
+The saved-file dialog tries to read the actual duration back from ffmpeg. It
+warns if that is much shorter than the recording session. If ffmpeg itself exits
+during a take, ScreenForge stops the timer, tries to save what it has and shows
+the error. Failed recordings and their log are retained in a temporary recovery
+folder instead of being silently deleted.
 
-The length in the "Recording saved" dialog is read back from the finished file
-with ffmpeg, not taken from the stopwatch. If they ever disagree, the log next to
-the video says so, and so does the dialog.
+The default **3-second countdown happens before recording starts**; it is not a
+recording limit. If the window disappears after the countdown, turn off **Hide
+this window while recording**, or use the tray icon and Ctrl+Shift+F9 to stop.
+If an updated build still stops, keep the `yourfile.mp4.log` next to the video
+(or the recovery log named in the error dialog) and share the reported error.
 
 ## Where things live
 
@@ -151,7 +152,8 @@ the video says so, and so does the dialog.
   A corrupt file is ignored rather than fatal, and every value is clamped on
   load (a frame rate of 47 becomes 48, a volume of 500% becomes 200%).
 * Videos: `Videos\ScreenForge\` by default, changeable in the app.
-* Temporary takes: `%TEMP%\screenforge-*`, deleted after a successful save.
+* Temporary takes: `%TEMP%\screenforge-*`, normally deleted after a successful
+  save, but retained when recovery may be needed.
 
 ## Limits, stated plainly
 
@@ -176,13 +178,12 @@ the video says so, and so does the dialog.
 dotnet test screen-forge/tests/ScreenForge.Tests.csproj
 ```
 
-The tests cover the parts where a mistake is silent: bitrate and frame rate
-arithmetic, the exact gdigrab/encoder/mux arguments, audio gain and mixing,
-concat escaping, file naming and collision suffixes, settings clamping, encoder
-list parsing and preference order, ffmpeg discovery, the silence arithmetic that
-keeps a soundtrack in step with the picture, and the length read back out of a
-finished file. They run on Linux,
-which is where CI runs them — no Windows and no screen needed.
+The tests cover capture/mux arguments, audio timing, process-exit detection,
+settings and file naming. They also run the real ffmpeg against synthetic video
+and audio: a video of 8 seconds must retain every frame with no audio, shorter
+one/two audio tracks, and audio longer than the video. No Windows, display or
+audio device is needed. FFmpeg with libx264 must be on `PATH`, or set the
+`SCREENFORGE_FFMPEG` environment variable to its executable path.
 
 The app itself is compiled by the `ScreenForge` workflow on `windows-latest`
 into the `screenforge-windows-x64` artifact. **I have not run it on a real

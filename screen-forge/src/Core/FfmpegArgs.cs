@@ -401,9 +401,12 @@ public static class FfmpegArgs
             if (!double.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double seconds))
                 continue;
 
-            double total = hours * 3600.0 + minutes * 60.0 + seconds;
+            if (hours < 0 || minutes < 0 || minutes >= 60 ||
+                !double.IsFinite(seconds) || seconds < 0 || seconds >= 60)
+                continue;
 
-            if (total <= 0)
+            double total = hours * 3600.0 + minutes * 60.0 + seconds;
+            if (total <= 0 || total > TimeSpan.MaxValue.TotalSeconds)
                 continue;
 
             return TimeSpan.FromSeconds(total);

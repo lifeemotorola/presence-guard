@@ -15,6 +15,7 @@
   <ItemGroup>
     <Compile Include="*.cs" />
     <Compile Include="../src/Core/**/*.cs" />
+    <Compile Include="../src/Recording/FfmpegProcess.cs" />
   </ItemGroup>
 
   <ItemGroup>

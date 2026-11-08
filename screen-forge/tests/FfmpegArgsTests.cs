@@ -314,6 +314,9 @@ public class FfmpegArgsTests
         Assert.Null(FfmpegArgs.ParseDuration(""));
         Assert.Null(FfmpegArgs.ParseDuration(null));
         Assert.Null(FfmpegArgs.ParseDuration("  Duration: 00:00:00.00, start: 0.0"));
+        Assert.Null(FfmpegArgs.ParseDuration("  Duration: 00:60:00.00, start: 0.0"));
+        Assert.Null(FfmpegArgs.ParseDuration("  Duration: 00:00:NaN, start: 0.0"));
+        Assert.Null(FfmpegArgs.ParseDuration("  Duration: -1:00:00, start: 0.0"));
     }
 
     [Fact]

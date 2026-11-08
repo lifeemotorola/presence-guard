@@ -11,7 +11,6 @@ the Free Software Foundation; either version 2 of the License, or
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Threading;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
@@ -27,230 +26,173 @@ public sealed class AudioDeviceInfo
 }
 
 /// <summary>
-/// Records one audio source to one WAV file.
-///
-/// Windows has no ffmpeg-native system audio capture: a loopback device has to
-/// be opened through WASAPI, which is what this does. The result is a plain WAV
-/// that ffmpeg mixes with the other track and the video at the end, so a failure
-/// here costs the soundtrack, not the recording.
-///
-/// One thing about loopback that is not obvious and used to cut recordings
-/// short: a playback device that is not playing anything sends *nothing*, not
-/// silence. A desktop that goes quiet — the normal state of a screen recording —
-/// therefore leaves a WAV that ends at the last sound it heard, and a muxer that
-/// trims the picture to its shortest stream then trims the whole recording to
-/// that length. So this writes silence whenever the device has been quiet for a
-/// tick, which keeps the track as long as the take and keeps later sound in its
-/// right place instead of dragging it forward.
+/// Records a WASAPI source to WAV. Loopback can have gaps when the playback
+/// device is idle. AudioTimeline inserts those gaps when the next packet arrives
+/// and pads trailing silence when capture stops, using a monotonic clock rather
+/// than a periodic timer. Access to the timeline and writer is serialized.
 /// </summary>
 public sealed class AudioTrack : IDisposable
 {
     private readonly IWaveIn capture;
     private readonly WaveFileWriter writer;
+    private readonly AudioTimeline timeline;
+    private readonly Stopwatch clock = new();
     private readonly object gate = new();
     private readonly ManualResetEventSlim finished = new(false);
-
-    /* The silence watchdog. Not a Windows Forms timer: this runs on the thread
-     * pool, because it must keep filling gaps while the UI is busy saving. */
-    private readonly System.Threading.Timer keepAlive;
-    private readonly byte[] silence;
-    private readonly int silenceChunk;
-    private long lastDataTicks;
-    private long silenceBytes;
-    private volatile bool running;
+    private bool writerClosed;
+    private bool stopRequested;
     private bool disposed;
 
     private AudioTrack(IWaveIn source, string path)
     {
         capture = source;
         Path = path;
-
-        /* The writer follows whatever the device gives us — usually 48 kHz
-         * float — and ffmpeg resamples at mux time if a second device disagrees. */
         writer = new WaveFileWriter(path, capture.WaveFormat);
 
-        silenceChunk = Silence.ChunkBytes(capture.WaveFormat.AverageBytesPerSecond, capture.WaveFormat.BlockAlign);
-        silence = silenceChunk > 0 ? new byte[silenceChunk] : Array.Empty<byte>();
-        keepAlive = new System.Threading.Timer(_ => FillGap(), null, Timeout.Infinite, Timeout.Infinite);
+        try
+        {
+            WaveFormat format = capture.WaveFormat;
+            // 8-bit PCM is unsigned; all ordinary wider PCM/float silence is zero.
+            byte silence = format.BitsPerSample == 8 ? (byte)128 : (byte)0;
+            timeline = new AudioTimeline(writer, format.AverageBytesPerSecond, format.BlockAlign, silence);
+        }
+        catch
+        {
+            writer.Dispose();
+            throw;
+        }
 
         capture.DataAvailable += OnDataAvailable;
         capture.RecordingStopped += OnRecordingStopped;
     }
 
     public string Path { get; }
-
     public Exception Error { get; private set; }
+    public long BytesWritten { get { lock (gate) return timeline.BytesWritten - timeline.SilenceWritten; } }
+    public long SilenceWritten { get { lock (gate) return timeline.SilenceWritten; } }
 
-    public long BytesWritten { get; private set; }
-
-    /// <summary>How much of the track was silence this class had to invent.</summary>
-    public long SilenceWritten => Interlocked.Read(ref silenceBytes);
-
-    public static AudioTrack StartSystem(string path)
-    {
-        var capture = new WasapiLoopbackCapture();
-        var track = new AudioTrack(capture, path);
-        track.Start();
-        return track;
-    }
+    public static AudioTrack StartSystem(string path) => Start(new WasapiLoopbackCapture(), path);
 
     public static AudioTrack StartMicrophone(string deviceId, string path)
     {
-        IWaveIn capture;
-
+        IWaveIn source;
         if (!string.IsNullOrWhiteSpace(deviceId))
         {
             using var enumerator = new MMDeviceEnumerator();
-            capture = new WasapiCapture(enumerator.GetDevice(deviceId));
+            source = new WasapiCapture(enumerator.GetDevice(deviceId));
         }
         else
         {
-            capture = new WasapiCapture();
+            source = new WasapiCapture();
         }
 
-        var track = new AudioTrack(capture, path);
-        track.Start();
-        return track;
+        return Start(source, path);
     }
 
-    private void Start()
+    private static AudioTrack Start(IWaveIn source, string path)
     {
-        lastDataTicks = Environment.TickCount64;
-        running = true;
-
+        AudioTrack track = null;
         try
         {
-            capture.StartRecording();
+            track = new AudioTrack(source, path);
+            track.clock.Start();
+            source.StartRecording();
+            return track;
         }
-        catch (Exception ex)
+        catch
         {
-            running = false;
-            Error = ex;
+            if (track != null)
+                track.Dispose();
+            else
+                source.Dispose();
             throw;
         }
-
-        keepAlive.Change(Silence.ChunkMilliseconds, Silence.ChunkMilliseconds);
     }
 
     private void OnDataAvailable(object sender, WaveInEventArgs e)
     {
-        Interlocked.Exchange(ref lastDataTicks, Environment.TickCount64);
-
         if (e.BytesRecorded <= 0)
             return;
 
         lock (gate)
         {
-            try
-            {
-                writer.Write(e.Buffer, 0, e.BytesRecorded);
-                BytesWritten += e.BytesRecorded;
-            }
-            catch (Exception ex)
-            {
-                Error = ex;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Writes a tick of silence when the device has gone quiet, so the track stays
-    /// as long as the picture and the next real sound lands where it happened.
-    /// </summary>
-    private void FillGap()
-    {
-        if (!running || silence.Length == 0)
-            return;
-
-        long now = Environment.TickCount64;
-
-        if (now - Interlocked.Read(ref lastDataTicks) < Silence.ChunkMilliseconds)
-            return;
-
-        lock (gate)
-        {
-            if (!running || disposed)
+            if (writerClosed || disposed)
                 return;
 
             try
             {
-                writer.Write(silence, 0, silence.Length);
-                Interlocked.Add(ref silenceBytes, silence.Length);
+                timeline.Append(e.Buffer, e.BytesRecorded, clock.Elapsed);
             }
             catch (Exception ex)
             {
                 Error ??= ex;
             }
         }
-
-        Interlocked.Exchange(ref lastDataTicks, now);
     }
 
     private void OnRecordingStopped(object sender, StoppedEventArgs e)
     {
         if (e.Exception != null)
-            Error ??= e.Exception;
+        {
+            lock (gate)
+                Error ??= e.Exception;
+        }
 
-        finished.Set();
+        try { finished.Set(); }
+        catch (ObjectDisposedException) { /* a late device callback */ }
     }
 
     public void Stop()
     {
-        running = false;
-
-        try
+        lock (gate)
         {
-            keepAlive.Change(Timeout.Infinite, Timeout.Infinite);
-        }
-        catch (ObjectDisposedException)
-        {
-            /* already disposed while closing */
+            if (stopRequested || disposed)
+                return;
+            stopRequested = true;
+            clock.Stop();
         }
 
-        try
-        {
-            capture.StopRecording();
-        }
-        catch (Exception ex)
-        {
-            Error ??= ex;
-        }
+        try { capture.StopRecording(); }
+        catch (Exception ex) { lock (gate) Error ??= ex; }
 
-        /* A device that never reports back must not hang the stop button. */
+        // A device that never reports back must not hang the stop button.
         finished.Wait(TimeSpan.FromSeconds(3));
-        CloseWriter();
+        CloseWriter(padTrailingSilence: true);
     }
 
-    private void CloseWriter()
+    private void CloseWriter(bool padTrailingSilence)
     {
         lock (gate)
         {
+            if (writerClosed)
+                return;
+
             try
             {
-                writer.Dispose();
+                if (padTrailingSilence)
+                    timeline.Complete(clock.Elapsed);
             }
             catch (Exception ex)
             {
                 Error ??= ex;
+            }
+            finally
+            {
+                try { writer.Dispose(); }
+                catch (Exception ex) { Error ??= ex; }
+                writerClosed = true;
             }
         }
     }
 
     public void Dispose()
     {
-        if (disposed)
-            return;
-
-        disposed = true;
-        running = false;
-
-        try
+        lock (gate)
         {
-            keepAlive.Dispose();
-        }
-        catch (Exception)
-        {
-            /* a timer that is already gone needs nothing */
+            if (disposed)
+                return;
+            disposed = true;
+            clock.Stop();
         }
 
         try
@@ -261,10 +203,10 @@ public sealed class AudioTrack : IDisposable
         }
         catch (Exception)
         {
-            /* disposing a dead device throws; there is nothing to do about it */
+            /* disposing a dead device can throw */
         }
 
-        CloseWriter();
+        CloseWriter(padTrailingSilence: false);
         finished.Dispose();
     }
 }
