@@ -1,0 +1,2 @@
+# PDFs are generated binary documents, not line-oriented text.
+*.pdf binary

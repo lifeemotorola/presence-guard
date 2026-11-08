@@ -1,87 +1,71 @@
 # Installing Presence Guard on Windows
 
-Two routes. **Route A needs no compiler** — GitHub builds the `.dll` for you on
-a Windows runner. Use it unless you specifically want a local toolchain.
+A printable **[installation guide (PDF)](presence-guard-install.pdf)** and
+**[usage guide (PDF)](presence-guard-usage.pdf)** are also available. The PDFs
+are prebuilt; maintainers can regenerate them with
+`python -m pip install reportlab==4.4.10` followed by
+`python docs/generate-guides.py` from the repository root.
+
+**Route A needs no compiler or build step**: download a prebuilt Windows
+artifact. Routes B and C are for developers who want to build the plugin.
+
+> **OBS 33.x:** this binary is built against OBS 31.1.1 headers. Compatibility
+> with OBS 33 has not been verified; check the OBS log if the plugin does not
+> load and obtain a compatible build before relying on it.
 
 ---
 
-## Route A — build it in the cloud (recommended, ~10 minutes)
+## Route A — download the prebuilt Windows plugin (recommended)
 
-You need a GitHub account. Nothing else — this repository already contains the
-workflows (`.github/workflows/`) and the build spec (`buildspec.json`) the
-runners need.
+### 1. Open a successful build
 
-### 1. Push the repository
+Open [this successful main-branch Actions run](https://github.com/lifeemotorola/presence-guard/actions/runs/42463108613).
+You may need to sign in to GitHub to download artifacts. If the artifact has
+expired, open [Actions](https://github.com/lifeemotorola/presence-guard/actions),
+choose a newer successful **main push run**, and confirm its **Build for Windows**
+job succeeded.
 
-In Git Bash (or PowerShell, with Git installed), from the repository root:
+### 2. Download the artifact
 
-```bash
-git push origin main
+> **The `.dll` is not in the repository.** It is a build output under
+> **Actions → run → Artifacts**, at the bottom of the run summary, not in the
+> **Code** tab.
+
+In that successful run, scroll down to **Artifacts** and download:
+
+```text
+presence-guard-0.1.0-windows-x64-6956a758a
 ```
 
-If Git asks for a password, use a Personal Access Token
-(<https://github.com/settings/tokens> → *Fine-grained tokens* → repository
-access: *Contents: Read and write*), or use GitHub Desktop instead.
+A newer successful run will have a different commit suffix. The downloaded
+Actions ZIP contains a second ZIP named `presence-guard-0.1.0-windows-x64.zip`.
+Extract **both** to obtain the `presence-guard` folder. Do not use the separate
+ScreenForge artifact; it is a screen recorder, not this OBS plugin.
 
-To build from a branch without merging, push the branch and open a pull request
-against `main`; the pull-request run builds Windows, macOS and Ubuntu as well.
+### 3. Install it
 
-### 3. Wait for the build
+1. Quit OBS completely, including any copy left in the system tray.
+2. In File Explorer, paste `%ProgramData%\obs-studio\plugins` into the address
+   bar. Create the `plugins` folder if needed. Windows may ask for administrator
+   permission.
+3. Move the **entire** extracted `presence-guard` folder there, keeping its
+   `bin` and `data` folders together. A typical installation looks like:
 
-Open the **Actions** tab. A run called *"main push run 🚀"* starts
-automatically. The **Build for Windows 🪟** job takes roughly 6–10 minutes (it
-downloads the OBS headers, prebuilt deps and Qt the first time).
-
-* Green ✔ on `build-project` → you're done.
-* If a job called *Check Formatting 🔍* fails, ignore it; the Windows build is a
-  separate job and still produces artifacts.
-
-### 4. Download the artifact
-
-> **The `.dll` is not in the repository.** It is a build output, so it exists
-> only as a workflow artifact on a finished Actions run — never in the **Code**
-> tab and never in a clone. Artifacts sit at the **bottom of the run summary
-> page**, under the *Artifacts* heading.
-
-On the finished run page, scroll to **Artifacts** and download
-
-```
-presence-guard-0.1.0-windows-x64-<commit>
-```
-
-It arrives as a `.zip`; inside it is `presence-guard-0.1.0-windows-x64.zip` —
-that is the second zip you have to extract before you see the folder.
-
-### 5. Install it
-
-1. Extract the inner `presence-guard-0.1.0-windows-x64.zip`.
-2. It contains a single folder, `presence-guard`. Move **that folder** into:
-
-   ```
-   C:\ProgramData\obs-studio\plugins\
-   ```
-
-   (paste that path into the Explorer address bar; the folder may not exist yet
-   — create it if not. No administrator rights are needed.)
-
-3. Verify the result looks exactly like this:
-
-   ```
+   ```text
    C:\ProgramData\obs-studio\plugins\presence-guard\bin\64bit\presence-guard.dll
    C:\ProgramData\obs-studio\plugins\presence-guard\data\locale\en-US.ini
    ```
 
-4. Restart OBS completely (not just minimise to tray).
+### 4. Open and verify the dock
 
-### 6. Turn the dock on
+Start OBS normally (not in Safe Mode) and open **Docks → Presence Guard**. The
+dock may start hidden or floating. Configure it using the
+[usage guide (PDF)](presence-guard-usage.pdf) or [README](../README.md#using-it).
 
-OBS starts the dock hidden and floating. Open **Docks → Presence Guard**. Then
-configure it as described in the [README](../README.md#using-it).
-
-To confirm the plugin loaded at all: **Help → Log Files → View Current Log** and
+To confirm the plugin loaded: **Help → Log Files → View Current Log**, then
 search for:
 
-```
+```text
 [presence-guard] loaded (version 0.1.0)
 ```
 
@@ -181,10 +165,10 @@ movement brings it back; *Restore now* forces it. If the previous scene was
 deleted while you were away, there is nothing to restore to and the guard leaves
 whatever is live on air.
 
-**After a major OBS update (e.g. 31 → 32)** plugin binaries can become
-incompatible. Rebuild (Route A: push any commit; Route B: rerun the three
-commands) — and if OBS bumped the API, update the `obs-studio` version and hashes
-in `buildspec.json` first.
+**After a major OBS update** plugin binaries can become incompatible. The
+current build uses OBS 31.1.1 headers and has not been verified against OBS 33.
+Check the OBS log and obtain a compatible build; maintainers may need to update
+the `obs-studio` version and hashes in `buildspec.json` before rebuilding.
 
 ## Uninstalling
 

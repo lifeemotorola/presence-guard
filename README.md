@@ -24,7 +24,8 @@ state machine covered by tests (`tests/run-tests.sh`).
 
 ## Requirements
 
-* OBS Studio **31.x** (built and tested against 31.1.1 headers)
+* OBS Studio **31.x** (built against 31.1.1 headers); compatibility with OBS
+  33.x has not been verified
 * Windows 10/11 x64 or macOS 12+ for the AFK rule (Linux builds work, but idle
   time is not implemented there, so only the dead-air rule runs)
 * The microphone source must be part of an active scene while the rule is armed
@@ -33,9 +34,13 @@ state machine covered by tests (`tests/run-tests.sh`).
 
 ## Install
 
-See **[docs/INSTALL.md](docs/INSTALL.md)** for the click-by-click version
-(build it with GitHub Actions, with no compiler on your machine, or build it
-locally in Visual Studio 2022).
+See **[docs/INSTALL.md](docs/INSTALL.md)** for the click-by-click version:
+download a prebuilt Windows artifact with no compiler, or build it locally in
+Visual Studio 2022.
+
+Printable guides: **[Installation (PDF)](docs/presence-guard-install.pdf)** ·
+**[Usage (PDF)](docs/presence-guard-usage.pdf)**. The Windows installation
+guide links to a successful prebuilt artifact and explains the two ZIP files.
 
 Short version on Windows: extract the plugin folder so you end up with
 

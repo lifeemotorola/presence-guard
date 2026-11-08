@@ -19,6 +19,7 @@
 !/tests
 !.clang-format
 !.gersemirc
+!/.gitattributes
 !.gitignore
 !buildspec.json
 !CMakeLists.txt
@@ -52,3 +53,6 @@
 /screen-forge/tests/obj/
 /screen-forge/windows-tests/bin/
 /screen-forge/windows-tests/obj/
+
+# Python cache from the printable-guide tests
+/docs/__pycache__/
