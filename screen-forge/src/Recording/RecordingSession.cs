@@ -554,6 +554,11 @@ public sealed class RecordingSession : IDisposable
             if (onDisk.HasValue && onDisk.Value + TimeSpan.FromSeconds(1.5) < session)
                 warnings.Add($"The file is {Clock(onDisk.Value)} but the session ran {Clock(session)}. " +
                              "Some video may be missing; see the log next to the file.");
+            else if (!onDisk.HasValue)
+            {
+                warnings.Add("The finished file's duration could not be verified; it may be incomplete.");
+                preserveWorkFolder = true;
+            }
 
             if (preserveWorkFolder)
                 warnings.Add("Recovery files: " + workFolder);

@@ -663,6 +663,7 @@ public partial class MainForm : Form
                 Warn(
                     "The recording stopped on its own.\n\n" + lost +
                     "\n\nWhat had been recorded up to that moment is saved:\n" + result.Path +
+                    (string.IsNullOrEmpty(result.LogPath) ? "" : "\n\nDetails: " + result.LogPath) +
                     ShortNote(result));
             }
             else

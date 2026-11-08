@@ -26,8 +26,8 @@ screen-forge/
 
 1. **Actions → ScreenForge → the newest green run**
 2. At the bottom, under **Artifacts**: `screenforge-windows-x64`
-3. Unzip twice (GitHub always wraps the zip in a zip). You get `ScreenForge.exe`
-   and a `PUT-FFMPEG-HERE.txt`.
+3. Extract the downloaded ZIP. If it contains another ZIP, extract that too.
+   You should see `ScreenForge.exe` and `PUT-FFMPEG-HERE.txt`.
 4. **Put `ffmpeg.exe` next to `ScreenForge.exe`** — see below. Without it the app
    starts and politely refuses to record.
 5. Double-click `ScreenForge.exe`.
