@@ -41,16 +41,20 @@ jobs:
 
       # In addition to pure logic, synthetic-media tests run the real ffmpeg mux
       # so an audio stream cannot silently shorten the output video.
-      - name: Check ffmpeg is available 🎞️
+      - name: Prepare ffmpeg for media tests 🎞️
         shell: bash
-        run: ffmpeg -version
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ffmpeg-env"
+          python="$RUNNER_TEMP/ffmpeg-env/bin/python"
+          "$python" -m pip install --disable-pip-version-check imageio-ffmpeg==0.8.1
+          ffmpeg_path="$("$python" -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')"
+          "$ffmpeg_path" -version
+          echo "SCREENFORGE_FFMPEG=$ffmpeg_path" >> "$GITHUB_ENV"
 
       - name: Run Logic Tests 🧪
         id: tests
         continue-on-error: true
         shell: bash
-        env:
-          SCREENFORGE_FFMPEG: ffmpeg
         run: |
           set -o pipefail
           dotnet test screen-forge/tests/ScreenForge.Tests.csproj \
