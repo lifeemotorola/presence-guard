@@ -168,9 +168,47 @@ jobs:
           next to itself first, then %APPDATA%\ffmpeg, then PATH.
           '@ | Set-Content dist/PUT-FFMPEG-HERE.txt -Encoding UTF8
 
+      # Publish the executable hash independently of the downloadable ZIP so a
+      # reader can compare the extracted file with this specific Actions run.
+      # A hash proves a match to the build, not that the program is safe or signed.
+      - name: Publish executable checksum 🔎
+        id: exe-checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -Algorithm SHA256 -Path dist/ScreenForge.exe).Hash.ToLowerInvariant()
+          if ($hash -notmatch '^[0-9a-f]{64}$') { throw 'Invalid SHA-256 result' }
+          "$hash  ScreenForge.exe" | Set-Content -Path dist/SHA256SUMS.txt -Encoding ascii
+          $signature = (Get-AuthenticodeSignature -FilePath dist/ScreenForge.exe).Status
+          "sha256=$hash" >> $env:GITHUB_OUTPUT
+          Write-Output "::notice title=ScreenForge.exe SHA-256::$hash"
+          Write-Output "::notice title=Authenticode signature status::$signature"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '### ScreenForge.exe SHA-256'
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "<code>$hash</code>"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Authenticode signature status on this runner: $signature."
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value 'This identifies the executable from this run. A matching hash does not prove that it is safe or digitally signed.'
+
       - name: Upload Artifact 📡
         uses: actions/upload-artifact@v4
         with:
           name: screenforge-windows-x64
           path: dist/
           if-no-files-found: error
+
+      # Validate the bytes users actually download, not just the staging folder.
+      - name: Download artifact for integrity check
+        uses: actions/download-artifact@v4
+        with:
+          name: screenforge-windows-x64
+          path: ${{ runner.temp }}/screenforge-integrity-check
+
+      - name: Check downloaded executable hash
+        shell: pwsh
+        env:
+          EXPECTED_SHA256: ${{ steps.exe-checksum.outputs.sha256 }}
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'screenforge-integrity-check'
+          $actual = (Get-FileHash -Algorithm SHA256 -Path (Join-Path $folder 'ScreenForge.exe')).Hash.ToLowerInvariant()
+          $checksumFile = (Get-Content -Raw -Path (Join-Path $folder 'SHA256SUMS.txt')).Trim()
+          if ($actual -ne $env:EXPECTED_SHA256 -or $checksumFile -ne "$actual  ScreenForge.exe") {
+            throw 'Uploaded executable or checksum does not match the published SHA-256.'
+          }

@@ -10,8 +10,7 @@
     <AssemblyName>ScreenForge</AssemblyName>
     <RootNamespace>ScreenForge</RootNamespace>
     <Version>1.1.0</Version>
-    <!-- What Explorer's Details tab calls the publisher, and what an installer
-         would sign as. -->
+    <!-- Explorer Details metadata only; this is not an Authenticode signature. -->
     <Company>Emmanuel Suah</Company>
     <Authors>Emmanuel Suah</Authors>
     <Copyright>© 2026 Emmanuel Suah</Copyright>
