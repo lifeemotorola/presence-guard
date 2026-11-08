@@ -271,24 +271,27 @@ public static class FfmpegArgs
                 "-map", "0:v:0",
                 "-map", "1:a:0",
                 "-c:v", "copy",
-                "-af", Gain(audioInputs[0].Gain),
+                /* apad puts silence after the last sample, which makes the sound
+                 * infinite; -shortest then ends the file at the *picture* instead
+                 * of at the sound. Without it, a track that stopped early — a
+                 * desktop that went quiet, a device that was unplugged — takes the
+                 * whole recording down to its own length. */
+                "-af", Gain(audioInputs[0].Gain) + ",apad",
                 "-c:a", "aac",
                 "-b:a", bitrate.ToString(CultureInfo.InvariantCulture) + "k",
                 "-ar", "48000",
-                /* The microphone is stopped a moment after the picture: cut the
-                 * sound at the last frame instead of leaving a frozen image with
-                 * half a second of silence behind it. */
                 "-shortest",
             });
         }
         else
         {
             /* Two sources, two faders, one soundtrack. normalize=0 keeps the
-             * mix from quietly halving everything. */
+             * mix from quietly halving everything; apad pads the result with
+             * silence so -shortest can only ever mean "the picture ends". */
             var filter = new StringBuilder();
             filter.Append("[1:a]").Append(Gain(audioInputs[0].Gain)).Append("[a1];");
             filter.Append("[2:a]").Append(Gain(audioInputs[1].Gain)).Append("[a2];");
-            filter.Append("[a1][a2]amix=inputs=2:duration=longest:normalize=0[aout]");
+            filter.Append("[a1][a2]amix=inputs=2:duration=longest:normalize=0,apad[aout]");
 
             args.AddRange(new[]
             {
@@ -353,6 +356,61 @@ public static class FfmpegArgs
         "-hide_banner",
         "-encoders",
     };
+
+    /// <summary>
+    /// Asks ffmpeg what is in a file. It exits non-zero for this on purpose — the
+    /// information is in the banner it prints before refusing to transcode — so
+    /// the caller reads the output and ignores the exit code.
+    /// </summary>
+    public static List<string> ProbeDuration(string path) => new()
+    {
+        "-hide_banner",
+        "-i",
+        path,
+    };
+
+    /// <summary>
+    /// The length out of an ffmpeg banner: <c>Duration: 00:01:02.34, start: …</c>.
+    /// Null when the file has no length to speak of, which is what a truncated
+    /// recording looks like.
+    /// </summary>
+    public static TimeSpan? ParseDuration(string output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+            return null;
+
+        foreach (string line in output.Split('\n'))
+        {
+            int at = line.IndexOf("Duration:", StringComparison.Ordinal);
+            if (at < 0)
+                continue;
+
+            string value = line[(at + "Duration:".Length)..].Trim();
+            int comma = value.IndexOf(',');
+            if (comma >= 0)
+                value = value[..comma];
+
+            string[] parts = value.Trim().Split(':');
+            if (parts.Length != 3)
+                continue;
+
+            if (!int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hours))
+                continue;
+            if (!int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int minutes))
+                continue;
+            if (!double.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double seconds))
+                continue;
+
+            double total = hours * 3600.0 + minutes * 60.0 + seconds;
+
+            if (total <= 0)
+                continue;
+
+            return TimeSpan.FromSeconds(total);
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Actually *uses* an encoder rather than trusting the list: a build can

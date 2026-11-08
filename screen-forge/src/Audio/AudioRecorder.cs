@@ -15,6 +15,7 @@ using System.IO;
 using System.Threading;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
+using ScreenForge.Core;
 
 namespace ScreenForge.Audio;
 
@@ -32,6 +33,15 @@ public sealed class AudioDeviceInfo
 /// be opened through WASAPI, which is what this does. The result is a plain WAV
 /// that ffmpeg mixes with the other track and the video at the end, so a failure
 /// here costs the soundtrack, not the recording.
+///
+/// One thing about loopback that is not obvious and used to cut recordings
+/// short: a playback device that is not playing anything sends *nothing*, not
+/// silence. A desktop that goes quiet — the normal state of a screen recording —
+/// therefore leaves a WAV that ends at the last sound it heard, and a muxer that
+/// trims the picture to its shortest stream then trims the whole recording to
+/// that length. So this writes silence whenever the device has been quiet for a
+/// tick, which keeps the track as long as the take and keeps later sound in its
+/// right place instead of dragging it forward.
 /// </summary>
 public sealed class AudioTrack : IDisposable
 {
@@ -39,6 +49,15 @@ public sealed class AudioTrack : IDisposable
     private readonly WaveFileWriter writer;
     private readonly object gate = new();
     private readonly ManualResetEventSlim finished = new(false);
+
+    /* The silence watchdog. Not a Windows Forms timer: this runs on the thread
+     * pool, because it must keep filling gaps while the UI is busy saving. */
+    private readonly System.Threading.Timer keepAlive;
+    private readonly byte[] silence;
+    private readonly int silenceChunk;
+    private long lastDataTicks;
+    private long silenceBytes;
+    private volatile bool running;
     private bool disposed;
 
     private AudioTrack(IWaveIn source, string path)
@@ -50,6 +69,10 @@ public sealed class AudioTrack : IDisposable
          * float — and ffmpeg resamples at mux time if a second device disagrees. */
         writer = new WaveFileWriter(path, capture.WaveFormat);
 
+        silenceChunk = Silence.ChunkBytes(capture.WaveFormat.AverageBytesPerSecond, capture.WaveFormat.BlockAlign);
+        silence = silenceChunk > 0 ? new byte[silenceChunk] : Array.Empty<byte>();
+        keepAlive = new System.Threading.Timer(_ => FillGap(), null, Timeout.Infinite, Timeout.Infinite);
+
         capture.DataAvailable += OnDataAvailable;
         capture.RecordingStopped += OnRecordingStopped;
     }
@@ -59,6 +82,9 @@ public sealed class AudioTrack : IDisposable
     public Exception Error { get; private set; }
 
     public long BytesWritten { get; private set; }
+
+    /// <summary>How much of the track was silence this class had to invent.</summary>
+    public long SilenceWritten => Interlocked.Read(ref silenceBytes);
 
     public static AudioTrack StartSystem(string path)
     {
@@ -87,10 +113,29 @@ public sealed class AudioTrack : IDisposable
         return track;
     }
 
-    private void Start() => capture.StartRecording();
+    private void Start()
+    {
+        lastDataTicks = Environment.TickCount64;
+        running = true;
+
+        try
+        {
+            capture.StartRecording();
+        }
+        catch (Exception ex)
+        {
+            running = false;
+            Error = ex;
+            throw;
+        }
+
+        keepAlive.Change(Silence.ChunkMilliseconds, Silence.ChunkMilliseconds);
+    }
 
     private void OnDataAvailable(object sender, WaveInEventArgs e)
     {
+        Interlocked.Exchange(ref lastDataTicks, Environment.TickCount64);
+
         if (e.BytesRecorded <= 0)
             return;
 
@@ -108,6 +153,39 @@ public sealed class AudioTrack : IDisposable
         }
     }
 
+    /// <summary>
+    /// Writes a tick of silence when the device has gone quiet, so the track stays
+    /// as long as the picture and the next real sound lands where it happened.
+    /// </summary>
+    private void FillGap()
+    {
+        if (!running || silence.Length == 0)
+            return;
+
+        long now = Environment.TickCount64;
+
+        if (now - Interlocked.Read(ref lastDataTicks) < Silence.ChunkMilliseconds)
+            return;
+
+        lock (gate)
+        {
+            if (!running || disposed)
+                return;
+
+            try
+            {
+                writer.Write(silence, 0, silence.Length);
+                Interlocked.Add(ref silenceBytes, silence.Length);
+            }
+            catch (Exception ex)
+            {
+                Error ??= ex;
+            }
+        }
+
+        Interlocked.Exchange(ref lastDataTicks, now);
+    }
+
     private void OnRecordingStopped(object sender, StoppedEventArgs e)
     {
         if (e.Exception != null)
@@ -118,6 +196,17 @@ public sealed class AudioTrack : IDisposable
 
     public void Stop()
     {
+        running = false;
+
+        try
+        {
+            keepAlive.Change(Timeout.Infinite, Timeout.Infinite);
+        }
+        catch (ObjectDisposedException)
+        {
+            /* already disposed while closing */
+        }
+
         try
         {
             capture.StopRecording();
@@ -153,6 +242,16 @@ public sealed class AudioTrack : IDisposable
             return;
 
         disposed = true;
+        running = false;
+
+        try
+        {
+            keepAlive.Dispose();
+        }
+        catch (Exception)
+        {
+            /* a timer that is already gone needs nothing */
+        }
 
         try
         {

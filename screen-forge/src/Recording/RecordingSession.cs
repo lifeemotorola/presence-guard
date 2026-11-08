@@ -60,6 +60,13 @@ public sealed class RecordingSession : IDisposable
     private Take current;
     private bool disposed;
 
+    /// <summary>
+    /// ffmpeg stopping by itself — a display that changed mode, an encoder that
+    /// ran out of memory, a capture area that vanished. Reported so the window can
+    /// stop honestly instead of showing a timer over a file that stopped growing.
+    /// </summary>
+    public event Action<string> CaptureLost;
+
     private RecordingSession(
         string ffmpegPath,
         VideoSettings video,
@@ -246,6 +253,10 @@ public sealed class RecordingSession : IDisposable
         process.Start();
         process.BeginErrorReadLine();
 
+        /* If ffmpeg dies on its own — not because we asked it to — the take is
+         * over whether or not the timer agrees. */
+        process.Exited += (_, _) => OnCaptureExited(take, process);
+
         /* Give ffmpeg a moment to fail on a bad argument, a busy desktop or a
          * missing encoder, so the error lands in the dialog and not in a log the
          * user will never open. */
@@ -284,6 +295,50 @@ public sealed class RecordingSession : IDisposable
             return;
 
         StartTake();
+    }
+
+    /// <summary>
+    /// Runs on a thread-pool thread when the capture process ends. A deliberate
+    /// stop clears <c>take.Process</c> before it asks ffmpeg to quit, so anything
+    /// arriving here with a live reference is ffmpeg leaving without being asked.
+    /// </summary>
+    private void OnCaptureExited(Take take, Process process)
+    {
+        if (take.Process != process)
+            return;
+
+        double seconds = running.Elapsed.TotalSeconds;
+
+        string why;
+        lock (take.FfmpegNoise)
+        {
+            why = take.FfmpegNoise.Count > 0
+                ? take.FfmpegNoise[take.FfmpegNoise.Count - 1]
+                : "ffmpeg exited without saying why";
+        }
+
+        Note($"ffmpeg stopped on its own after {seconds:0.0}s: {why}");
+        CaptureLost?.Invoke($"ffmpeg stopped on its own after {seconds:0.0} s — {why}");
+    }
+
+    /// <summary>
+    /// An audio path worth handing to the muxer: a WAV that a dead device left
+    /// behind is 44 bytes of header, and feeding that to ffmpeg costs the whole
+    /// recording for the sake of a silent track.
+    /// </summary>
+    private static string UsableAudio(string path)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                return null;
+
+            return new FileInfo(path).Length > 1024 ? path : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private void StopTake()
@@ -422,11 +477,20 @@ public sealed class RecordingSession : IDisposable
                     continue;
 
                 string mixedPath = Path.Combine(workFolder, $"mixed-{take.Index}.mp4");
+                string systemAudio = UsableAudio(take.SystemPath);
+                string microphone = UsableAudio(take.MicrophonePath);
+
+                if (take.SystemPath != null && systemAudio == null)
+                    Note($"system audio for take {take.Index} is empty (the output device was silent or gone); mixing the picture alone");
+
+                if (take.MicrophonePath != null && microphone == null)
+                    Note($"microphone for take {take.Index} is empty; mixing the picture alone");
+
                 var mux = new MuxRequest
                 {
                     VideoPath = take.VideoPath,
-                    SystemAudioPath = take.SystemPath,
-                    MicrophonePath = take.MicrophonePath,
+                    SystemAudioPath = systemAudio,
+                    MicrophonePath = microphone,
                     SystemGainPercent = audio.SystemGainPercent,
                     MicrophoneGainPercent = audio.MicrophoneGainPercent,
                     AudioBitrateKbps = 192,
@@ -479,9 +543,26 @@ public sealed class RecordingSession : IDisposable
             result.Success = true;
             result.Path = finalPath;
             result.Bytes = new FileInfo(finalPath).Length;
+
+            /* The stopwatch knows how long you were recording; the file knows how
+             * long the recording is. When they disagree the file is what you have,
+             * so report the file and say what happened. */
+            TimeSpan session = result.Duration;
+            TimeSpan? onDisk = await ProbeDurationAsync(finalPath).ConfigureAwait(false);
+
+            if (onDisk.HasValue)
+                result.Duration = onDisk.Value;
+
             result.Message = mixed.Count > 1
                 ? $"Joined {mixed.Count} takes into one file."
                 : "Saved.";
+
+            if (onDisk.HasValue && onDisk.Value + TimeSpan.FromSeconds(1.5) < session)
+            {
+                result.Message =
+                    $"The file is {Clock(onDisk.Value)} but the session ran {Clock(session)} — ffmpeg stopped early. " +
+                    "The log next to the video has its last words.";
+            }
         }
         catch (Exception ex)
         {
@@ -555,6 +636,37 @@ public sealed class RecordingSession : IDisposable
         int from = Math.Max(0, lines.Length - 3);
         return string.Join(" | ", lines[from..]).Trim();
     }
+
+    /// <summary>
+    /// How long the finished file really is, according to ffmpeg itself. Null when
+    /// there is nothing to measure.
+    /// </summary>
+    private async Task<TimeSpan?> ProbeDurationAsync(string path)
+    {
+        try
+        {
+            ProcessResult probe = await FfmpegProcess
+                .RunAsync(ffmpegPath, FfmpegArgs.ProbeDuration(path), 20000)
+                .ConfigureAwait(false);
+
+            TimeSpan? duration = FfmpegArgs.ParseDuration(probe.Output);
+
+            if (duration.HasValue)
+                Note($"file length: {Clock(duration.Value)}");
+            else
+                Note("could not read the length of the finished file");
+
+            return duration;
+        }
+        catch (Exception ex)
+        {
+            Note("measuring the finished file: " + ex.Message);
+            return null;
+        }
+    }
+
+    private static string Clock(TimeSpan value) =>
+        $"{(int)value.TotalMinutes}:{value.Seconds:00}";
 
     private void Note(string line)
     {

@@ -40,6 +40,13 @@ public partial class MainForm : Form
     private Timer heartbeat;
     private bool busy;
 
+    /* Hotkeys repeat while a key is held; a quarter of a second apart is a
+     * repeat, not a second decision. */
+    private long lastToggleTicks;
+
+    /* Set when ffmpeg dies mid-take, so the stop that follows can say why. */
+    private string lostCaptureReason;
+
     private ToolStripMenuItem trayToggle;
     private ToolStripMenuItem trayPause;
 
@@ -546,6 +553,7 @@ public partial class MainForm : Form
         }
 
         busy = true;
+        lostCaptureReason = null;
         btnRecord.Enabled = false;
         SetRecordingUi(false);
         btnRecord.Enabled = false;
@@ -556,6 +564,7 @@ public partial class MainForm : Form
         try
         {
             created = await RecordingSession.CreateAsync(ffmpegPath, settings, target, outputPath, AppendLog);
+            created.CaptureLost += OnCaptureLost;
             await Task.Run(() => created.Start());
 
             session = created;
@@ -603,6 +612,9 @@ public partial class MainForm : Form
         busy = true;
         HideChip();
 
+        string lost = lostCaptureReason;
+        lostCaptureReason = null;
+
         RecordingSession finishing = session;
         lblStatus.Text = "Finishing the file…";
         btnPause.Enabled = false;
@@ -635,15 +647,28 @@ public partial class MainForm : Form
         {
             AppendLog($"saved {result.Path} ({Megabytes(result.Bytes)}, {Clock(result.Duration)})");
 
-            DialogResult open = MessageBox.Show(
-                this,
-                $"Saved:\n{result.Path}\n\n{Megabytes(result.Bytes)} · {Clock(result.Duration)} · {result.Takes} take(s)\n\nOpen the folder?",
-                "Recording saved",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Information);
+            if (lost != null)
+            {
+                /* The capture died; the user did not press stop. Say so, and say
+                 * what survived, instead of showing a cheerful "Recording saved". */
+                Warn(
+                    "The recording stopped on its own.\n\n" + lost +
+                    "\n\nWhat had been recorded up to that moment is saved:\n" + result.Path +
+                    ShortNote(result));
+            }
+            else
+            {
+                DialogResult open = MessageBox.Show(
+                    this,
+                    $"Saved:\n{result.Path}\n\n{Megabytes(result.Bytes)} · {Clock(result.Duration)} · {result.Takes} take(s)" +
+                    ShortNote(result) + "\n\nOpen the folder?",
+                    "Recording saved",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information);
 
-            if (open == DialogResult.Yes)
-                OpenOutputFolder();
+                if (open == DialogResult.Yes)
+                    OpenOutputFolder();
+            }
         }
         else
         {
@@ -655,10 +680,41 @@ public partial class MainForm : Form
 
     private void ToggleRecording()
     {
+        long now = Environment.TickCount64;
+
+        if (now - lastToggleTicks < 400)
+            return;
+
+        lastToggleTicks = now;
+
         if (session != null)
             _ = StopRecordingAsync();
         else
             _ = StartRecordingAsync();
+    }
+
+    /// <summary>
+    /// ffmpeg stopped by itself. Stop the session the way the button would, so the
+    /// takes are muxed and whatever was captured is saved, and remember the reason
+    /// for the dialog that follows.
+    /// </summary>
+    private void OnCaptureLost(string reason)
+    {
+        if (IsDisposed || Disposing)
+            return;
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action<string>(OnCaptureLost), reason);
+            return;
+        }
+
+        if (session == null)
+            return;
+
+        lostCaptureReason = reason;
+        AppendLog("capture lost: " + reason);
+        _ = StopRecordingAsync();
     }
 
     private void TogglePause()
@@ -888,6 +944,18 @@ public partial class MainForm : Form
         txtLog.AppendText(line.TrimEnd() + Environment.NewLine);
         txtLog.SelectionStart = txtLog.TextLength;
         txtLog.ScrollToCaret();
+    }
+
+    /// <summary>The session's own remark, when it has one worth showing.</summary>
+    private static string ShortNote(RecordingResult result)
+    {
+        if (result == null || string.IsNullOrWhiteSpace(result.Message))
+            return "";
+
+        if (result.Message == "Saved." || result.Message.StartsWith("Joined ", StringComparison.Ordinal))
+            return "";
+
+        return "\n\n" + result.Message;
     }
 
     private void Warn(string message)

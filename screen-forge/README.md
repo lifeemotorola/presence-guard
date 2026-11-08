@@ -122,6 +122,29 @@ stream untouched, and writes the final file with `+faststart`. Pauses become
 separate takes joined by the concat demuxer, so the timer jumps the way you
 expect instead of recording an hour of a frozen screen.
 
+### Why the soundtrack is padded with silence
+
+WASAPI loopback hands over packets only while the playback device is playing
+something. A quiet desktop — the normal state of a screen recording — therefore
+leaves a WAV that ends at the last sound it heard. Anything that then assumes
+"the sound is as long as the picture" cuts the recording to that length, which is
+how recordings used to come out a few seconds long no matter how long you
+recorded.
+
+Three things stop that now:
+
+* ScreenForge writes silence into the gap whenever the device has been quiet for
+  a tick, so the WAV stays as long as the take and later sound still lands where
+  it happened.
+* The mux appends `apad` to the soundtrack, which makes `-shortest` mean "the
+  picture ends", not "the sound ends".
+* An audio file too small to hold anything is left out of the mix instead of
+  being handed to ffmpeg.
+
+The length in the "Recording saved" dialog is read back from the finished file
+with ffmpeg, not taken from the stopwatch. If they ever disagree, the log next to
+the video says so, and so does the dialog.
+
 ## Where things live
 
 * Settings: `%APPDATA%\ScreenForge\settings.json` — plain JSON, safe to edit.
@@ -156,7 +179,9 @@ dotnet test screen-forge/tests/ScreenForge.Tests.csproj
 The tests cover the parts where a mistake is silent: bitrate and frame rate
 arithmetic, the exact gdigrab/encoder/mux arguments, audio gain and mixing,
 concat escaping, file naming and collision suffixes, settings clamping, encoder
-list parsing and preference order, and ffmpeg discovery. They run on Linux,
+list parsing and preference order, ffmpeg discovery, the silence arithmetic that
+keeps a soundtrack in step with the picture, and the length read back out of a
+finished file. They run on Linux,
 which is where CI runs them — no Windows and no screen needed.
 
 The app itself is compiled by the `ScreenForge` workflow on `windows-latest`
