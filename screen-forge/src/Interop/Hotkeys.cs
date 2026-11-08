@@ -25,6 +25,10 @@ public sealed class Hotkeys : IDisposable
 
     private const uint ModControl = 0x0002;
     private const uint ModShift = 0x0004;
+
+    /* Without this, holding the key fires the hotkey again on every key repeat:
+     * start, stop, start, stop, and a recording three seconds long. */
+    private const uint ModNoRepeat = 0x4000;
     private const uint VkF9 = 0x78;
     private const uint VkF10 = 0x79;
 
@@ -61,7 +65,7 @@ public sealed class Hotkeys : IDisposable
     {
         try
         {
-            if (NativeMethods.RegisterHotKey(window, id, ModControl | ModShift, key))
+            if (NativeMethods.RegisterHotKey(window, id, ModControl | ModShift | ModNoRepeat, key))
             {
                 registered.Add(id);
                 return true;

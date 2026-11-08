@@ -59,6 +59,7 @@ public sealed class RecordingSession : IDisposable
 
     private Take current;
     private bool disposed;
+    private bool preserveWorkFolder;
 
     private RecordingSession(
         string ffmpegPath,
@@ -89,9 +90,8 @@ public sealed class RecordingSession : IDisposable
 
     public int TakeCount => takes.Count;
 
-    public TimeSpan Elapsed => Paused
-        ? TimeSpan.FromMilliseconds(finishedMilliseconds)
-        : TimeSpan.FromMilliseconds(finishedMilliseconds + running.Elapsed.TotalMilliseconds);
+    public TimeSpan Elapsed => TimeSpan.FromMilliseconds(
+        finishedMilliseconds + (running.IsRunning ? running.Elapsed.TotalMilliseconds : 0));
 
     /// <summary>Bytes written so far, so the UI can show that something is happening.</summary>
     public long BytesOnDisk
@@ -220,13 +220,21 @@ public sealed class RecordingSession : IDisposable
             OutputPath = take.VideoPath,
         };
 
-        List<string> args = FfmpegArgs.RecordVideo(request);
+        List<string> args;
+        try
+        {
+            args = FfmpegArgs.RecordVideo(request);
+        }
+        catch
+        {
+            StopAudio(take);
+            throw;
+        }
         Note("$ " + FfmpegArgs.ToCommandLine(ffmpegPath, args));
 
         var process = new Process
         {
             StartInfo = FfmpegProcess.StartInfo(ffmpegPath, args),
-            EnableRaisingEvents = true,
         };
 
         process.ErrorDataReceived += (_, e) =>
@@ -236,36 +244,54 @@ public sealed class RecordingSession : IDisposable
 
             lock (take.FfmpegNoise)
             {
-                if (take.FfmpegNoise.Count < 200)
-                    take.FfmpegNoise.Add(e.Data);
+                // Retain the most recent diagnostics, not just startup messages.
+                if (take.FfmpegNoise.Count >= 200)
+                    take.FfmpegNoise.RemoveAt(0);
+                take.FfmpegNoise.Add(e.Data);
             }
 
             Note(e.Data);
         };
 
-        process.Start();
-        process.BeginErrorReadLine();
-
-        /* Give ffmpeg a moment to fail on a bad argument, a busy desktop or a
-         * missing encoder, so the error lands in the dialog and not in a log the
-         * user will never open. */
-        if (process.WaitForExit(600))
+        try
         {
-            string why = take.FfmpegNoise.Count > 0
-                ? take.FfmpegNoise[take.FfmpegNoise.Count - 1]
-                : "ffmpeg stopped immediately";
+            process.Start();
+            process.BeginErrorReadLine();
 
-            StopAudio(take);
-            throw new InvalidOperationException($"the capture did not start: {why}");
+            // Catch common startup errors before putting the UI in recording mode.
+            if (process.WaitForExit(600))
+            {
+                // A completed process can still have pending asynchronous stderr.
+                process.WaitForExit();
+                string why;
+                lock (take.FfmpegNoise)
+                {
+                    why = take.FfmpegNoise.Count > 0
+                        ? take.FfmpegNoise[take.FfmpegNoise.Count - 1]
+                        : "ffmpeg stopped immediately";
+                }
+                throw new InvalidOperationException($"the capture did not start: {why}");
+            }
+
+            take.Process = process;
+            current = take;
+            takes.Add(take);
+            running.Restart();
+            Paused = false;
+            Note($"take {index} running");
         }
-
-        take.Process = process;
-        current = take;
-        takes.Add(take);
-        running.Restart();
-        Paused = false;
-
-        Note($"take {index} running");
+        catch
+        {
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(true);
+            }
+            catch (Exception) { /* process never started or already exited */ }
+            process.Dispose();
+            StopAudio(take);
+            throw;
+        }
     }
 
     public void Pause()
@@ -284,6 +310,28 @@ public sealed class RecordingSession : IDisposable
             return;
 
         StartTake();
+    }
+
+    /// <summary>
+    /// Called by the UI heartbeat while no start, pause or stop is in progress.
+    /// Polling avoids losing an exit between process startup and UI registration.
+    /// </summary>
+    public bool TryGetCaptureFailure(out string reason)
+    {
+        Take take = current;
+        if (take == null || Paused)
+        {
+            reason = null;
+            return false;
+        }
+
+        string details;
+        lock (take.FfmpegNoise)
+        {
+            int from = Math.Max(0, take.FfmpegNoise.Count - 3);
+            details = string.Join(" | ", take.FfmpegNoise.GetRange(from, take.FfmpegNoise.Count - from));
+        }
+        return CaptureStatus.TryDescribeUnexpectedExit(take.Process, details, out reason);
     }
 
     private void StopTake()
@@ -325,6 +373,8 @@ public sealed class RecordingSession : IDisposable
                     process.Kill(true);
                     process.WaitForExit(3000);
                 }
+                if (process.HasExited)
+                    process.WaitForExit(); // drain the final asynchronous stderr lines
             }
             catch (Exception ex)
             {
@@ -372,15 +422,25 @@ public sealed class RecordingSession : IDisposable
             Note($"stopping microphone: {ex.Message}");
         }
 
+        if (take.System?.Error != null)
+            Note("system audio stopped or could not be written: " + take.System.Error.Message);
+        if (take.Microphone?.Error != null)
+            Note("microphone stopped or could not be written: " + take.Microphone.Error.Message);
+
         take.System?.Dispose();
         take.Microphone?.Dispose();
         take.System = null;
         take.Microphone = null;
 
-        /* A WAV with only a header (44 bytes) is a device that never delivered a
-         * buffer: drop it rather than muxing silence. */
-        take.SystemPath = Usable(take.SystemPath);
-        take.MicrophonePath = Usable(take.MicrophonePath);
+        // Do not hand a missing, invalid or header-only WAV to the muxer.
+        string systemPath = Usable(take.SystemPath);
+        string microphonePath = Usable(take.MicrophonePath);
+        if (take.SystemPath != null && systemPath == null)
+            Note($"take {take.Index}: system audio is empty; excluding it");
+        if (take.MicrophonePath != null && microphonePath == null)
+            Note($"take {take.Index}: microphone audio is empty; excluding it");
+        take.SystemPath = systemPath;
+        take.MicrophonePath = microphonePath;
     }
 
     private static string Usable(string path)
@@ -403,18 +463,16 @@ public sealed class RecordingSession : IDisposable
         if (Paused && current == null && takes.Count == 0)
             return Failure("nothing was recorded");
 
-        StopTake();
-        Paused = false;
-
-        var result = new RecordingResult
-        {
-            Takes = takes.Count,
-            Duration = TimeSpan.FromMilliseconds(finishedMilliseconds),
-        };
+        var result = new RecordingResult();
 
         try
         {
+            StopTake();
+            Paused = false;
+            result.Takes = takes.Count;
+            result.Duration = TimeSpan.FromMilliseconds(finishedMilliseconds);
             List<string> mixed = new();
+            List<string> warnings = new();
 
             foreach (Take take in takes)
             {
@@ -442,6 +500,8 @@ public sealed class RecordingSession : IDisposable
                     /* Mixing is the only step that can lose everything, so if it
                      * fails the take is kept as it stands, silence and all. */
                     Note($"mixing take {take.Index} failed: {LastLines(muxResult.Output)}");
+                    warnings.Add($"Audio could not be mixed for take {take.Index}; its original audio was kept.");
+                    preserveWorkFolder = true;
                     mixed.Add(take.VideoPath);
                 }
                 else
@@ -472,6 +532,8 @@ public sealed class RecordingSession : IDisposable
                 if (!concatResult.Ok || !File.Exists(finalPath))
                 {
                     Note($"joining the takes failed: {LastLines(concatResult.Output)}");
+                    warnings.Add("Joining the takes failed; only the first take is in this file. The others were kept.");
+                    preserveWorkFolder = true;
                     File.Copy(mixed[0], finalPath, true);
                 }
             }
@@ -479,22 +541,44 @@ public sealed class RecordingSession : IDisposable
             result.Success = true;
             result.Path = finalPath;
             result.Bytes = new FileInfo(finalPath).Length;
-            result.Message = mixed.Count > 1
-                ? $"Joined {mixed.Count} takes into one file."
-                : "Saved.";
+
+            /* The stopwatch knows how long you were recording; the file knows how
+             * long the recording is. When they disagree the file is what you have,
+             * so report the file and say what happened. */
+            TimeSpan session = result.Duration;
+            TimeSpan? onDisk = await ProbeDurationAsync(finalPath).ConfigureAwait(false);
+
+            if (onDisk.HasValue)
+                result.Duration = onDisk.Value;
+
+            if (onDisk.HasValue && onDisk.Value + TimeSpan.FromSeconds(1.5) < session)
+            {
+                warnings.Add($"The file is {Clock(onDisk.Value)} but the session ran {Clock(session)}. " +
+                             "Some video may be missing; see the log next to the file.");
+                preserveWorkFolder = true;
+            }
+            else if (!onDisk.HasValue)
+            {
+                warnings.Add("The finished file's duration could not be verified; it may be incomplete.");
+                preserveWorkFolder = true;
+            }
+
+            if (preserveWorkFolder)
+                warnings.Add("Recovery files: " + workFolder);
+
+            result.Message = warnings.Count > 0
+                ? string.Join("\n\n", warnings)
+                : mixed.Count > 1 ? $"Joined {mixed.Count} takes into one file." : "Saved.";
         }
         catch (Exception ex)
         {
             Note("failed: " + ex);
             return Failure(ex.Message);
         }
-        finally
-        {
-            current = null;
-        }
 
         result.LogPath = WriteLog(result.Path);
-        Cleanup();
+        if (!preserveWorkFolder)
+            Cleanup();
         return result;
     }
 
@@ -502,14 +586,20 @@ public sealed class RecordingSession : IDisposable
     public void Cancel()
     {
         StopTake();
+        preserveWorkFolder = false;
         Cleanup();
     }
 
     private RecordingResult Failure(string message)
     {
-        var result = new RecordingResult { Success = false, Message = message };
+        // Never delete the only copy of a failed recording or its diagnostics.
+        preserveWorkFolder = true;
+        var result = new RecordingResult
+        {
+            Success = false,
+            Message = message + "\n\nRecovery files: " + workFolder,
+        };
         result.LogPath = WriteLog(null);
-        Cleanup();
         return result;
     }
 
@@ -518,12 +608,13 @@ public sealed class RecordingSession : IDisposable
         try
         {
             Note($"elapsed {Elapsed.TotalSeconds:0.0}s, {takes.Count} take(s)");
-            string text = transcript.ToString();
+            string text;
+            lock (transcript)
+                text = transcript.ToString();
 
-            if (string.IsNullOrWhiteSpace(videoPath))
-                return "";
-
-            string sidecar = FfmpegArgs.SidecarLogPath(videoPath);
+            string sidecar = string.IsNullOrWhiteSpace(videoPath)
+                ? Path.Combine(workFolder, "screenforge-error.log")
+                : FfmpegArgs.SidecarLogPath(videoPath);
             File.WriteAllText(sidecar, text);
             return sidecar;
         }
@@ -556,6 +647,37 @@ public sealed class RecordingSession : IDisposable
         return string.Join(" | ", lines[from..]).Trim();
     }
 
+    /// <summary>
+    /// How long the finished file really is, according to ffmpeg itself. Null when
+    /// there is nothing to measure.
+    /// </summary>
+    private async Task<TimeSpan?> ProbeDurationAsync(string path)
+    {
+        try
+        {
+            ProcessResult probe = await FfmpegProcess
+                .RunAsync(ffmpegPath, FfmpegArgs.ProbeDuration(path), 20000)
+                .ConfigureAwait(false);
+
+            TimeSpan? duration = FfmpegArgs.ParseDuration(probe.Output);
+
+            if (duration.HasValue)
+                Note($"file length: {Clock(duration.Value)}");
+            else
+                Note("could not read the length of the finished file");
+
+            return duration;
+        }
+        catch (Exception ex)
+        {
+            Note("measuring the finished file: " + ex.Message);
+            return null;
+        }
+    }
+
+    private static string Clock(TimeSpan value) =>
+        $"{(int)value.TotalMinutes}:{value.Seconds:00}";
+
     private void Note(string line)
     {
         if (string.IsNullOrWhiteSpace(line))
@@ -583,13 +705,16 @@ public sealed class RecordingSession : IDisposable
 
         try
         {
-            current?.Process?.Dispose();
+            if (current != null)
+                StopTake();
         }
         catch (Exception)
         {
-            /* already gone */
+            // Leave potentially recoverable takes in place if cleanup failed.
+            preserveWorkFolder = true;
         }
 
-        Cleanup();
+        if (!preserveWorkFolder)
+            Cleanup();
     }
 }

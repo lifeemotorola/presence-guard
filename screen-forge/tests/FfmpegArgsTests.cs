@@ -241,4 +241,89 @@ public class FfmpegArgsTests
 
         Assert.Equal(@"C:\Apps\ffmpeg.exe -i ""C:\My Videos\take 1.mp4"" -c copy", line);
     }
+
+    /* ------------------------------------------------------------------ */
+    /* A quiet desktop used to shorten the picture. These are the three    */
+    /* arguments that stop it happening, and the parser that tells the     */
+    /* difference between "a file" and "half a file".                      */
+    /* ------------------------------------------------------------------ */
+
+    [Fact]
+    public void OneTrackIsPaddedSoAQuietDesktopCannotTrimThePicture()
+    {
+        var mux = new MuxRequest
+        {
+            VideoPath = "take.mp4",
+            SystemAudioPath = "system.wav",
+            SystemGainPercent = 100,
+            OutputPath = "out.mp4",
+        };
+
+        string args = Join(FfmpegArgs.Mux(mux));
+
+        Assert.Contains("-af volume=1.00,apad", args);
+        Assert.Contains("-shortest", args);
+    }
+
+    [Fact]
+    public void TheTwoSourceMixIsPaddedToo()
+    {
+        var mux = new MuxRequest
+        {
+            VideoPath = "take.mp4",
+            SystemAudioPath = "system.wav",
+            MicrophonePath = "mic.wav",
+            OutputPath = "out.mp4",
+        };
+
+        string args = Join(FfmpegArgs.Mux(mux));
+
+        Assert.Contains("normalize=0,apad[aout]", args);
+        Assert.Contains("-shortest", args);
+    }
+
+    [Fact]
+    public void WithoutSoundNothingIsPaddedAndNothingIsTrimmed()
+    {
+        var mux = new MuxRequest { VideoPath = "take.mp4", OutputPath = "out.mp4" };
+        string args = Join(FfmpegArgs.Mux(mux));
+
+        Assert.DoesNotContain("apad", args);
+        Assert.DoesNotContain("-shortest", args);
+    }
+
+    [Fact]
+    public void TheLengthOfAFinishedFileIsReadFromTheBanner()
+    {
+        const string banner =
+            "ffmpeg version 7.1 Copyright (c) 2000-2024 the FFmpeg developers\n" +
+            "  Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:\\videos\\take.mp4':\n" +
+            "  Duration: 00:01:02.34, start: 0.000000, bitrate: 4211 kb/s\n" +
+            "  Stream #0:0[0x1](und): Video: h264 (High), yuv420p, 1920x1080\n";
+
+        TimeSpan? duration = FfmpegArgs.ParseDuration(banner);
+
+        Assert.NotNull(duration);
+        Assert.Equal(62.34, duration.Value.TotalSeconds, 2);
+    }
+
+    [Fact]
+    public void ARecordingWithNoLengthReportsNothingRatherThanZero()
+    {
+        Assert.Null(FfmpegArgs.ParseDuration("  Duration: N/A, start: 0.000000, bitrate: N/A"));
+        Assert.Null(FfmpegArgs.ParseDuration(""));
+        Assert.Null(FfmpegArgs.ParseDuration(null));
+        Assert.Null(FfmpegArgs.ParseDuration("  Duration: 00:00:00.00, start: 0.0"));
+        Assert.Null(FfmpegArgs.ParseDuration("  Duration: 00:60:00.00, start: 0.0"));
+        Assert.Null(FfmpegArgs.ParseDuration("  Duration: 00:00:NaN, start: 0.0"));
+        Assert.Null(FfmpegArgs.ParseDuration("  Duration: -1:00:00, start: 0.0"));
+    }
+
+    [Fact]
+    public void TheDurationProbeAsksFfmpegAboutTheFileAndNothingElse()
+    {
+        string args = Join(FfmpegArgs.ProbeDuration(@"C:\videos\take 1.mp4"));
+
+        Assert.Equal(@"-hide_banner -i C:\videos\take 1.mp4", args);
+    }
 }

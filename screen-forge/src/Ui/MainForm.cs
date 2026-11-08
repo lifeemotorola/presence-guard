@@ -40,6 +40,13 @@ public partial class MainForm : Form
     private Timer heartbeat;
     private bool busy;
 
+    /* Hotkeys repeat while a key is held; a quarter of a second apart is a
+     * repeat, not a second decision. */
+    private long lastToggleTicks;
+
+    /* Set when ffmpeg dies mid-take, so the stop that follows can say why. */
+    private string lostCaptureReason;
+
     private ToolStripMenuItem trayToggle;
     private ToolStripMenuItem trayPause;
 
@@ -77,7 +84,7 @@ public partial class MainForm : Form
         heartbeat.Start();
 
         CreateTray();
-        AppendLog("ScreenForge 1.0 — press Ctrl+Shift+F9 to start or stop.");
+        AppendLog("ScreenForge 1.0.1 — press Ctrl+Shift+F9 to start or stop.");
         AppendLog(hotkeys.Status);
         UpdateSummary();
     }
@@ -535,17 +542,27 @@ public partial class MainForm : Form
 
         if (settings.CountdownSeconds > 0)
         {
-            using var countdown = new CountdownForm(settings.CountdownSeconds, target, displays);
-            countdown.ShowDialog(this);
-
-            if (countdown.Cancelled)
+            // A hotkey pressed during the modal countdown must not start a
+            // second countdown or create a second capture session.
+            busy = true;
+            try
             {
-                lblStatus.Text = "Cancelled.";
-                return;
+                using var countdown = new CountdownForm(settings.CountdownSeconds, target, displays);
+                countdown.ShowDialog(this);
+                if (countdown.Cancelled)
+                {
+                    lblStatus.Text = "Cancelled.";
+                    return;
+                }
+            }
+            finally
+            {
+                busy = false;
             }
         }
 
         busy = true;
+        lostCaptureReason = null;
         btnRecord.Enabled = false;
         SetRecordingUi(false);
         btnRecord.Enabled = false;
@@ -603,6 +620,9 @@ public partial class MainForm : Form
         busy = true;
         HideChip();
 
+        string lost = lostCaptureReason;
+        lostCaptureReason = null;
+
         RecordingSession finishing = session;
         lblStatus.Text = "Finishing the file…";
         btnPause.Enabled = false;
@@ -611,7 +631,8 @@ public partial class MainForm : Form
 
         try
         {
-            result = await finishing.StopAsync();
+            // StopTake waits for ffmpeg and audio devices. Keep the UI responsive.
+            result = await Task.Run(() => finishing.StopAsync());
         }
         catch (Exception ex)
         {
@@ -635,30 +656,62 @@ public partial class MainForm : Form
         {
             AppendLog($"saved {result.Path} ({Megabytes(result.Bytes)}, {Clock(result.Duration)})");
 
-            DialogResult open = MessageBox.Show(
-                this,
-                $"Saved:\n{result.Path}\n\n{Megabytes(result.Bytes)} · {Clock(result.Duration)} · {result.Takes} take(s)\n\nOpen the folder?",
-                "Recording saved",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Information);
+            if (lost != null)
+            {
+                /* The capture died; the user did not press stop. Say so, and say
+                 * what survived, instead of showing a cheerful "Recording saved". */
+                Warn(
+                    "The recording stopped on its own.\n\n" + lost +
+                    "\n\nWhat had been recorded up to that moment is saved:\n" + result.Path +
+                    (string.IsNullOrEmpty(result.LogPath) ? "" : "\n\nDetails: " + result.LogPath) +
+                    ShortNote(result));
+            }
+            else
+            {
+                DialogResult open = MessageBox.Show(
+                    this,
+                    $"Saved:\n{result.Path}\n\n{Megabytes(result.Bytes)} · {Clock(result.Duration)} · {result.Takes} take(s)" +
+                    ShortNote(result) + "\n\nOpen the folder?",
+                    "Recording saved",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information);
 
-            if (open == DialogResult.Yes)
-                OpenOutputFolder();
+                if (open == DialogResult.Yes)
+                    OpenOutputFolder();
+            }
         }
         else
         {
             AppendLog("recording failed: " + result.Message);
-            Warn("The recording could not be finished.\n\n" + result.Message +
+            Warn((lost == null ? "The recording could not be finished." : "The recording stopped unexpectedly.\n\n" + lost) +
+                 "\n\n" + result.Message +
                  (string.IsNullOrEmpty(result.LogPath) ? "" : $"\n\nDetails: {result.LogPath}"));
         }
     }
 
     private void ToggleRecording()
     {
+        long now = Environment.TickCount64;
+
+        if (now - lastToggleTicks < 400)
+            return;
+
+        lastToggleTicks = now;
+
         if (session != null)
             _ = StopRecordingAsync();
         else
             _ = StartRecordingAsync();
+    }
+
+    private void HandleCaptureFailure(string reason)
+    {
+        if (session == null || busy)
+            return;
+
+        lostCaptureReason = reason;
+        AppendLog("capture lost: " + reason);
+        _ = StopRecordingAsync();
     }
 
     private void TogglePause()
@@ -713,6 +766,14 @@ public partial class MainForm : Form
                 lblEstimate.Text = "";
             }
 
+            return;
+        }
+
+        // A dead ffmpeg must not leave a running timer over a frozen file.
+        // Skip transitional states such as pause/stop, which intentionally end it.
+        if (!busy && session.TryGetCaptureFailure(out string reason))
+        {
+            HandleCaptureFailure(reason);
             return;
         }
 
@@ -888,6 +949,18 @@ public partial class MainForm : Form
         txtLog.AppendText(line.TrimEnd() + Environment.NewLine);
         txtLog.SelectionStart = txtLog.TextLength;
         txtLog.ScrollToCaret();
+    }
+
+    /// <summary>The session's own remark, when it has one worth showing.</summary>
+    private static string ShortNote(RecordingResult result)
+    {
+        if (result == null || string.IsNullOrWhiteSpace(result.Message))
+            return "";
+
+        if (result.Message == "Saved." || result.Message.StartsWith("Joined ", StringComparison.Ordinal))
+            return "";
+
+        return "\n\n" + result.Message;
     }
 
     private void Warn(string message)
