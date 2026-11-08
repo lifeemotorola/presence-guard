@@ -9,7 +9,9 @@ the Free Software Foundation; either version 2 of the License, or
 */
 
 using System;
+using System.ComponentModel;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
@@ -24,6 +26,11 @@ internal static class ClickSmoke
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmFlush();
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool BitBlt(IntPtr destination, int x, int y, int width, int height,
+        IntPtr source, int sourceX, int sourceY, uint operation);
 
     [STAThread]
     private static int Main()
@@ -157,11 +164,35 @@ internal static class ClickSmoke
 
     private static Bitmap Capture(int x, int y)
     {
-        var image = new Bitmap(ClickFeedback.WindowSize, ClickFeedback.WindowSize);
-        using Graphics graphics = Graphics.FromImage(image);
-        graphics.CopyFromScreen(x - image.Width / 2, y - image.Height / 2, 0, 0, image.Size,
-            CopyPixelOperation.SourceCopy | CopyPixelOperation.CaptureBlt);
-        return image;
+        var image = new Bitmap(ClickFeedback.WindowSize, ClickFeedback.WindowSize, PixelFormat.Format24bppRgb);
+        IntPtr source = NativeMethods.GetDC(IntPtr.Zero);
+        if (source == IntPtr.Zero)
+        {
+            image.Dispose();
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not open screen DC");
+        }
+
+        try
+        {
+            using Graphics graphics = Graphics.FromImage(image);
+            IntPtr destination = graphics.GetHdc();
+            try
+            {
+                // Match gdigrab: GDI SRCCOPY | CAPTUREBLT, including layered windows.
+                const uint sourceCopyAndCaptureBlt = 0x40CC0020;
+                if (!BitBlt(destination, 0, 0, image.Width, image.Height, source,
+                        x - image.Width / 2, y - image.Height / 2, sourceCopyAndCaptureBlt))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not capture screen pixels");
+            }
+            finally { graphics.ReleaseHdc(destination); }
+            return image;
+        }
+        catch
+        {
+            image.Dispose();
+            throw;
+        }
+        finally { NativeMethods.ReleaseDC(IntPtr.Zero, source); }
     }
 
     private static bool Similar(Color a, Color b) =>
