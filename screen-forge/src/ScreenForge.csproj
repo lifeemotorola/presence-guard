@@ -9,7 +9,7 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>ScreenForge</AssemblyName>
     <RootNamespace>ScreenForge</RootNamespace>
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
     <!-- What Explorer's Details tab calls the publisher, and what an installer
          would sign as. -->
     <Company>Emmanuel Suah</Company>
@@ -17,8 +17,8 @@
     <Copyright>© 2026 Emmanuel Suah</Copyright>
     <Product>ScreenForge</Product>
     <AssemblyTitle>ScreenForge</AssemblyTitle>
-    <FileVersion>1.0.1.0</FileVersion>
-    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
     <Description>A screen recorder for Windows 11 that does the boring parts properly.</Description>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <ApplicationManifest>app.manifest</ApplicationManifest>

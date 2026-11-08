@@ -22,6 +22,7 @@ public class SettingsTests
         Assert.Equal(3, settings.CountdownSeconds);
         Assert.True(settings.RecordSystem);
         Assert.False(settings.RecordMicrophone);
+        Assert.False(settings.ShowMouseClicks);
     }
 
     [Fact]
@@ -36,6 +37,7 @@ public class SettingsTests
             settings.Encoder = EncoderKind.Nvenc;
             settings.NamePattern = "{source} {time}";
             settings.RecordMicrophone = true;
+            settings.ShowMouseClicks = true;
             settings.MicrophoneGainPercent = 140;
             settings.SourceKind = CaptureKind.Window;
 
@@ -47,8 +49,24 @@ public class SettingsTests
             Assert.Equal(EncoderKind.Nvenc, loaded.Encoder);
             Assert.Equal("{source} {time}", loaded.NamePattern);
             Assert.True(loaded.RecordMicrophone);
+            Assert.True(loaded.ShowMouseClicks);
             Assert.Equal(140, loaded.MicrophoneGainPercent);
             Assert.Equal(CaptureKind.Window, loaded.SourceKind);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SettingsFromBeforeClickHighlightsKeepTheFeatureOff()
+    {
+        string path = TempFile();
+        try
+        {
+            File.WriteAllText(path, "{ \"CaptureCursor\": true }");
+            Assert.False(SettingsStore.Load(path, @"C:\Videos").ShowMouseClicks);
         }
         finally
         {

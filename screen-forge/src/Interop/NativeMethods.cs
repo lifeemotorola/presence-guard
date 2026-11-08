@@ -34,6 +34,41 @@ internal struct MONITORINFO
     public uint dwFlags;
 }
 
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativePoint
+{
+    public int X;
+    public int Y;
+    public NativePoint(int x, int y) { X = x; Y = y; }
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeSize
+{
+    public int Width;
+    public int Height;
+    public NativeSize(int width, int height) { Width = width; Height = height; }
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct MouseHookData
+{
+    public NativePoint Point;
+    public uint MouseData;
+    public uint Flags;
+    public uint Time;
+    public UIntPtr ExtraInfo;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+internal struct BlendFunction
+{
+    public byte Operation;
+    public byte Flags;
+    public byte SourceAlpha;
+    public byte AlphaFormat;
+}
+
 internal static class NativeMethods
 {
     internal const uint MonitorInfoPrimary = 1;
@@ -51,6 +86,8 @@ internal static class NativeMethods
     internal delegate bool MonitorEnumProc(IntPtr monitor, IntPtr window, IntPtr rect, IntPtr data);
 
     internal delegate bool EnumWindowsProc(IntPtr window, IntPtr param);
+
+    internal delegate IntPtr MouseHookProc(int code, IntPtr message, IntPtr data);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -101,4 +138,43 @@ internal static class NativeMethods
 
     [DllImport("kernel32.dll")]
     internal static extern uint SetThreadExecutionState(uint flags);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern IntPtr GetModuleHandle(string moduleName);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern IntPtr SetWindowsHookEx(int id, MouseHookProc callback, IntPtr module, uint threadId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool UnhookWindowsHookEx(IntPtr hook);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern IntPtr GetDC(IntPtr window);
+
+    [DllImport("user32.dll")]
+    internal static extern int ReleaseDC(IntPtr window, IntPtr dc);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    internal static extern IntPtr CreateCompatibleDC(IntPtr dc);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DeleteDC(IntPtr dc);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    internal static extern IntPtr SelectObject(IntPtr dc, IntPtr objectHandle);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DeleteObject(IntPtr objectHandle);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool UpdateLayeredWindow(
+        IntPtr window, IntPtr targetDc, ref NativePoint destination, ref NativeSize size,
+        IntPtr sourceDc, ref NativePoint source, uint colorKey, ref BlendFunction blend, uint flags);
 }

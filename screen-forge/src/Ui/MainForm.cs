@@ -37,6 +37,7 @@ public partial class MainForm : Form
     private Hotkeys hotkeys;
     private NotifyIcon tray;
     private FloatingTimer chip;
+    private MouseClickHighlighter clickHighlighter;
     private Timer heartbeat;
     private bool busy;
 
@@ -84,7 +85,7 @@ public partial class MainForm : Form
         heartbeat.Start();
 
         CreateTray();
-        AppendLog("ScreenForge 1.0.1 — press Ctrl+Shift+F9 to start or stop.");
+        AppendLog("ScreenForge 1.1.0 — press Ctrl+Shift+F9 to start or stop.");
         AppendLog(hotkeys.Status);
         UpdateSummary();
     }
@@ -121,6 +122,7 @@ public partial class MainForm : Form
             }
         }
 
+        DisposeClickHighlighter();
         SaveSettings();
         tray?.Dispose();
         hotkeys?.Dispose();
@@ -199,6 +201,7 @@ public partial class MainForm : Form
         txtPattern.Text = settings.NamePattern;
         chkHide.Checked = settings.HideWhileRecording;
         chkCursor.Checked = settings.CaptureCursor;
+        chkMouseClicks.Checked = settings.ShowMouseClicks;
         chkDuplication.Checked = settings.UseDesktopDuplication;
         chkSystem.Checked = settings.RecordSystem;
         chkMicrophone.Checked = settings.RecordMicrophone;
@@ -226,6 +229,7 @@ public partial class MainForm : Form
         settings.Quality = (QualityPreset)Math.Max(0, cboQuality.SelectedIndex);
         settings.Encoder = (EncoderKind)Math.Max(0, cboEncoder.SelectedIndex);
         settings.CaptureCursor = chkCursor.Checked;
+        settings.ShowMouseClicks = chkMouseClicks.Checked;
         settings.UseDesktopDuplication = chkDuplication.Checked;
         settings.RecordSystem = chkSystem.Checked;
         settings.RecordMicrophone = chkMicrophone.Checked;
@@ -469,12 +473,14 @@ public partial class MainForm : Form
                 /* Starting a take spawns ffmpeg and waits for it to survive its
                  * first moments; that is not work for the UI thread. */
                 await Task.Run(() => live.Resume());
+                clickHighlighter?.SetActive(true);
                 btnPause.Text = "Pause";
                 lblStatus.Text = "Recording…";
                 AppendLog("resumed");
             }
             else
             {
+                clickHighlighter?.SetActive(false);
                 await Task.Run(() => live.Pause());
                 btnPause.Text = "Resume";
                 lblStatus.Text = "Paused — the takes are joined when you stop.";
@@ -483,6 +489,7 @@ public partial class MainForm : Form
         }
         catch (Exception ex)
         {
+            clickHighlighter?.SetActive(session != null && !session.Paused);
             AppendLog("pause failed: " + ex.Message);
             Warn("Pausing failed: " + ex.Message);
             btnPause.Text = session != null && session.Paused ? "Resume" : "Pause";
@@ -572,10 +579,14 @@ public partial class MainForm : Form
 
         try
         {
+            if (settings.ShowMouseClicks)
+                PrepareClickHighlighter(target.Rect);
+
             created = await RecordingSession.CreateAsync(ffmpegPath, settings, target, outputPath, AppendLog);
             await Task.Run(() => created.Start());
 
             session = created;
+            clickHighlighter?.SetActive(true);
             KeepAwake.Begin();
             AppendLog($"recording {target.Description} → {outputPath}");
 
@@ -590,6 +601,7 @@ public partial class MainForm : Form
         catch (Exception ex)
         {
             AppendLog("could not start: " + ex.Message);
+            DisposeClickHighlighter();
 
             try
             {
@@ -618,6 +630,7 @@ public partial class MainForm : Form
             return;
 
         busy = true;
+        DisposeClickHighlighter();
         HideChip();
 
         string lost = lostCaptureReason;
@@ -737,6 +750,7 @@ public partial class MainForm : Form
         cboQuality.Enabled = !recording;
         cboEncoder.Enabled = !recording;
         chkCursor.Enabled = !recording;
+        chkMouseClicks.Enabled = !recording;
         chkDuplication.Enabled = !recording && SourceKind() == CaptureKind.Monitor;
         chkSystem.Enabled = !recording;
         chkMicrophone.Enabled = !recording && cboMicrophone.Items.Count > 0 && cboMicrophone.SelectedItem is AudioDeviceInfo;
@@ -861,6 +875,36 @@ public partial class MainForm : Form
         }
 
         Activate();
+    }
+
+    private void PrepareClickHighlighter(CaptureRect area)
+    {
+        DisposeClickHighlighter();
+        var highlighter = new MouseClickHighlighter(this, area, ClickHighlighterFailed);
+        try
+        {
+            highlighter.Start();
+            clickHighlighter = highlighter;
+            AppendLog("mouse click rings enabled (left: gold, right: blue, middle: purple)");
+        }
+        catch (Exception ex)
+        {
+            highlighter.Dispose();
+            AppendLog("mouse click rings unavailable: " + ex.Message);
+            Warn("Mouse click rings could not be enabled. Recording will continue without them.\n\n" + ex.Message);
+        }
+    }
+
+    private void ClickHighlighterFailed(string message)
+    {
+        AppendLog(message);
+        tray?.ShowBalloonTip(5000, "Mouse click rings unavailable", message, ToolTipIcon.Warning);
+    }
+
+    private void DisposeClickHighlighter()
+    {
+        clickHighlighter?.Dispose();
+        clickHighlighter = null;
     }
 
     private void ShowChip(CaptureTarget target)

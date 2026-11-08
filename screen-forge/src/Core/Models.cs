@@ -108,6 +108,7 @@ public sealed class AppSettings
     public QualityPreset Quality { get; set; } = QualityPreset.High;
     public EncoderKind Encoder { get; set; } = EncoderKind.Auto;
     public bool CaptureCursor { get; set; } = true;
+    public bool ShowMouseClicks { get; set; }
     public bool UseDesktopDuplication { get; set; }
     public bool RecordSystem { get; set; } = true;
     public bool RecordMicrophone { get; set; }

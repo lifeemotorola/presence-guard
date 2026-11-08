@@ -33,6 +33,7 @@ public partial class MainForm
     private ComboBox cboQuality;
     private ComboBox cboEncoder;
     private ToggleSwitch chkCursor;
+    private ToggleSwitch chkMouseClicks;
     private ToggleSwitch chkDuplication;
 
     private ToggleSwitch chkSystem;
@@ -152,7 +153,7 @@ public partial class MainForm
 
         var byline = new Label
         {
-            Text = "by Emmanuel Suah  ·  v1.0",
+            Text = "by Emmanuel Suah  ·  v1.1",
             Font = Theme.Small,
             ForeColor = Theme.Muted,
             AutoSize = true,
@@ -400,6 +401,7 @@ public partial class MainForm
         cboEncoder.SelectedIndexChanged += (_, _) => UpdateSummary();
 
         chkCursor = MakeToggle("Draw the mouse pointer", true, 230);
+        chkMouseClicks = MakeToggle("Show mouse click rings", false, 230);
         chkDuplication = MakeToggle("Desktop duplication (one full display only)", false, 340);
         chkDuplication.CheckedChanged += (_, _) => UpdateSummary();
 
@@ -407,6 +409,7 @@ public partial class MainForm
         AddField(card, "Quality", cboQuality, 210);
         AddField(card, "Encoder", cboEncoder, 200);
         AddField(card, null, chkCursor, 230, 10, 10);
+        AddField(card, null, chkMouseClicks, 230, 10, 0);
         AddField(card, null, chkDuplication, 340, 4, 0);
 
         return card;

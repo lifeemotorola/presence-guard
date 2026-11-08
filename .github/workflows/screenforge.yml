@@ -115,6 +115,10 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Test native click indicators 🖱️
+        shell: pwsh
+        run: dotnet run --project screen-forge/windows-tests/ClickSmoke.csproj --configuration Release
+
       - name: Publish 🧱
         shell: pwsh
         run: |
