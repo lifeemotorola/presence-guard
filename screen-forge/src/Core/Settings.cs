@@ -40,6 +40,7 @@ public static class SettingsStore
         Quality = QualityPreset.High,
         Encoder = EncoderKind.Auto,
         CaptureCursor = true,
+        ShowMouseClicks = false,
         UseDesktopDuplication = false,
         RecordSystem = true,
         RecordMicrophone = false,

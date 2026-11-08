@@ -50,3 +50,5 @@
 /screen-forge/src/obj/
 /screen-forge/tests/bin/
 /screen-forge/tests/obj/
+/screen-forge/windows-tests/bin/
+/screen-forge/windows-tests/obj/

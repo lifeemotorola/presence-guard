@@ -261,9 +261,10 @@ asking OBS to get out of the way.
 | Where | **Actions → ScreenForge** → artifact `screenforge-windows-x64` |
 | Publisher | **Emmanuel Suah** (shows up in the exe's file properties) |
 | Needs | Windows 10/11 x64, and **`ffmpeg.exe` next to the exe** (link below) |
-| Install | none — unzip twice, drop `ffmpeg.exe` beside `ScreenForge.exe`, run it |
+| Install | extract the ZIP, put `ffmpeg.exe` beside `ScreenForge.exe`, run it |
 | Hotkeys | **Ctrl+Shift+F9** start/stop, **Ctrl+Shift+F10** pause |
-| Tests | `dotnet test` — 59 logic checks, run on Linux in CI |
+| Clicks | **Picture → Show mouse click rings** adds coloured rings to the video, if enabled |
+| Tests | Linux logic/media tests and a Windows click-indicator smoke test in CI |
 
 The one file I cannot put in a repository: get `ffmpeg-release-essentials.zip`
 from <https://www.gyan.dev/ffmpeg/builds/>, copy `bin/ffmpeg.exe`, paste it next

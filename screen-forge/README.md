@@ -86,6 +86,7 @@ instead of mixing themed controls with recoloured stock ones.
 | **Frame rates** | 15, 24, 30, 48, 60, 120, 144 |
 | **Quality** | Low / Medium / High / Maximum, and the bitrate is derived from the pixels and the frame rate you actually asked for, not a fixed number |
 | **Encoders** | NVENC, AMF, Quick Sync, or x264 — picked by encoding a few frames at startup, not by trusting `ffmpeg -encoders` |
+| **Mouse clicks** | optional, short click rings: left gold, right blue, middle purple |
 | **Audio** | system sound and/or microphone, two independent faders, mixed into one stereo track at the end |
 | **Pause** | really pauses: each pause closes a complete file, and the takes are joined when you stop |
 | **Safety** | every take is a fragmented MP4 from its first second; a crash or a killed process leaves something recoverable in `%TEMP%\screenforge-*` |
@@ -94,6 +95,24 @@ instead of mixing themed controls with recoloured stock ones.
 | **While recording** | the window hides, the machine is kept awake, a small clock sits on a screen that is *not* being recorded |
 | **Naming** | `Recording 2026-11-07 14-32-05.mp4`, with `(2)`, `(3)` on collision; tokens `{date} {time} {source} {quality} {fps}` |
 | **Logs** | every recording leaves `yourfile.mp4.log` next to the video with the exact ffmpeg command lines |
+
+### Show mouse clicks in a recording
+
+1. In **Picture**, turn on **Show mouse click rings** before pressing Record.
+   It is off by default, and ScreenForge remembers your choice.
+2. Click while recording. A brief ring appears at each click in the selected
+   capture area: **gold for left**, **blue for right**, **purple for middle**.
+3. Stop and save as usual. The rings are visible on the desktop while recording
+   and are captured as part of the video; they cannot be removed from the MP4
+   afterward. **Draw the mouse pointer** is a separate setting.
+
+The effect passes clicks through to the application underneath and does not
+activate its own window. It is inactive while paused and removed on stop. A
+Windows mouse hook observes button-down events while the option is in use; no
+click history is saved or transmitted. Secure desktops, protected content,
+exclusive fullscreen apps, or software that hides overlays may prevent the ring
+from being shown or captured. If Windows cannot enable the effect, ScreenForge
+reports the problem and continues recording without it.
 
 ### Hotkeys
 
@@ -179,11 +198,15 @@ dotnet test screen-forge/tests/ScreenForge.Tests.csproj
 ```
 
 The tests cover capture/mux arguments, audio timing, process-exit detection,
-settings and file naming. They also run the real ffmpeg against synthetic video
+settings, click mapping/geometry, and file naming. A Windows smoke test also
+creates the hook and layered windows; when an interactive desktop is available,
+it checks a `CAPTUREBLT` screen grab and click-through behavior. The media tests
+run the real ffmpeg against synthetic video
 and audio: a video of 8 seconds must retain every frame with no audio, shorter
 one/two audio tracks, and audio longer than the video. No Windows, display or
-audio device is needed. FFmpeg with libx264 must be on `PATH`, or set the
-`SCREENFORGE_FFMPEG` environment variable to its executable path.
+audio device is needed for the Linux suite. FFmpeg with libx264 must be on
+`PATH`, or set `SCREENFORGE_FFMPEG` to its executable path. The Windows-specific
+smoke test runs separately in the Windows build job.
 
 The app itself is compiled by the `ScreenForge` workflow on `windows-latest`
 into the `screenforge-windows-x64` artifact. **I have not run it on a real
