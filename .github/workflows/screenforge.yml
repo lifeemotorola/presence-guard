@@ -212,26 +212,3 @@ jobs:
           if ($actual -ne $env:EXPECTED_SHA256 -or $checksumFile -ne "$actual  ScreenForge.exe") {
             throw 'Uploaded executable or checksum does not match the published SHA-256.'
           }
-
-  previous-artifact-check:
-    name: Verify previous download (temporary)
-    if: github.event_name == 'pull_request'
-    runs-on: windows-latest
-    timeout-minutes: 10
-    permissions:
-      actions: read
-    steps:
-      - name: Download prior main artifact
-        uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ github.token }}
-          run-id: 42470582061
-          name: screenforge-windows-x64
-          path: old-build
-      - name: Identify previous executable
-        shell: pwsh
-        run: |
-          $hash = (Get-FileHash -Path old-build/ScreenForge.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          $signature = (Get-AuthenticodeSignature -FilePath old-build/ScreenForge.exe).Status
-          Write-Output "::notice title=Previous ScreenForge.exe SHA-256::$hash"
-          Write-Output "::notice title=Previous Authenticode status::$signature"
