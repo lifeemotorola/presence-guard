@@ -2,8 +2,7 @@
 # Smoke-test the packaged DLL's actual load in a disposable OBS Studio 33.0.1
 # portable installation. No streaming or recording is started.
 param(
-    [Parameter(Mandatory=$true)] [string] $PackagePath,
-    [Parameter(Mandatory=$true)] [string] $PlatformPluginPath
+    [Parameter(Mandatory=$true)] [string] $PackagePath
 )
 $ErrorActionPreference = 'Stop'
 $work = Join-Path $env:RUNNER_TEMP 'onair-twin-real-obs'
@@ -31,8 +30,13 @@ try {
     New-Item -ItemType Directory -Path $plugin -Force | Out-Null
     Copy-Item (Join-Path $PackagePath 'bin\64bit\obs-onair-twin.dll') $plugin
     Copy-Item (Join-Path $PackagePath 'data') $plugin -Recurse
-    $env:QT_QPA_PLATFORM = 'offscreen'
-    $env:QT_QPA_PLATFORM_PLUGIN_PATH = $PlatformPluginPath
+    # Use the native platform plugin bundled with this OBS distribution,
+    # not a platform DLL from a separately compiled Qt build.
+    $platform = Get-ChildItem $bin -Recurse -Filter qwindows.dll | Select-Object -First 1
+    if (!$platform) { throw 'The OBS distribution does not contain qwindows.dll.' }
+    $env:QT_QPA_PLATFORM = 'windows'
+    $env:QT_QPA_PLATFORM_PLUGIN_PATH = Split-Path $platform.FullName
+    $env:QT_FORCE_STDERR_LOGGING = '1'
     $env:OBS_PLUGINS_PATH = ''
     $stdout = Join-Path $work 'obs-stdout.txt'
     $stderr = Join-Path $work 'obs-stderr.txt'

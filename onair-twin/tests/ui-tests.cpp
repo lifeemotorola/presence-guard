@@ -67,18 +67,20 @@ int main(int argc, char **argv)
 		}
 	}
 #endif
+#ifdef _WIN32
 	const QByteArray platformDir = qgetenv("QT_QPA_PLATFORM_PLUGIN_PATH");
-	if (qgetenv("QT_QPA_PLATFORM") == "offscreen" && !platformDir.isEmpty()) {
-		QPluginLoader platform(QString::fromLocal8Bit(platformDir) + "/qoffscreen.dll");
+	if (qgetenv("QT_QPA_PLATFORM") == "windows" && !platformDir.isEmpty()) {
+		QPluginLoader platform(QString::fromLocal8Bit(platformDir) + "/qwindows.dll");
 		if (!platform.load()) {
-			std::fprintf(stderr, "Could not load Qt offscreen plugin: %s\n",
+			std::fprintf(stderr, "Could not load Qt Windows platform plugin: %s\n",
 				     platform.errorString().toUtf8().constData());
 			return 1;
 		}
 		platform.unload();
-		std::printf("Qt offscreen plugin loaded\n");
+		std::printf("Qt Windows platform plugin loaded\n");
 		std::fflush(stdout);
 	}
+#endif
 	std::printf("Starting QApplication\n");
 	std::fflush(stdout);
 	QApplication app(argc, argv);
