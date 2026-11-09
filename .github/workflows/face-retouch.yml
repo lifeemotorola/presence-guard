@@ -4,17 +4,19 @@ run-name: Face Retouch · ${{ github.ref_name }} 💄
 
 # The portrait plugin in this repository (photoshop-face-retouch/). Like the
 # export kit it has no compiler — it is a folder of HTML and JavaScript — so the
-# work here is running the retouch arithmetic, proving the manifest is loadable,
-# and handing back the plugin folder exactly as Photoshop wants it.
+# work here is logic and simulated UXP testing plus packaging. A real Photoshop
+# host is not available in GitHub Actions and must be tested separately.
 on:
   push:
     branches: [main]
     paths:
       - 'photoshop-face-retouch/**'
+      - 'tests/uxp-harness.js'
       - '.github/workflows/face-retouch.yml'
   pull_request:
     paths:
       - 'photoshop-face-retouch/**'
+      - 'tests/uxp-harness.js'
       - '.github/workflows/face-retouch.yml'
   workflow_dispatch:
 
@@ -63,6 +65,11 @@ jobs:
       - name: Checkout 🛎️
         uses: actions/checkout@v4
 
+      - name: Set Up Node 🔧
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       # Only what Photoshop reads. Tests, package.json and the drawn panel stay
       # in the repository; they have no business inside a plugin bundle.
       - name: Assemble 📦
@@ -71,11 +78,17 @@ jobs:
           target="${RUNNER_TEMP}/plugin"
           mkdir -p "$target"
 
-          cp manifest.json index.html styles.css "$target/"
+          cp manifest.json index.html index.js styles.css INSTALL.txt "$target/"
+          cp ../LICENSE "$target/LICENSE.txt"
           cp -r src icons "$target/"
 
           echo "package contents:"
           find "$target" -type f | sed "s|$target/||" | sort
+
+      # Run the same startup simulation against the assembled artifact, not just
+      # the repository source. This catches omitted entry scripts and assets.
+      - name: Check Packaged Startup 🧪
+        run: UXP_TEST_PLUGIN_ROOT="${RUNNER_TEMP}/plugin" node --test tests/startup.test.js
 
       - name: Upload Artifact 📡
         uses: actions/upload-artifact@v4

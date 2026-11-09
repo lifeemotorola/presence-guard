@@ -1,6 +1,6 @@
 {
   "name": "photoshop-export-kit",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "One click, every platform size: a UXP plugin for Photoshop.",
   "scripts": {

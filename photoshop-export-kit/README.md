@@ -10,9 +10,9 @@ round: tick the sizes you publish at, press once, and get a folder of files name
 |---|---|
 | Photoshop | **23.3 or newer** (2022+), 24+ recommended |
 | Kind | UXP plugin — HTML + JavaScript, not a C++ SDK plugin |
-| Needs | the free **UXP Developer Tool** to load it once |
+| Needs | the free **UXP Developer Tool** for development loading |
 | Sizes | 10 built in, 4 ticked by default |
-| Tests | `npm test` — 28 checks, no Photoshop needed |
+| Tests | `npm test` — includes simulated UXP/host checks, no Photoshop needed |
 
 ## What it exports
 
@@ -39,50 +39,58 @@ Cropping a 16:9 screenshot into a 1080×1920 story is where faces get cut in hal
 With **Find the subject when cropping** ticked, the plugin reads the document at
 about 96 pixels across, scores every cell for detail and colour, and slides the
 crop window to wherever the picture is busiest — then reports whether it was
-actually sure. A flat sky, a gradient or a studio backdrop scores near zero
-everywhere, so the crop stays centred instead of wandering off to a corner
+actually sure (`detail crop` or `centered crop` in the results). A flat sky, a
+gradient or a studio backdrop scores near zero everywhere, so the crop stays centred instead of wandering off to a corner
 because of noise.
 
-No machine learning is involved and none is claimed: it is a detail-and-colour
-map, and it is what makes the difference between "cropped" and "cropped through
-somebody's ear".
+No machine learning or face detection is involved: this is a detail-and-colour
+map, and it may choose a busy background instead of the intended subject.
 
 ## Everything else it does right
 
-- **Your document is never touched.** Each slot works on a throwaway duplicate
-  and closes it without saving.
+- **The source document is not edited.** Each slot works on a temporary duplicate
+  and attempts to close it without saving; Photoshop is asked to auto-close it on
+  cancellation. Check for a leftover duplicate if Photoshop reports an error.
 - **One slot failing does not stop the export.** You get "7 exported, 1 failed"
   and the reason, not silence.
 - **It warns before it lies.** A 500×500 source blown up to 1080×1920 is called
   out in the panel as a 3.8× enlargement, before you press the button.
 - **The folder is remembered** between sessions.
 - **JPEG quality, sharpening and the smart crop** are three settings, not thirty.
-- **Rewriting the same export is safe**: files are overwritten by name.
+  Sharpening is attempted on the active layer of each duplicate, not necessarily
+  the whole composite; the results say `sharpen skipped` if Photoshop refuses.
+- **Existing files with the same output names are overwritten without prompting.**
+  Use an empty destination folder when testing.
 
-## Install it (5 minutes, once)
+## Install / update
 
-Photoshop plugins are not double-clicked like OBS ones. This is Adobe's own
-developer flow:
+This is a **development plugin folder**, not a double-click installer or a
+`.ccx`. You do not need Node or a compiler to use it.
 
-1. Install the **UXP Developer Tool** (free) from the Creative Cloud desktop app
-   → *Marketplace → search "UXP Developer Tool"*.
-2. Get the plugin folder: **Actions → Export Kit → newest green run →
-   Artifacts → `photoshop-export-kit-plugin`**, unzip it (it is a zip inside a
-   zip), or just use this folder from the repository.
-3. Open the UXP Developer Tool → **Add Plugin…** → choose
-   `photoshop-export-kit/manifest.json`.
-4. Press **Load** next to *Export Kit*.
-5. In Photoshop: **Plugins → Export Kit**. The panel opens. Drag it anywhere.
-6. Tick the sizes you use, choose a folder, press **Export everything**.
+1. Download `photoshop-export-kit-plugin` from **Actions → Export Kit → a
+   successful run → Artifacts**. Extract the ZIP to a local folder, such as
+   Documents. Keep `manifest.json`, `index.js`, `src/` and `icons/` together.
+2. In Photoshop enable **Edit → Preferences → Plug-ins → Enable Developer
+   Mode** (Mac: **Photoshop → Preferences → Plug-ins**), then restart Photoshop.
+3. Open Photoshop, then install/open **UXP Developer Tool** from Creative Cloud
+   Desktop and check that the intended Photoshop is connected.
+4. If an old Export Kit entry is present, **Unload** and remove it from the
+   Developer Tool, so it cannot keep pointing at the old folder.
+5. Click **Add Plugin**, select the **new extracted** `manifest.json`, then
+   **Load**. Open **Plugins → Export Kit** in Photoshop. You may need to load
+   it again after restarting Photoshop.
+6. Test with a copy of a document and an empty destination folder first. Existing
+   files with the same output names are overwritten.
 
-The plugin stays loaded across Photoshop restarts once added in the Developer
-Tool; to keep it after uninstalling the tool you would need to package and sign
-it as a `.ccx` through Adobe's developer console, which is a separate (free)
-process and deliberately not automated here.
+You can instead add `photoshop-export-kit/manifest.json` from a current checkout.
+If loading fails, click **Details** in the Developer Tool and share the exact
+error or a screenshot. For a timeout, try the extracted folder in local Documents.
+See the included `INSTALL.txt`. Packaging/distributing a `.ccx` is a separate
+Adobe Developer Tool / Developer Console process, not part of this artifact.
 
 ## Reading the results
 
-Each row is a file: `✓` and its size, or `✗` and the reason.
+Each row shows a filename and available details, or a failure reason.
 
 | What you might see | What it means |
 |---|---|
@@ -93,12 +101,13 @@ Each row is a file: `✓` and its size, or `✗` and the reason.
 
 ## Honest limits
 
-- **Rotated or transformed layer content is exported as it looks.** This works on
-  the document canvas, so what you see is what you get — hidden layers included.
+- **Rotated or transformed layer content is exported as it looks.** Hidden layers
+  remain hidden in the export.
 - **Smart objects are rasterised by the export**, exactly as Photoshop's own
   export does.
-- **Fit slots pad with transparency**, which becomes white in a JPEG. If you
-  wanted the picture to fill the frame instead, that is what the *fill* slots do.
+- **Fit slots expand the canvas.** Padding may be transparent when the document
+  has no locked Background layer, or use Photoshop's background colour when it
+  does. JPEG does not support transparency. Use *fill* to crop instead.
 - **The smart crop is a heuristic.** It finds busy regions, not faces. With a
   subject on a busy background, trust your eyes over the panel.
 - **The panel needs Photoshop 23.3+** because that is where UXP panels with
@@ -106,14 +115,14 @@ Each row is a file: `✓` and its size, or `✗` and the reason.
 
 ## Build and test
 
-There is nothing to build: the plugin is the folder. The logic is tested:
+There is nothing to build: the plugin is the folder. Run the automated tests:
 
 ```bash
 cd photoshop-export-kit
 npm test
 ```
 
-28 checks over the export arithmetic and the crop chooser: every slot's
+The arithmetic tests cover every slot's
 geometry for 16:9, 4:3, square and vertical documents, the rounding that must
 never leave a one-pixel seam, blow-up detection, file naming, the crop moving
 inside its slack and never outside it, the detail map, the centred fallback for
@@ -126,6 +135,8 @@ all.
 photoshop-export-kit/
 ├─ manifest.json        the plugin's identity and entry points
 ├─ index.html           the panel
+├─ index.js             plugin-root entry script
+├─ INSTALL.txt          install and troubleshooting steps
 ├─ styles.css
 ├─ icons/
 ├─ src/
@@ -135,3 +146,9 @@ photoshop-export-kit/
 │ └─ panel.js           the widgets
 └─ tests/               node --test suites
 ```
+
+The tests include a simulated UXP loader, lifecycle and fake Photoshop adapter;
+the assembled artifact is tested the same way in Actions. They **do not** run
+inside Photoshop, so a real-host load and export test is still required.
+
+Copyright © 2026 Emmanuel Suah. GPL-2.0-or-later; see the repository LICENSE.

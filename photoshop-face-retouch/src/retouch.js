@@ -16,21 +16,11 @@ You should have received a copy of the GNU General Public License along
 with this program; if not, see <https://www.gnu.org/licenses/>.
 */
 
-/*
- * Everything that touches Photoshop, and nothing that decides anything.
- *
- * Two rules in here, both learned the hard way from scripts that fail in the
- * middle of somebody's photo:
- *
- *   1. Every step is optional. A filter that refuses on a smart object, a blend
- *      mode an older build spells differently, a group that cannot be made —
- *      each is caught, recorded, and the retouch continues. A half-finished
- *      retouch with a report beats no retouch and a dialog box with a number in
- *      it.
- *   2. Copies are always made from the same original layer and always land
- *      directly above it, which is what fixes the stacking order without ever
- *      moving anything. Grouping happens afterwards, if it happens at all.
- */
+/* Photoshop-facing adapter. Its modal operations use batchPlay for layer
+ * selection because Document.activeLayers is read-only before Photoshop 26.9.
+ * New layers are hidden or at 0% opacity while configured. Photoshop requires
+ * filter targets to be visible, so filter copies are shown at 0% first. Failed
+ * steps are removed or left inert with a warning, never applied to the original. */
 
 "use strict";
 
@@ -43,9 +33,8 @@ const descriptors = require("./descriptors.js");
 const BATCH = { synchronousExecution: true };
 
 /*
- * ElementPlacement has been spelled more than one way over the years — the
- * ExtendScript generation called it PLACEINSIDE, the current one INSIDE. Rather
- * than bet the group on the spelling, ask for the one that exists.
+ * Prefer UXP's documented PLACEINSIDE / PLACEAFTER, with legacy aliases as
+ * fallbacks. Grouping is optional if the host cannot move the new layers.
  */
 function placement(names) {
 	const table = constants.ElementPlacement || {};
@@ -58,7 +47,7 @@ function placement(names) {
 	return undefined;
 }
 
-const INSIDE = placement(["INSIDE", "PLACEINSIDE"]);
+const INSIDE = placement(["PLACEINSIDE", "INSIDE"]);
 const AFTER = placement(["PLACEAFTER", "PLACE_AFTER", "AFTER"]);
 
 /* ------------------------------------------------------------------------- */
@@ -136,164 +125,256 @@ function baseLayer(doc) {
 /* the retouch                                                               */
 /* ------------------------------------------------------------------------- */
 
-/**
- * Builds the layer stack. Must be called inside executeAsModal.
- * Returns a step-by-step report; never leaves a Photoshop error to the caller.
- */
-async function build(settings) {
-	const doc = activeDocument();
-	const width = Math.round(Number(doc.width));
-	const height = Math.round(Number(doc.height));
+/* batchPlay can resolve successfully with an error descriptor; treating that
+ * as success could apply a filter to the wrong layer or leave a solid tint. */
+async function playChecked(descriptor) {
+	const result = await action.batchPlay([descriptor], BATCH);
+	for (const item of result || []) {
+		if (item && String(item._obj || "").toLowerCase() === "error") {
+			const error = new Error(item.message || `Photoshop error ${item.result}`);
+			error.code = item.result;
+			throw error;
+		}
+	}
+}
 
+async function selectLayer(doc, layer, context) {
+	if (!layer || layer.id === undefined || doc.id === undefined)
+		throw new Error("Photoshop did not provide a layer or document ID.");
+	if (!app.activeDocument || app.activeDocument.id !== doc.id)
+		throw new Error("The active document changed during the retouch.");
+	const descriptor = {
+		_obj: "select",
+		_target: [{ _ref: "layer", _id: layer.id }, { _ref: "document", _id: doc.id }],
+		makeVisible: false,
+		_options: { dialogOptions: "dontDisplay" },
+	};
+	try {
+		await playChecked(descriptor);
+	} catch (error) {
+		if (cancelled(context, error) || !app.activeDocument || app.activeDocument.id !== doc.id)
+			throw error;
+		/* Some Photoshop actions reject the optional document reference. The
+		 * document is already active and modal; retry the ID-only form. */
+		descriptor._target = [{ _ref: "layer", _id: layer.id }];
+		await playChecked(descriptor);
+	}
+	const selected = doc.activeLayers || [];
+	if (!app.activeDocument || app.activeDocument.id !== doc.id ||
+		!Array.from(selected).some((item) => item.id === layer.id))
+		throw new Error("Photoshop did not select the intended layer.");
+}
+
+function layerIds(container, ids) {
+	const found = ids || new Set();
+	for (const layer of (container && container.layers) || []) {
+		found.add(layer.id);
+		if (layer.layers && layer.layers.length)
+			layerIds(layer, found);
+	}
+	return found;
+}
+
+function cancelled(context, error) {
+	return Boolean((context && context.isCancelled) || (error && error.code === -128));
+}
+
+/* Cleanup can itself fail, especially after Escape. Preserve an already-hidden
+ * incomplete layer when possible and say explicitly what the user should check. */
+async function discardFailedLayer(layer, safelyInvisible) {
+	if (!layer)
+		return "";
+	try {
+		await layer.delete();
+		return "";
+	} catch (error) {
+		if (safelyInvisible) {
+			try { layer.visible = false; } catch (ignored) { /* opacity was already zero */ }
+			return "; incomplete layer was left hidden or at 0% opacity — remove it manually";
+		}
+		try {
+			layer.visible = false;
+			return "; incomplete layer was left hidden — remove it manually";
+		} catch (ignored) {
+			return "; could not remove or hide the incomplete layer — undo or inspect it manually";
+		}
+	}
+}
+
+/** Build the stack inside executeAsModal and report every attempted step. */
+async function build(settings, context) {
+	const doc = activeDocument();
 	const plan = logic.plan({
 		presetId: settings.presetId,
 		strength: settings.strength,
 		texture: settings.texture,
-		width: width,
-		height: height,
+		width: Math.round(Number(doc.width)),
+		height: Math.round(Number(doc.height)),
 		options: settings.options,
 	});
 
 	if (plan.steps.length === 0)
-		return { plan: plan, steps: [], grouped: false };
+		return { plan: plan, steps: [], grouped: false, cancelled: false };
 
 	const base = baseLayer(doc);
 	const created = [];
 	const report = [];
+	let wasCancelled = false;
 
 	for (const step of plan.steps) {
+		if (cancelled(context)) {
+			wasCancelled = true;
+			break;
+		}
 		const entry = { id: step.id, name: step.name, note: step.note, ok: false, message: "" };
-
-		const isFill = !!(step.filter && step.filter.type === "fill");
-
+		let layer = null;
+		let safelyInvisible = false;
 		try {
-			/* Always copy from the original, with the original active: the copy
-			 * lands directly above it, which is what stacks the layers in plan
-			 * order without ever moving one. */
-			doc.activeLayers = [base];
-
-			let layer = null;
-
-			if (isFill) {
-				/* A solid colour layer is made, not copied; it too lands above the
-				 * active layer, so it arrives just under the layers made before it. */
-				await action.batchPlay([descriptors.solidColour(step.filter.color, step.name)], BATCH);
-				layer = doc.activeLayers[0];
+			/* Select by IDs, not the setter introduced in Photoshop 26.9. */
+			await selectLayer(doc, base, context);
+			const before = layerIds(doc);
+			let candidate;
+			if (step.filter && step.filter.type === "fill") {
+				await playChecked(descriptors.solidColour(step.filter.color, step.name));
+				candidate = doc.activeLayers && doc.activeLayers[0];
 			} else {
-				layer = await base.duplicate();
+				candidate = await base.duplicate();
 			}
+			/* Never alter or delete a pre-existing layer if the host returns the
+			 * wrong active object after a failed create. */
+			if (!candidate || candidate.id === undefined || before.has(candidate.id))
+				throw new Error("Photoshop did not return a new layer.");
+			layer = candidate;
+			layer.visible = false;
+			safelyInvisible = true;
+			layer.opacity = 0;
+			layer.name = step.name;
+			/* Prefer the host's enum values; the core plan is host-independent. */
+			const modes = constants && constants.BlendMode;
+			layer.blendMode = (modes && modes[step.blend.toUpperCase()]) || step.blend;
 
-			if (!layer)
-				throw new Error("Photoshop did not hand back the new layer.");
-
-			try {
-				layer.name = step.name;
-			} catch (error) {
-				entry.message = `could not rename the layer: ${error.message}`;
-			}
-
-			/* The blend mode and the opacity are what make the layer do its job.
-			 * A warmth fill left on Normal at 100% would simply paint the photo
-			 * orange, so this is set for the fill exactly as for the copies. */
-			try {
-				layer.blendMode = step.blend;
-			} catch (error) {
-				entry.message = `blend mode "${step.blend}" not available: ${error.message}`;
+			/* A hidden layer cannot receive filters in Photoshop. Visible at 0%
+			 * remains inert even if cancellation prevents later cleanup. */
+			layer.visible = true;
+			if (!(step.filter && step.filter.type === "fill")) {
+				await selectLayer(doc, layer, context);
+				const descriptor = descriptors.forStep(step);
+				if (descriptor)
+					await playChecked(descriptor);
 			}
 
 			layer.opacity = step.opacity;
-
-			if (!isFill) {
-				doc.activeLayers = [layer];
-
-				const descriptor = descriptors.forStep(step);
-				if (descriptor)
-					await action.batchPlay([descriptor], BATCH);
-			}
-
+			safelyInvisible = false;
 			created.push(layer);
 			entry.ok = true;
 		} catch (error) {
-			entry.message = error && error.message ? error.message : String(error);
+			entry.message = (error && error.message ? error.message : String(error)) +
+				await discardFailedLayer(layer, safelyInvisible);
+			wasCancelled = cancelled(context, error);
 		}
-
 		report.push(entry);
+		if (wasCancelled)
+			break;
 	}
 
-	await order(created);
-
-	const grouped = await groupThem(doc, created);
-
-	return { plan: plan, steps: report, grouped: grouped };
+	let grouped = false;
+	let warning = "";
+	if (!wasCancelled && !cancelled(context)) {
+		try {
+			const ordered = await order(created, context);
+			const grouping = await groupThem(doc, created, context);
+			grouped = grouping.grouped;
+			if (created.length && !grouped)
+				warning = "Some layers could not be grouped; check their order in the Layers panel.";
+			else if (!(grouped ? grouping.ordered : ordered))
+				warning = "Photoshop could not arrange every layer; check their order in the Layers panel.";
+		} catch (error) {
+			if (cancelled(context, error))
+				wasCancelled = true;
+			else
+				warning = "Could not finish arranging the new layers; check the Layers panel.";
+		}
+	} else {
+		wasCancelled = true;
+	}
+	if (cancelled(context))
+		wasCancelled = true;
+	return { plan: plan, steps: report, grouped: grouped, cancelled: wasCancelled, warning: warning };
 }
 
-/**
- * Puts the new layers in plan order — top layer first — regardless of where
- * Photoshop happened to drop each copy. Moving a layer after its neighbour is the
- * one reordering the DOM does deterministically, and it is a no-op if the copy is
- * already there.
- */
-async function order(layers) {
-	if (!AFTER || layers.length < 2)
-		return;
+function checkCancellation(context) {
+	if (cancelled(context)) {
+		const error = new Error("Retouch cancelled.");
+		error.code = -128;
+		throw error;
+	}
+}
 
-	for (let index = layers.length - 1; index >= 1; index--) {
+/** Put new layers in plan order, top first. Report a refused move. */
+async function order(layers, context) {
+	if (layers.length < 2)
+		return true;
+	if (!AFTER)
+		return false;
+	let ordered = true;
+	for (let index = 1; index < layers.length; index++) {
+		checkCancellation(context);
 		try {
 			await layers[index].move(layers[index - 1], AFTER);
 		} catch (error) {
-			/* a locked or already-correct layer; the next attempt may still work */
+			if (cancelled(context, error)) throw error;
+			ordered = false;
 		}
 	}
+	return ordered;
 }
 
-/**
- * Tries to put the new layers into one group. If Photoshop says no — older
- * builds spell the layer section differently, or the document has a locked
- * arrangement — the layers stay where they are: above the original, correctly
- * ordered, still removable by name.
- */
-async function groupThem(doc, created) {
-	if (!created.length)
-		return false;
-
+/** Try grouping; do not claim success if any new layer remains outside. */
+async function groupThem(doc, created, context) {
+	if (!created.length || !INSIDE)
+		return { grouped: false, ordered: false };
+	checkCancellation(context);
 	let group = null;
-
-	if (!INSIDE)
-		return false;
-
 	try {
-		doc.activeLayers = [created[0]];
-		await action.batchPlay([descriptors.layerGroup(logic.GROUP_NAME)], BATCH);
-		const candidate = doc.activeLayers[0];
-
-		if (candidate && candidate.layers && candidate.layers.length === 0)
+		await selectLayer(doc, created[0], context);
+		const before = layerIds(doc);
+		await playChecked(descriptors.layerGroup(logic.GROUP_NAME));
+		const candidate = doc.activeLayers && doc.activeLayers[0];
+		if (candidate && !before.has(candidate.id) && candidate.layers && candidate.layers.length === 0)
 			group = candidate;
 	} catch (error) {
-		return false;
+		if (cancelled(context, error)) throw error;
+		return { grouped: false, ordered: false };
 	}
-
 	if (!group)
-		return false;
+		return { grouped: false, ordered: false };
 
+	let allGrouped = true;
 	for (const layer of created) {
+		checkCancellation(context);
 		try {
 			await layer.move(group, INSIDE);
+			if (!Array.from(group.layers).some((item) => item.id === layer.id))
+				allGrouped = false;
 		} catch (error) {
-			/* one layer stays outside; the group is still worth having */
+			if (cancelled(context, error)) throw error;
+			allGrouped = false;
 		}
 	}
-
-	/* Inside the group the order has to be put back: where a freshly moved layer
-	 * lands among its new siblings is not specified anywhere. */
-	await order(created);
-
-	try {
-		doc.activeLayers = [group];
-	} catch (error) {
-		/* selection is a nicety */
+	if (!allGrouped) {
+		if (group.layers.length === 0) {
+			try { await group.delete(); } catch (error) {
+				if (cancelled(context, error)) throw error;
+			}
+		}
+		return { grouped: false, ordered: false };
 	}
-
-	return true;
+	const ordered = await order(created, context);
+	try { await selectLayer(doc, group, context); } catch (error) {
+		if (cancelled(context, error)) throw error;
+		/* Final selection is optional. */
+	}
+	return { grouped: true, ordered: ordered };
 }
 
 /* ------------------------------------------------------------------------- */
@@ -301,32 +382,42 @@ async function groupThem(doc, created) {
 /* ------------------------------------------------------------------------- */
 
 async function apply(settings) {
-	return psCore.executeAsModal(async () => build(settings), { commandName: "Face Retouch" });
+	return psCore.executeAsModal(async (context) => build(settings, context), { commandName: "Face Retouch" });
 }
 
-async function removeAll() {
+async function removeAll(expectedDocumentId) {
 	return psCore.executeAsModal(
-		async () => {
+		async (context) => {
 			const doc = activeDocument();
-			const found = collectRetouchLayers(doc);
+			if (expectedDocumentId === undefined || doc.id !== expectedDocumentId)
+				throw new Error("The active document changed. Review the layers and confirm Remove again.");
 
-			/* Groups first: deleting one takes its members with it, and the
-			 * members that are already gone simply refuse. */
-			const groups = found.filter((layer) => layer.layers && layer.layers.length);
-			const others = found.filter((layer) => !(layer.layers && layer.layers.length));
-
+			/* If a matching parent is removed, do not attempt to delete its
+			 * already-removed children separately. A nonmatching parent is traversed. */
+			const targets = [];
+			const walk = (container) => {
+				for (const layer of (container && container.layers) || []) {
+					if (logic.isRetouchLayer(layer.name))
+						targets.push(layer);
+					else if (layer.layers && layer.layers.length)
+						walk(layer);
+				}
+			};
+			walk(doc);
 			let removed = 0;
-
-			for (const layer of groups.concat(others)) {
+			let failed = 0;
+			let wasCancelled = false;
+			for (const layer of targets) {
+				if (cancelled(context)) { wasCancelled = true; break; }
 				try {
 					await layer.delete();
 					removed++;
 				} catch (error) {
-					/* already deleted with its parent */
+					if (cancelled(context, error)) { wasCancelled = true; break; }
+					failed++;
 				}
 			}
-
-			return removed;
+			return { removed: removed, failed: failed, cancelled: wasCancelled };
 		},
 		{ commandName: "Remove Face Retouch" },
 	);

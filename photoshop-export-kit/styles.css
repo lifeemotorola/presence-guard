@@ -1,18 +1,30 @@
 /*
 Export Kit for Photoshop
-Copyright (C) 2026 Presence Guard contributors
+Copyright (C) 2026 Emmanuel Suah
 
 Deliberately plain: Photoshop's own colours come through the host theme, and
 nothing here is fixed to a light or dark palette, so the panel looks at home in
 all four Photoshop themes.
 */
 
+/* Constrain the panel viewport so every control stays reachable in a small dock. */
 #root {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	overflow-y: auto;
+	overflow-x: auto;
 	display: flex;
 	flex-direction: column;
 	padding: 10px;
 	font-size: 12px;
 	gap: 10px;
+}
+
+#root > * {
+	flex-shrink: 0;
 }
 
 header {
@@ -48,6 +60,7 @@ header {
 
 .slot-row {
 	display: flex;
+	flex-wrap: wrap;
 	justify-content: space-between;
 	align-items: center;
 	padding: 1px 0;
@@ -69,6 +82,7 @@ header {
 
 .row {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px;
 }
@@ -89,6 +103,7 @@ header {
 
 .result {
 	display: flex;
+	flex-wrap: wrap;
 	justify-content: space-between;
 	align-items: baseline;
 	gap: 8px;
@@ -99,9 +114,8 @@ header {
 
 .result .name {
 	flex: 1;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	min-width: 0;
+	white-space: normal;
 }
 
 .result .detail {

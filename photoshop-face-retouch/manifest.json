@@ -2,12 +2,15 @@
 	"manifestVersion": 5,
 	"id": "com.presenceguard.faceretouch",
 	"name": "Face Retouch",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"main": "index.html",
 	"host": [
 		{
 			"app": "PS",
-			"minVersion": "24.0.0"
+			"minVersion": "24.0.0",
+			"data": {
+				"apiVersion": 2
+			}
 		}
 	],
 	"entrypoints": [
@@ -60,6 +63,6 @@
 		}
 	],
 	"requiredPermissions": {
-		"localFileSystem": "fullAccess"
+		"localFileSystem": "plugin"
 	}
 }

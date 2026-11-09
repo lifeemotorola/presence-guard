@@ -1,6 +1,6 @@
 /*
 Export Kit for Photoshop
-Copyright (C) 2026 Presence Guard contributors
+Copyright (C) 2026 Emmanuel Suah
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -47,6 +47,10 @@ const DETAIL_MAP_WIDTH = 96;
 
 const FOLDER_TOKEN_KEY = "exportkit.folderToken";
 
+function cancelled(context, error) {
+	return Boolean((context && context.isCancelled) || (error && error.code === -128));
+}
+
 /* ------------------------------------------------------------------------- */
 /* the document                                                              */
 /* ------------------------------------------------------------------------- */
@@ -66,10 +70,10 @@ function activeDocumentInfo() {
 
 /*
  * Reads the document small and asks smartcrop.js where the subject is.
- * Returns a crop offset in source pixels. Never throws: if the imaging API is
- * missing or refuses, the crop simply stays centred.
+ * Returns a crop offset in source pixels. If the imaging API is missing or
+ * refuses, use the centre; cancellation must propagate instead.
  */
-async function analyseForCrop(doc, job) {
+async function analyseForCrop(doc, job, context) {
 	const centred = {
 		offsetX: Math.round(job.slackX / 2),
 		offsetY: Math.round(job.slackY / 2),
@@ -108,6 +112,8 @@ async function analyseForCrop(doc, job) {
 			slackY: job.slackY,
 		});
 	} catch (error) {
+		if (cancelled(context, error))
+			throw error;
 		return centred;
 	} finally {
 		try {
@@ -123,20 +129,24 @@ async function analyseForCrop(doc, job) {
 /* one file                                                                  */
 /* ------------------------------------------------------------------------- */
 
-async function padToTarget(doc, target) {
+async function padToTarget(doc, target, context) {
 	const anchor = constants && constants.AnchorPosition ? constants.AnchorPosition.MIDDLECENTER : undefined;
 
 	try {
 		await doc.resizeCanvas(target.width, target.height, anchor);
 	} catch (error) {
+		if (cancelled(context, error))
+			throw error;
 		/* Older builds do not accept the anchor; the default is centred too. */
 		await doc.resizeCanvas(target.width, target.height);
 	}
 }
 
-async function sharpen(doc) {
+async function sharpen(doc, context) {
 	try {
-		await action.batchPlay(
+		if (!app.activeDocument || app.activeDocument.id !== doc.id)
+			throw new Error("Temporary export document is not active.");
+		const result = await action.batchPlay(
 			[
 				{
 					_obj: "unsharpMask",
@@ -149,10 +159,18 @@ async function sharpen(doc) {
 			],
 			{ synchronousExecution: true },
 		);
+		for (const item of result || []) {
+			if (item && String(item._obj || "").toLowerCase() === "error") {
+				const error = new Error(item.message || `Photoshop error ${item.result}`);
+				error.code = item.result;
+				throw error;
+			}
+		}
 		return true;
 	} catch (error) {
-		/* Not every document can take a filter (empty layers, smart objects in
-		 * odd states). The file is still worth exporting. */
+		if (cancelled(context, error))
+			throw error;
+		/* Not every document can take a filter. Export but report the skip. */
 		return false;
 	}
 }
@@ -175,14 +193,22 @@ async function saveCopy(doc, file, job, options) {
 
 /*
  * One slot, start to finish, on a throwaway copy of the document — the
- * user's file is never touched, and a failure halfway through leaves nothing
- * behind but a closed copy.
+ * source document is not edited. A failure or cancellation can leave an output
+ * file behind; the duplicate is closed manually or by modal auto-close.
  */
-async function exportOne(doc, job, options, folder, baseName) {
+async function exportOne(doc, job, options, folder, baseName, context) {
 	let copy = null;
+	let registered = false;
+	const control = context && context.hostControl;
 
 	try {
 		copy = await doc.duplicate();
+		/* After cancellation Photoshop can refuse further changes, including a
+		 * manual close. Register the duplicate for cleanup at modal exit. */
+		if (control && typeof control.registerAutoCloseDocument === "function") {
+			await control.registerAutoCloseDocument(copy.id);
+			registered = true;
+		}
 
 		await copy.resizeImage(job.resize.width, job.resize.height);
 
@@ -195,10 +221,10 @@ async function exportOne(doc, job, options, folder, baseName) {
 					bottom: job.crop.bottom,
 				});
 		} else {
-			await padToTarget(copy, job.target);
+			await padToTarget(copy, job.target, context);
 		}
 
-		const sharpened = options.sharpen ? await sharpen(copy) : null;
+		const sharpened = options.sharpen ? await sharpen(copy, context) : null;
 
 		const name = logic.fileNameForJob(baseName, job);
 		const file = await folder.createFile(name, { overwrite: true });
@@ -213,13 +239,24 @@ async function exportOne(doc, job, options, folder, baseName) {
 			/* the file is on disk whether or not it reports a size */
 		}
 
-		return { ok: true, name, bytes, sharpened, smart: options.smartCrop && job.smartCrop !== false };
+		return {
+			ok: true, name, bytes, sharpened,
+			smart: Boolean(options.smartCrop && job.smartCrop === true),
+			cropDecision: job.smartCrop === true ? "detail crop" : job.smartCrop === false ? "centered crop" : null,
+		};
 	} finally {
 		if (copy) {
+			let closed = false;
 			try {
 				await copy.closeWithoutSaving();
-			} catch (ignored) {
-				/* Photoshop may have closed it already during an error */
+				closed = true;
+			} catch (error) {
+				if (!registered && !cancelled(context, error))
+					throw new Error("The temporary export document could not be closed; close it without saving.");
+				/* Registered copies will be closed by the host at modal exit. */
+			}
+			if (closed && registered && typeof control.unregisterAutoCloseDocument === "function") {
+				try { await control.unregisterAutoCloseDocument(copy.id); } catch (ignored) { /* already closed */ }
 			}
 		}
 	}
@@ -234,42 +271,50 @@ async function exportOne(doc, job, options, folder, baseName) {
  * rest still export, because "seven of eight worked" beats "nothing happened".
  */
 async function exportJobs(jobs, options) {
-	const { folder, settings, baseName, onProgress } = options;
+	const { folder, settings, baseName, onProgress, documentId } = options;
 	const results = [];
+	let wasCancelled = false;
 
 	if (!folder)
 		throw new Error("choose a folder first");
-
 	if (!jobs || jobs.length === 0)
-		return results;
+		return { results, cancelled: false };
 
 	await psCore.executeAsModal(
 		async (executionContext) => {
 			const doc = app.activeDocument;
 			if (!doc)
 				throw new Error("no document is open");
+			if (documentId !== undefined && doc.id !== documentId)
+				throw new Error("The active document changed. Check the document and export again.");
 
 			for (let index = 0; index < jobs.length; index++) {
-				if (executionContext && typeof executionContext.isCancelled === "function" && executionContext.isCancelled())
+				if (cancelled(executionContext)) {
+					wasCancelled = true;
 					break;
-
+				}
 				const planned = jobs[index];
-
 				if (typeof onProgress === "function")
 					onProgress({ index, total: jobs.length, slotId: planned.slotId, label: planned.label });
 
-				let job = planned;
-
-				if (settings.smartCrop && planned.mode === "fill" && (planned.slackX > 0 || planned.slackY > 0)) {
-					const where = await analyseForCrop(doc, planned);
-					job = logic.withCropOffset(planned, where.offsetX, where.offsetY);
-					job.smartCrop = Boolean(where.smart);
-				}
-
 				try {
-					const result = await exportOne(doc, job, settings, folder, baseName);
+					let job = planned;
+					if (settings.smartCrop && planned.mode === "fill" && (planned.slackX > 0 || planned.slackY > 0)) {
+						const where = await analyseForCrop(doc, planned, executionContext);
+						job = logic.withCropOffset(planned, where.offsetX, where.offsetY);
+						job.smartCrop = Boolean(where.smart);
+					}
+					if (cancelled(executionContext)) {
+						wasCancelled = true;
+						break;
+					}
+					const result = await exportOne(doc, job, settings, folder, baseName, executionContext);
 					results.push(Object.assign({ slotId: planned.slotId, label: planned.label }, result));
 				} catch (error) {
+					if (cancelled(executionContext, error)) {
+						wasCancelled = true;
+						break;
+					}
 					results.push({
 						ok: false,
 						slotId: planned.slotId,
@@ -278,11 +323,12 @@ async function exportJobs(jobs, options) {
 					});
 				}
 			}
+			if (cancelled(executionContext))
+				wasCancelled = true;
 		},
 		{ commandName: "Export Kit" },
 	);
-
-	return results;
+	return { results, cancelled: wasCancelled };
 }
 
 /* ------------------------------------------------------------------------- */
@@ -295,7 +341,7 @@ async function chooseFolder() {
 		return null;
 
 	try {
-		const token = localFileSystem.createPersistentToken(folder);
+		const token = await localFileSystem.createPersistentToken(folder);
 		window.localStorage.setItem(FOLDER_TOKEN_KEY, token);
 	} catch (ignored) {
 		/* remembering the folder is a convenience, not a requirement */

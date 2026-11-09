@@ -1,0 +1,28 @@
+EXPORT KIT 1.0.1 — INSTALL / UPDATE
+By Emmanuel Suah
+
+Requires Photoshop 23.3 or later (including Photoshop 2023/2024) and Adobe's
+free UXP Developer Tool. This is a development plugin folder, not a .ccx
+installer. No compiler or Node is needed to use it. Automated tests simulate
+UXP; this version has not been verified in a live Photoshop installation.
+
+1. Download the photoshop-export-kit-plugin artifact from a successful Export
+   Kit GitHub Actions run. Right-click the ZIP and choose Extract All.
+   Put the extracted folder somewhere local, such as Documents. Keep index.js,
+   index.html, styles.css, src and icons together with manifest.json.
+2. In Photoshop, enable Developer Mode under Edit > Preferences > Plug-ins
+   (on a Mac: Photoshop > Preferences > Plug-ins), then restart Photoshop.
+3. Install/open UXP Developer Tool from Creative Cloud Desktop. Start Photoshop
+   first, then the Developer Tool. Confirm the intended Photoshop is connected.
+4. If the old Export Kit entry is present, unload and remove that entry in the
+   Developer Tool. Do not accidentally keep using the old folder.
+5. Click Add Plugin and choose manifest.json from the NEW extracted folder.
+   Click Load. In Photoshop, open Plugins > Export Kit.
+6. Open a copy of a document for your first test, choose an empty output folder,
+   tick one or more sizes and click Export everything. Existing files with the
+   same output names in that folder will be overwritten.
+
+If it still will not load, click Details next to the error in UXP Developer Tool
+and share the exact message or a screenshot, along with the Photoshop version.
+If the tool reports a timeout, try the extracted folder in local Documents.
+You may need to press Load again after restarting Photoshop.
