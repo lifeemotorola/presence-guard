@@ -13,6 +13,7 @@ Licensed under GPL-2.0-or-later; this program comes WITHOUT ANY WARRANTY.
 #include <QFontMetrics>
 #include <QLabel>
 #include <QMessageBox>
+#include <QPluginLoader>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QTemporaryDir>
@@ -20,6 +21,13 @@ Licensed under GPL-2.0-or-later; this program comes WITHOUT ANY WARRANTY.
 #include <QTimer>
 #include <cstdio>
 #include <string>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 void fakeSetConfigRoot(const std::string &path);
 void fakeSetupUiFixture();
@@ -47,6 +55,30 @@ static QPushButton *findButton(TwinDock &dock, const QString &text)
 
 int main(int argc, char **argv)
 {
+#ifdef _WIN32
+	/* Qt otherwise displays a native modal error box on platform startup
+	 * failure in unattended Windows sessions. Preserve redirected logs. */
+	if (!GetConsoleWindow()) {
+		const HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
+		const HANDLE err = GetStdHandle(STD_ERROR_HANDLE);
+		if (AllocConsole()) {
+			SetStdHandle(STD_OUTPUT_HANDLE, out);
+			SetStdHandle(STD_ERROR_HANDLE, err);
+		}
+	}
+#endif
+	const QByteArray platformDir = qgetenv("QT_QPA_PLATFORM_PLUGIN_PATH");
+	if (qgetenv("QT_QPA_PLATFORM") == "offscreen" && !platformDir.isEmpty()) {
+		QPluginLoader platform(QString::fromLocal8Bit(platformDir) + "/qoffscreen.dll");
+		if (!platform.load()) {
+			std::fprintf(stderr, "Could not load Qt offscreen plugin: %s\n",
+				     platform.errorString().toUtf8().constData());
+			return 1;
+		}
+		platform.unload();
+		std::printf("Qt offscreen plugin loaded\n");
+		std::fflush(stdout);
+	}
 	std::printf("Starting QApplication\n");
 	std::fflush(stdout);
 	QApplication app(argc, argv);

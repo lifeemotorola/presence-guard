@@ -72,10 +72,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $offscreen = Get-ChildItem $testQt -Recurse -Filter qoffscreen.dll | Select-Object -First 1
           if (!$offscreen) { Write-Host '::error::The pinned Qt offscreen plugin is missing.'; exit 1 }
-          Write-Host "::notice::Qt runtime: $($qtCore.FullName); offscreen: $($offscreen.FullName)"
+          $windowsPlatform = Get-ChildItem .deps -Recurse -Filter qwindows.dll | Select-Object -First 1
+          Write-Host "::notice::Qt runtime: $($qtCore.FullName); offscreen: $($offscreen.FullName); Windows platform: $($windowsPlatform.FullName)"
           $env:PATH = "$(Split-Path $qtCore.FullName);$env:PATH"
           $env:QT_QPA_PLATFORM = 'offscreen'
           $env:QT_DEBUG_PLUGINS = '1'
+          $env:QT_FORCE_STDERR_LOGGING = '1'
           $env:QT_QPA_PLATFORM_PLUGIN_PATH = Split-Path $offscreen.FullName
           $env:ONAIRTWIN_UI_SCREENSHOT = Join-Path $env:RUNNER_TEMP 'onair-twin-dock.png'
           function Invoke-Test([string] $exe) {
