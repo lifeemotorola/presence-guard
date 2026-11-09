@@ -1,0 +1,276 @@
+name: OnAirTwin
+run-name: OnAirTwin · ${{ github.ref_name }}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'onair-twin/**'
+      - '.github/workflows/onair-twin-windows.yml'
+  pull_request:
+    paths:
+      - 'onair-twin/**'
+      - '.github/workflows/onair-twin-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.ref }}'
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: onair-twin
+
+jobs:
+  model-tests:
+    name: Rehearsal and snapshot tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run model and fake-OBS adapter tests
+        run: ./tests/run-tests.sh
+
+  windows-build:
+    name: Windows x64 / OBS 33.0.1
+    needs: model-tests
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore verified OBS Qt SDK archive
+        id: qt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: onair-twin/.deps/windows-deps-qt6-*-x64.zip
+          key: onair-twin-qt6-windows-${{ hashFiles('onair-twin/buildspec.json') }}-v1
+      - name: Restore verified OBS dependencies archive
+        id: deps-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: onair-twin/.deps/windows-deps-20*-x64.zip
+          key: onair-twin-deps-windows-${{ hashFiles('onair-twin/buildspec.json') }}-v1
+      - name: Fetch OBS build dependencies via GitHub API
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The API resolves to the same official asset even when the public
+          # release-download endpoint returns HTTP 5xx. The helper verifies SHA-256.
+          $spec = Get-Content buildspec.json -Raw | ConvertFrom-Json
+          try {
+            $tag = $spec.dependencies.prebuilt.version
+            $name = "windows-deps-$tag-x64.zip"
+            & .\tests\fetch-release-asset.ps1 -Repository 'obsproject/obs-deps' -Tag $tag -AssetName $name `
+              -ExpectedHash $spec.dependencies.prebuilt.hashes.'windows-x64' -Destination (Join-Path (Get-Location) ".deps\$name")
+            $tag = $spec.dependencies.qt6.version
+            $name = "windows-deps-qt6-$tag-x64.zip"
+            & .\tests\fetch-release-asset.ps1 -Repository 'obsproject/obs-deps' -Tag $tag -AssetName $name `
+              -ExpectedHash $spec.dependencies.qt6.hashes.'windows-x64' -Destination (Join-Path (Get-Location) ".deps\$name")
+          } catch {
+            $message = $_.Exception.Message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=OBS dependency download failed::$message"
+            throw
+          }
+      - name: Save verified OBS Qt SDK archive
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: onair-twin/.deps/windows-deps-qt6-*-x64.zip
+          key: onair-twin-qt6-windows-${{ hashFiles('onair-twin/buildspec.json') }}-v1
+      - name: Save verified OBS dependencies archive
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: onair-twin/.deps/windows-deps-20*-x64.zip
+          key: onair-twin-deps-windows-${{ hashFiles('onair-twin/buildspec.json') }}-v1
+      - name: Prepare verified OBS source and nested dependencies
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          try {
+            # OBS's own x64 build also configures its small x86 helper targets.
+            # Pre-stage their official archive in OBS's nested .deps directory.
+            $spec = Get-Content buildspec.json -Raw | ConvertFrom-Json
+            $version = $spec.dependencies.'obs-studio'.version
+            $expected = $spec.dependencies.'obs-studio'.hashes.'windows-x64'
+            $deps = Join-Path (Get-Location) '.deps'
+            $sourceZip = Join-Path $deps "$version.zip"
+            if (!(Test-Path $sourceZip) -or (Get-FileHash $sourceZip -Algorithm SHA256).Hash -ne $expected) {
+              Invoke-WebRequest -Uri "https://codeload.github.com/obsproject/obs-studio/zip/refs/tags/$version" -OutFile "$sourceZip.part"
+              if ((Get-FileHash "$sourceZip.part" -Algorithm SHA256).Hash -ne $expected) { throw 'OBS source archive checksum mismatch.' }
+              Move-Item "$sourceZip.part" $sourceZip -Force
+            }
+            & tar.exe -xf $sourceZip -C $deps
+            if ($LASTEXITCODE -ne 0) { throw "OBS source extraction failed: $LASTEXITCODE" }
+            $sourceDir = Join-Path $deps "obs-studio-$version"
+            $sourcePresets = Get-Content (Join-Path $sourceDir 'CMakePresets.json') -Raw | ConvertFrom-Json
+            $dependencyPreset = $sourcePresets.configurePresets | Where-Object { $_.name -eq 'dependencies' } | Select-Object -First 1
+            if (!$dependencyPreset) { throw 'OBS source dependency preset not found.' }
+            $innerSpec = $dependencyPreset.vendor.'obsproject.com/obs-studio'.dependencies
+            $innerDeps = Join-Path $sourceDir '.deps'
+            New-Item -ItemType Directory -Path $innerDeps -Force | Out-Null
+            $x86Tag = $innerSpec.prebuilt.version
+            $x86Name = "windows-deps-$x86Tag-x86.zip"
+            & .\tests\fetch-release-asset.ps1 -Repository 'obsproject/obs-deps' -Tag $x86Tag -AssetName $x86Name `
+              -ExpectedHash $innerSpec.prebuilt.hashes.'windows-x86' -Destination (Join-Path $innerDeps $x86Name)
+            foreach ($pattern in @('windows-deps-20*-x64.zip', 'windows-deps-qt6-*-x64.zip')) {
+              Get-ChildItem $deps -Filter $pattern | Copy-Item -Destination $innerDeps -Force
+            }
+            # CMake removes an unmarked source directory. This marker is safe
+            # only after the source ZIP was verified and extracted above.
+            Set-Content (Join-Path $deps '.dependency_obs-studio_x64.sha256') -Value $expected -NoNewline -Encoding ascii
+          } catch {
+            $message = $_.Exception.Message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=OBS source preparation failed::$message"
+            throw
+          }
+      - name: Configure
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $log = Join-Path $env:RUNNER_TEMP 'onair-twin-configure.log'
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            cmake --preset windows-x64 -DBUILD_TWIN_TESTS=ON 2>&1 | Tee-Object -FilePath $log
+            $code = $LASTEXITCODE
+            if ($code -eq 0) { break }
+            $detail = Get-Content $log -Raw
+            # A failed CMake download can leave a partial archive. Retry only
+            # download/hash transport failures, never compiler/config errors.
+            if ($attempt -lt 3 -and $detail -match 'file DOWNLOAD|Unable to download|HTTP response') {
+              Write-Host "::warning::Dependency download failed (attempt $attempt); retrying."
+              $spec = Get-Content buildspec.json -Raw | ConvertFrom-Json
+              $archives = @{
+                "windows-deps-$($spec.dependencies.prebuilt.version)-x64.zip" = $spec.dependencies.prebuilt.hashes.'windows-x64'
+                "windows-deps-qt6-$($spec.dependencies.qt6.version)-x64.zip" = $spec.dependencies.qt6.hashes.'windows-x64'
+                "$($spec.dependencies.'obs-studio'.version).zip" = $spec.dependencies.'obs-studio'.hashes.'windows-x64'
+              }
+              foreach ($entry in $archives.GetEnumerator()) {
+                $path = Join-Path '.deps' $entry.Key
+                if ((Test-Path $path) -and ((Get-FileHash $path -Algorithm SHA256).Hash -ne $entry.Value)) {
+                  Remove-Item $path -Force
+                }
+              }
+              Start-Sleep -Seconds 10
+              continue
+            }
+            $tail = ((Get-Content $log -Tail 45) -join "`n").Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Configure failed::$tail"
+            exit $code
+          }
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build --preset windows-x64 --config RelWithDebInfo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test report, baseline and dock
+        shell: pwsh
+        run: |
+          # Exercise the real widget against fake OBS using the SDK's own
+          # Windows Qt platform plugin. Mixing another Qt build's platform DLL
+          # can fail even when both distributions report the same Qt version.
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $qtCore = Get-ChildItem .deps -Recurse -Filter Qt6Core.dll | Select-Object -First 1
+          $windowsPlatform = Get-ChildItem .deps -Recurse -Filter qwindows.dll | Select-Object -First 1
+          if (!$qtCore -or !$windowsPlatform) {
+            Write-Host '::error::The OBS Qt SDK runtime or Windows platform plugin is missing.'
+            exit 1
+          }
+          Write-Host "::notice::Qt runtime: $($qtCore.FullName); Windows platform: $($windowsPlatform.FullName)"
+          $env:PATH = "$(Split-Path $qtCore.FullName);$env:PATH"
+          $env:QT_QPA_PLATFORM = 'windows'
+          $env:QT_DEBUG_PLUGINS = '1'
+          $env:QT_FORCE_STDERR_LOGGING = '1'
+          $env:QT_QPA_PLATFORM_PLUGIN_PATH = Split-Path $windowsPlatform.FullName
+          $env:ONAIRTWIN_UI_SCREENSHOT = Join-Path $env:RUNNER_TEMP 'onair-twin-dock.png'
+          function Invoke-Test([string] $exe) {
+            $tag = [IO.Path]::GetFileNameWithoutExtension($exe)
+            $outFile = Join-Path $env:RUNNER_TEMP "$tag.out.txt"
+            $errFile = Join-Path $env:RUNNER_TEMP "$tag.err.txt"
+            $process = Start-Process -FilePath (Resolve-Path $exe).Path -NoNewWindow -PassThru -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+            if (!$process.WaitForExit(60000)) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+              $detail = ((Get-Content $outFile -Raw -ErrorAction SilentlyContinue) + "`n" + (Get-Content $errFile -Raw -ErrorAction SilentlyContinue))
+              $escaped = $detail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Host "::error title=Test timeout::$tag timed out after 60 seconds. $escaped"
+              exit 1
+            }
+            $detail = ((Get-Content $outFile -Raw -ErrorAction SilentlyContinue) + "`n" + (Get-Content $errFile -Raw -ErrorAction SilentlyContinue))
+            Write-Host $detail
+            if ($process.ExitCode -ne 0) {
+              $escaped = $detail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Host "::error title=Test failure::$tag exited $($process.ExitCode). $escaped"
+              exit 1
+            }
+          }
+          Invoke-Test '.\build_x64\RelWithDebInfo\onair-twin-qt-tests.exe'
+          Invoke-Test '.\build_x64\RelWithDebInfo\onair-twin-ui-tests.exe'
+      - name: Assemble installable package
+        shell: pwsh
+        run: |
+          $install = "$env:RUNNER_TEMP\install"
+          cmake --install build_x64 --config RelWithDebInfo --prefix $install
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $package = "$install\obs-onair-twin"
+          if (!(Test-Path "$package\bin\64bit\obs-onair-twin.dll")) { throw 'Plugin DLL missing.' }
+          if (!(Test-Path "$package\data\locale\en-US.ini")) { throw 'Locale data missing.' }
+          Copy-Item windows\Install.ps1, windows\Install.bat, windows\Uninstall.ps1, windows\Uninstall.bat, README.md, LICENSE $package
+          $sha = '${{ github.event.pull_request.head.sha || github.sha }}'
+          "Source corresponding to this build: https://github.com/${{ github.repository }}/tree/$sha/onair-twin`nGPL-2.0-or-later; see LICENSE." |
+            Set-Content -Encoding UTF8 "$package\SOURCE-CODE.txt"
+          $hash = (Get-FileHash "$package\bin\64bit\obs-onair-twin.dll" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  obs-onair-twin.dll" | Set-Content -Encoding ASCII "$package\SHA256SUMS.txt"
+          "### OnAirTwin DLL`nSHA-256: ``$hash```nBuilt for OBS 33.0.1 headers. This build is unsigned." >> $env:GITHUB_STEP_SUMMARY
+      - name: Restore OBS portable archive
+        id: obs-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/obs-studio-33.0.1.zip
+          key: onair-twin-obs-portable-33.0.1-0d9436451c2d-v1
+      - name: Fetch verified OBS 33.0.1 portable
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          try {
+            & .\tests\fetch-release-asset.ps1 -Repository 'obsproject/obs-studio' -Tag '33.0.1' `
+              -AssetName 'OBS-Studio-33.0.1-Windows-x64.zip' `
+              -ExpectedHash '0d9436451c2d772b33428e3fdae9776f071895c335de17283176306fb72651d3' `
+              -Destination "$env:RUNNER_TEMP\obs-studio-33.0.1.zip"
+          } catch {
+            $message = $_.Exception.Message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=OBS portable download failed::$message"
+            throw
+          }
+      - name: Save verified OBS portable archive
+        if: steps.obs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/obs-studio-33.0.1.zip
+          key: onair-twin-obs-portable-33.0.1-0d9436451c2d-v1
+      - name: Smoke-test packaged DLL in OBS 33.0.1
+        shell: pwsh
+        run: |
+          & .\tests\real-obs-smoke.ps1 -PackagePath "$env:RUNNER_TEMP\install\obs-onair-twin" `
+            -ArchivePath "$env:RUNNER_TEMP\obs-studio-33.0.1.zip"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload Windows plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-onair-twin-windows-x64
+          path: ${{ runner.temp }}/install/obs-onair-twin/
+          if-no-files-found: error
+      - name: Upload UI test screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: onair-twin-ui-test
+          path: ${{ runner.temp }}/onair-twin-dock.png
+          if-no-files-found: error

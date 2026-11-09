@@ -12,6 +12,7 @@
 !/obs-beautifier
 !/hype-clip
 !/auto-scene
+!/onair-twin
 !/photoshop-export-kit
 !/photoshop-face-retouch
 !/screen-forge
@@ -44,6 +45,9 @@
 /obs-beautifier/build_tests
 /hype-clip/build_tests
 /auto-scene/build_tests
+/onair-twin/build_tests
+/onair-twin/build_*
+/onair-twin/.deps
 /release
 
 # ScreenForge build output (the artifact is built in CI)

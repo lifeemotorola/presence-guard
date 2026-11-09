@@ -308,3 +308,17 @@ one step left to you — step 5 above.
   the state machine is separated from the UI.
 * **Linux idle support** behind an opt-in `libXss` flag.
 * Fade-through-transition instead of a hard cut when parking the scene.
+
+## OnAirTwin: rehearsal and configuration-change reports
+
+`onair-twin/` is a separate OBS 33.0.1 Windows **beta** dock by Emmanuel Suah.
+It scans scene/source configuration, compares a saved baseline, and simulates a
+source becoming unavailable without changing OBS. It reports configured backup
+paths and exports an HTML report. It does **not** verify real device output,
+viewer playback or perform failover. The product idea and commercial validation
+notes are in [`onair-twin/README.md`](onair-twin/README.md).
+
+Get the prebuilt DLL via **Actions → OnAirTwin → a successful run → Artifacts →
+`obs-onair-twin-windows-x64`**. Extract it and run `Install.bat` as administrator
+with OBS closed; restart OBS and open **Docks → OnAirTwin**. This is an unsigned
+build. The plugin's model and UI are tested against fake OBS, not a real show.
