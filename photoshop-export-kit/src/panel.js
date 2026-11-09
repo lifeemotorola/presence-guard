@@ -1,6 +1,6 @@
 /*
 Export Kit for Photoshop
-Copyright (C) 2026 Presence Guard contributors
+Copyright (C) 2026 Emmanuel Suah
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -40,8 +40,11 @@ const KEYS = {
 
 const state = {
 	folder: null,
+	folderRequest: null,
 	busy: false,
 	lastDoc: "",
+	wired: false,
+	timer: null,
 };
 
 /* ------------------------------------------------------------------------- */
@@ -263,8 +266,14 @@ function renderResults(results) {
 
 		const detail = document.createElement("span");
 		detail.className = "detail";
-		if (result.ok)
-			detail.textContent = logic.formatBytes(result.bytes) || "";
+		if (result.ok) {
+			const details = [];
+			const size = logic.formatBytes(result.bytes);
+			if (size) details.push(size);
+			if (result.sharpened === false) details.push("sharpen skipped");
+			if (result.cropDecision) details.push(result.cropDecision);
+			detail.textContent = details.join(" · ");
+		}
 
 		row.appendChild(name);
 		row.appendChild(detail);
@@ -277,7 +286,7 @@ async function ensureFolder() {
 		return state.folder;
 
 	const remembered = await kit.rememberedFolder();
-	if (remembered) {
+	if (remembered && !state.folder) {
 		state.folder = remembered;
 		setFolderLine(remembered.nativePath || remembered.name || "Folder");
 		return state.folder;
@@ -287,15 +296,21 @@ async function ensureFolder() {
 }
 
 async function pickFolder() {
-	try {
-		const folder = await kit.chooseFolder();
-		if (!folder)
-			return;
-		state.folder = folder;
-		setFolderLine(folder.nativePath || folder.name || "Folder");
-	} catch (error) {
-		setStatus(String((error && error.message) || error));
-	}
+	if (state.folderRequest)
+		return state.folderRequest;
+	const request = (async () => {
+		try {
+			const folder = await kit.chooseFolder();
+			if (!folder)
+				return;
+			state.folder = folder;
+			setFolderLine(folder.nativePath || folder.name || "Folder");
+		} catch (error) {
+			setStatus(String((error && error.message) || error));
+		}
+	})();
+	state.folderRequest = request;
+	try { return await request; } finally { state.folderRequest = null; }
 }
 
 async function exportEverything() {
@@ -319,32 +334,36 @@ async function exportEverything() {
 	const settings = readSettings();
 	const jobs = logic.planExport(info.width, info.height, selection, settings);
 
-	await ensureFolder();
-	if (!state.folder) {
-		await pickFolder();
-		if (!state.folder) {
-			setStatus("Choose where the files should go first.");
-			return;
-		}
-	}
-
+	/* Lock before awaiting a folder chooser, not only once export begins. */
 	state.busy = true;
 	setDisabled(el("export"), true);
 	setDisabled(el("choose-folder"), true);
 	setStatus("Starting…");
 
 	try {
-		const results = await kit.exportJobs(jobs, {
+		if (state.folderRequest)
+			await state.folderRequest;
+		await ensureFolder();
+		if (!state.folder) {
+			await pickFolder();
+			if (!state.folder) {
+				setStatus("Choose where the files should go first.");
+				return;
+			}
+		}
+		const outcome = await kit.exportJobs(jobs, {
 			folder: state.folder,
 			settings,
 			baseName: info.name,
+			documentId: info.id,
 			onProgress: (progress) => {
 				setStatus(`Exporting ${progress.index + 1} of ${progress.total} · ${progress.label}`);
 			},
 		});
 
-		renderResults(results);
-		setStatus(logic.summarise(results).text);
+		renderResults(outcome.results);
+		const summary = logic.summarise(outcome.results).text;
+		setStatus(outcome.cancelled ? `Cancelled · ${summary} completed; check the destination for partial files.` : summary);
 	} catch (error) {
 		setStatus(String((error && error.message) || error));
 	} finally {
@@ -359,6 +378,9 @@ async function exportEverything() {
 /* ------------------------------------------------------------------------- */
 
 function wire() {
+	if (state.wired)
+		return;
+	state.wired = true;
 	buildSlots();
 	wireOptions();
 
@@ -376,33 +398,58 @@ function wire() {
 			setFolderLine(state.folder.nativePath || state.folder.name || "Folder");
 	});
 
-	/* Photoshop has no event for "the user switched documents", and a stale
-	 * header is how people export the wrong file. */
-	setInterval(() => {
-		if (!state.busy)
-			refreshDocument();
-	}, 1000);
+}
+
+/* Manifest v5 supplies the panel node itself, not { rootNode }. Avoid moving
+ * the root into itself if the host has already mounted it. */
+function mount(rootNode) {
+	const root = el("root");
+	if (!root || !rootNode || typeof rootNode.appendChild !== "function")
+		return;
+	for (let parent = rootNode; parent; parent = parent.parentNode) {
+		if (parent === root)
+			return;
+	}
+	if (root.parentNode !== rootNode)
+		rootNode.appendChild(root);
+}
+
+function start(rootNode) {
+	mount(rootNode);
+	wire();
+	refreshDocument();
+	/* Refresh only while visible; repeated show calls must not leak timers. */
+	if (!state.timer) {
+		state.timer = setInterval(() => {
+			if (!state.busy)
+				refreshDocument();
+		}, 1000);
+	}
+}
+
+function stop() {
+	if (state.timer) {
+		clearInterval(state.timer);
+		state.timer = null;
+	}
 }
 
 entrypoints.setup({
 	panels: {
 		exportKitPanel: {
-			create({ rootNode }) {
-				const root = document.getElementById("root");
-				if (root && rootNode && rootNode.appendChild)
-					rootNode.appendChild(root);
+			create(rootNode) {
+				mount(rootNode);
 				wire();
 			},
-			show() {
-				refreshDocument();
-			},
-			hide() {},
-			destroy() {},
+			show(rootNode) { start(rootNode); },
+			hide() { stop(); },
+			destroy() { stop(); },
 		},
 	},
 	commands: {
 		exportKitAll() {
-			exportEverything();
+			wire();
+			return exportEverything();
 		},
 	},
 });

@@ -52,6 +52,7 @@ const state = {
 	busy: false,
 	timer: null,
 	wired: false,
+	removeConfirm: null,
 };
 
 /* ------------------------------------------------------------------------- */
@@ -254,6 +255,8 @@ function safeInfo() {
 
 function refresh() {
 	const info = safeInfo();
+	if (state.removeConfirm && (!info || info.id !== state.removeConfirm.docId || Date.now() > state.removeConfirm.until))
+		cancelRemove();
 
 	if (!info) {
 		el("doc-line").textContent = "Open a photo to start";
@@ -310,7 +313,7 @@ function renderReport(result) {
 
 		const note = document.createElement("div");
 		note.className = "report-note";
-		note.textContent = step.ok ? step.note : "failed";
+		note.textContent = step.ok ? step.note : (step.message || "failed");
 
 		row.appendChild(dot);
 		row.appendChild(name);
@@ -326,6 +329,7 @@ function renderReport(result) {
 async function applyRetouch() {
 	if (state.busy)
 		return;
+	cancelRemove();
 
 	setBusy(true);
 	setStatus("Building the layers…", "");
@@ -344,17 +348,17 @@ async function applyRetouch() {
 		const built = result.steps.filter((step) => step.ok).length;
 		const failed = result.steps.length - built;
 
-		if (built === 0) {
+		if (result.cancelled) {
+			setStatus(`Cancelled after ${built} layer${built === 1 ? "" : "s"}. Inspect or undo any unfinished layers.`, "bad");
+		} else if (built === 0) {
 			setStatus("Nothing was built. " + (result.steps[0] ? result.steps[0].message : ""), "bad");
 		} else if (failed === 0) {
-			setStatus(
-				result.grouped
-					? `${built} layers in one group. Toggle the group off to compare.`
-					: `${built} layers above your photo.`,
-				"good",
-			);
+			const summary = result.grouped
+				? `${built} layers in one group. Toggle the group off to compare.`
+				: `${built} layers built.`;
+			setStatus(result.warning ? `${summary} ${result.warning}` : summary, result.warning ? "bad" : "good");
 		} else {
-			setStatus(`${built} layers built, ${failed} refused — see the list.`, "bad");
+			setStatus(`${built} layers built, ${failed} refused — see the list.${result.warning ? " " + result.warning : ""}`, "bad");
 		}
 	} catch (error) {
 		setStatus(error && error.message ? error.message : String(error), "bad");
@@ -366,6 +370,7 @@ async function applyRetouch() {
 async function compare() {
 	if (state.busy)
 		return;
+	cancelRemove();
 
 	setBusy(true);
 
@@ -383,20 +388,45 @@ async function compare() {
 	}
 }
 
+function cancelRemove() {
+	if (state.removeConfirm) {
+		state.removeConfirm = null;
+		el("remove").textContent = "Remove";
+	}
+}
+
 async function removeRetouch() {
 	if (state.busy)
 		return;
 
+	const info = safeInfo();
+	if (!info || !info.hasRetouch) {
+		cancelRemove();
+		setStatus("No matching layers were found.", "");
+		return;
+	}
+	const confirmation = state.removeConfirm;
+	if (!confirmation || confirmation.docId !== info.id || Date.now() > confirmation.until) {
+		state.removeConfirm = { docId: info.id, until: Date.now() + 15000 };
+		el("remove").textContent = "Confirm remove";
+		setStatus("Confirm to delete all layers named Face Retouch or FR · …, including any you made. Check the Layers panel first.", "bad");
+		return;
+	}
+	cancelRemove();
 	setBusy(true);
 	el("report").textContent = "";
 
 	try {
-		const removed = await kit.removeAll();
+		const result = await kit.removeAll(info.id);
 
-		if (removed === 0)
-			setStatus("There was nothing of mine to remove.", "");
+		if (result.cancelled)
+			setStatus(`Removal cancelled after ${result.removed} item${result.removed === 1 ? "" : "s"}. Check the Layers panel.`, "bad");
+		else if (result.failed)
+			setStatus(`Removed ${result.removed} item${result.removed === 1 ? "" : "s"}; ${result.failed} could not be removed. Check the Layers panel.`, "bad");
+		else if (result.removed === 0)
+			setStatus("No matching layers were found.", "");
 		else
-			setStatus(`Removed ${removed} layer${removed === 1 ? "" : "s"}.`, "good");
+			setStatus(`Removed ${result.removed} item${result.removed === 1 ? "" : "s"}.`, "good");
 	} catch (error) {
 		setStatus(error && error.message ? error.message : String(error), "bad");
 	} finally {
@@ -466,15 +496,29 @@ function stop() {
 	}
 }
 
+/* The manifest-v5 lifecycle passes the panel root node directly. */
+function mount(rootNode) {
+	const root = el("root");
+	if (!root || !rootNode || typeof rootNode.appendChild !== "function")
+		return;
+	for (let parent = rootNode; parent; parent = parent.parentNode) {
+		if (parent === root)
+			return;
+	}
+	if (root.parentNode !== rootNode)
+		rootNode.appendChild(root);
+}
+
 entrypoints.setup({
 	panels: {
 		faceRetouchPanel: {
-			show() {
+			create(rootNode) { mount(rootNode); },
+			show(rootNode) {
+				mount(rootNode);
 				start();
 			},
-			hide() {
-				stop();
-			},
+			hide() { stop(); },
+			destroy() { stop(); },
 		},
 	},
 	commands: {

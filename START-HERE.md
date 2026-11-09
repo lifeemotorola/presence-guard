@@ -211,34 +211,34 @@ Details in [`auto-scene/README.md`](auto-scene/README.md).
 `photoshop-export-kit/` is the odd one out here, on purpose: a **Photoshop UXP
 plugin**, not an OBS one. One document in, ten ready-to-publish files out —
 YouTube thumbnail, Shorts/TikTok cover, Instagram post, X post, banners, Twitch
-panels — each cropped the way that size needs, with a smart crop that finds the
-busy part of the picture instead of cutting a face in half, and an honest note
-before export when the source is too small to fill a slot.
+panels — cropped or padded as needed. Optional smart crop looks for busy regions,
+not faces, and may still cut off a subject. The panel warns about enlargement.
 
 | | Export Kit (`photoshop-export-kit/`) |
 |---|---|
 | Host | Photoshop **23.3+** (UXP, not the C++ SDK) |
-| Load it | the free **UXP Developer Tool**, once |
+| Load it | enable Photoshop Developer Mode; add the extracted `manifest.json` in the free **UXP Developer Tool**, then Load |
 | Get it | **Actions → Export Kit** → artifact `photoshop-export-kit-plugin` |
-| Tests | `npm test` — 28 checks, no Photoshop needed |
+| Tests | `npm test` — logic and simulated UXP checks, not a real Photoshop test |
 
 Details in [`photoshop-export-kit/README.md`](photoshop-export-kit/README.md).
 
 ## The portrait retoucher: Face Retouch
 
 `photoshop-face-retouch/` is the second Photoshop UXP plugin here. One press
-builds six named adjustment layers above the photo — skin evened in **Colour** so
-the pores survive, shadows lifted, warmth put back, texture restored on top — all
-inside one group you can toggle off to compare and delete to undo. Nothing is
-flattened and the background layer is never touched.
+builds up to six named photo-copy and colour-fill layers above the selected layer.
+The plugin attempts to put them in a group; check the report if grouping fails.
+Compare and Remove match names, not ownership, and can affect your own similarly
+named layers. Remove asks for confirmation. No face detection or automatic mask
+is included; add a mask manually in Photoshop for local retouching.
 
 | | Face Retouch (`photoshop-face-retouch/`) |
 |---|---|
 | Host | Photoshop **2023 (24.0)+** (UXP, not the C++ SDK) |
-| Load it | the free **UXP Developer Tool** → Add Plugin → `manifest.json` → Load |
+| Load it | enable Photoshop Developer Mode; add the extracted `manifest.json` in the free **UXP Developer Tool**, then Load |
 | Get it | **Actions → Face Retouch** → artifact `photoshop-face-retouch-plugin` |
 | Presets | Natural, Soft, Glamour, Editorial, Studio — plus Strength and Texture |
-| Tests | `npm test` — 31 checks, no Photoshop needed |
+| Tests | `npm test` — logic and simulated UXP checks, not a real Photoshop test |
 
 What it does not do, on purpose: it does not find the face and it does not reshape
 it. UXP has no landmark detection, and a guessed jaw warp on somebody's portrait is

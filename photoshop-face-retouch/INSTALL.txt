@@ -1,0 +1,31 @@
+FACE RETOUCH 1.0.1 — INSTALL / UPDATE
+By Emmanuel Suah
+
+Requires Photoshop 2023 (24.0) or later and Adobe's free UXP Developer Tool.
+This is a development plugin folder, not a .ccx installer. No compiler or Node
+is needed to use it. Automated tests simulate UXP; this version has not been
+verified in a live Photoshop installation.
+
+1. Download the photoshop-face-retouch-plugin artifact from a successful Face
+   Retouch GitHub Actions run. Right-click the ZIP and choose Extract All.
+   Put the extracted folder somewhere local, such as Documents. Keep index.js,
+   index.html, styles.css, src and icons together with manifest.json.
+2. In Photoshop, enable Developer Mode under Edit > Preferences > Plug-ins
+   (on a Mac: Photoshop > Preferences > Plug-ins), then restart Photoshop.
+3. Install/open UXP Developer Tool from Creative Cloud Desktop. Start Photoshop
+   first, then the Developer Tool. Confirm the intended Photoshop is connected.
+4. If the old Face Retouch entry is present, unload and remove that entry in the
+   Developer Tool. Do not accidentally keep using the old folder.
+5. Click Add Plugin and choose manifest.json from the NEW extracted folder.
+   Click Load. In Photoshop, open Plugins > Face Retouch.
+6. Open a copy of a photo for your first test. Select a photo layer, then press
+   Retouch the face. Check the report and Layers panel before saving.
+
+If it still will not load, click Details next to the error in UXP Developer Tool
+and share the exact message or a screenshot, along with the Photoshop version.
+If the tool reports a timeout, try the extracted folder in local Documents.
+You may need to press Load again after restarting Photoshop.
+
+IMPORTANT: Compare and Remove find layers by name, not by proof of ownership.
+Remove can delete ANY group named "Face Retouch" and ANY layer named "FR · ...",
+including yours. Inspect the Layers panel and confirm before deleting.

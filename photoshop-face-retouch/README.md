@@ -1,10 +1,9 @@
 # Face Retouch — a portrait panel for Photoshop
 
 Portrait retouching that leaves the photograph intact. One press builds a stack of
-adjustment layers above your picture — skin evened, shadows lifted, warmth put back,
-texture restored — and then leaves every one of them adjustable, maskable, and
-removable. Nothing is flattened, nothing is painted over, and the background layer
-is never touched.
+copies of the selected layer and a colour-fill layer — skin tone adjusted, shadows
+lifted, warmth added, texture restored — leaving the new layers editable and
+removable. The selected source layer is not flattened or painted over.
 
 ![The panel and the layer stack it builds](docs/ui.png)
 
@@ -22,22 +21,32 @@ loads in Photoshop through the free UXP Developer Tool and appears under
 | UXP Developer Tool | free, from the Creative Cloud desktop app |
 | Anything else | nothing. No Node, no Python, no compiler |
 
-The panel is tested against Photoshop 2023's scripting API and uses no feature
-newer than manifest version 5, which 2023 supports.
+Version 1.0.1 targets the Photoshop 2023/2024 APIs and manifest version 5.
+Automated tests simulate startup and Photoshop operations; **they do not run
+inside Photoshop**. Real-host verification is still needed.
 
 ---
 
-## Install
+## Install / update
 
-1. Open the **UXP Developer Tool**.
-2. **Add Plugin** → choose `photoshop-face-retouch/manifest.json`.
-3. Press **Load**. The panel appears in Photoshop under
-   **Plugins → Face Retouch**.
-4. To keep it after restarting Photoshop, use **… → Load on start** in the
-   Developer Tool.
+1. From **Actions → Face Retouch → a successful run → Artifacts**, download
+   `photoshop-face-retouch-plugin`. Extract the ZIP to a local folder (such as
+   Documents). `manifest.json`, `index.js`, `src/` and `icons/` must stay together.
+2. In Photoshop enable **Edit → Preferences → Plug-ins → Enable Developer Mode**
+   (Mac: **Photoshop → Preferences → Plug-ins**), then restart Photoshop.
+3. Install/open **UXP Developer Tool** from Creative Cloud Desktop. Start
+   Photoshop first and confirm the tool is connected to the intended version.
+4. If an older Face Retouch entry exists, **Unload** and remove it from the
+   Developer Tool; otherwise it may keep pointing to the old files.
+5. Click **Add Plugin**, select the **new extracted** `manifest.json`, then click
+   **Load**. Open **Plugins → Face Retouch** in Photoshop. You may need to load
+   it again after restarting Photoshop.
 
-If Photoshop is older than 24.0 the Developer Tool refuses the plugin and says so;
-that is the version gate in `manifest.json`, not a broken file.
+This is a development plugin folder, **not a double-click installer or a `.ccx`**.
+You can also add `photoshop-face-retouch/manifest.json` from a current repository
+checkout. If loading fails, click **Details** in the Developer Tool and share the
+exact error or a screenshot. If loading times out, try moving the extracted folder
+to local Documents. See the included `INSTALL.txt` for the same steps.
 
 ---
 
@@ -54,10 +63,12 @@ Open a photo, pick a look, press **Retouch the face**. You get six layers:
 | `FR · Lift` | Lighten | A blurred copy, pulled back to a low opacity — opens the shadow under the eyes and beside the nose |
 | `FR · Smooth` | Color | A blurred copy in **Colour**, the layer this whole thing is built around |
 
-They are collected into one group called **Face Retouch**. Toggle the group off to
-compare; toggle it back on. **Compare** in the panel does the same thing; **Remove**
-deletes everything the plugin made — or just press Ctrl+Z, because all of it is
-normal Photoshop history.
+The plugin attempts to collect them into a group called **Face Retouch**; if
+Photoshop refuses, check their placement and order in the Layers panel. Toggle a
+group off and back on to compare. **Compare** toggles matching layers; **Remove**
+asks for confirmation before deleting matching names. These controls use layer names rather than ownership:
+inspect the Layers panel first, because your own matching layers can be affected.
+Photoshop's History/Undo can also undo the changes, potentially in multiple steps.
 
 ### Why the smoothing is in *Colour*
 
@@ -121,16 +132,17 @@ The numbers the tests pin down, for **Natural, strength 60, on an 1800 px photo*
 
 ## Retouching one area only
 
-Make a selection first — the eyes, the cheek, the jaw — and the **blur and the high
-pass** are confined to it, because Photoshop filters respect the active selection. The
-new layers arrive with that selection as their mask, so you can feather or paint it in
-afterwards. That turns the panel into a local dodge-and-burn tool:
+The plugin does **not** detect faces or automatically create a mask from a
+selection. The effects use the selected layer and may affect the whole image;
+an active selection can affect filters and fill layers differently.
 
-1. Lasso the shadows under the eyes, feather it (Shift+F6, 20 px).
-2. Turn **Glow**, **Depth** and **Warmth** off, leave **Lift** on.
-3. Press Retouch. You get one lift layer, masked to the area you picked.
+For a predictable local effect, deselect first, run the retouch, then select the
+new **Face Retouch** group. Make a selection of the area in Photoshop and add a
+layer mask to the group. If Photoshop could not group the new layers, group them
+manually before adding the mask. Adjust or feather the mask as needed.
 
-The panel tells you when a selection is active in the line under the title.
+The selection indicator is a convenience and may be unavailable in Photoshop
+2023, whose selection API differs from later versions.
 
 ---
 
@@ -158,51 +170,41 @@ masking.
 
 ## Testing
 
-```
+```bash
 cd photoshop-face-retouch
 npm test
 ```
 
-31 tests, no Photoshop and no network. They cover the arithmetic that decides the
-radii and opacities, the presets, the document-size scaling, the clamps on absurd
-input, the plan's layer order, the fill descriptors — including the fact that the
-green channel of a solid colour is called `grain` — and that every descriptor that
-reaches `batchPlay` is plain JSON. The other half checks the things Photoshop checks
-before it will load a plugin: the manifest, the entry points the panel registers, the
-icon sizes straight out of the PNG headers, and that every file the page references
-is in the folder.
+The Node tests cover retouch plans, descriptors, manifest resources, simulated
+UXP HTML startup and panel lifecycle, and fake Photoshop 24/25-style operations
+(including read-only `activeLayers`, cancellation and failed layers). The Actions
+workflow also runs the startup simulation against the assembled artifact.
+**None of these are a real Photoshop load, visual, or image-quality test.**
 
-The split exists so that the parts worth testing do not need Photoshop:
-
-| File | Runs where | What is in it |
-|---|---|---|
-| `src/core.js` | node | presets, scaling, radii, opacities, the plan |
-| `src/descriptors.js` | node | blur, high pass, colour fill, group |
-| `src/retouch.js` | Photoshop | `executeAsModal`, DOM, `batchPlay`, the report |
-| `src/panel.js` | Photoshop | the DOM and the buttons |
-| `tests/core.test.js` | node | 15 checks: presets, scaling, radii, the plan |
-| `tests/descriptors.test.js` | node | 8 checks: the payloads that reach `batchPlay` |
-| `tests/manifest.test.js` | node | 8 checks: the manifest, icons, files, permissions, the element ids the panel looks up |
+| File | Purpose |
+|---|---|
+| `index.js` | plugin-root bootstrap for the panel module |
+| `src/core.js` / `src/descriptors.js` | presets, calculations and action descriptors |
+| `src/retouch.js` | modal Photoshop adapter and layer management |
+| `src/panel.js` | panel UI and controls |
+| `tests/startup.test.js` | simulated UXP entry and lifecycle |
+| `tests/host-adapter.test.js` | fake Photoshop behavior and safety cases |
 
 ---
 
 ## When something refuses
 
-Every layer is built independently and every failure is caught, recorded and shown in
-the panel with a red dot — "6 layers built, 1 refused". The retouch continues. The
-usual causes:
+Each attempted step reports success or the Photoshop error. An incomplete layer
+is deleted when possible; if Photoshop refuses, the panel warns that it was left
+hidden or at zero opacity and should be removed manually. A layer that cannot
+be grouped is reported instead of being silently treated as grouped. Check the
+Layers panel and use History/Undo as needed, especially after cancellation.
 
-- **The base layer is a smart object** and the filter cannot be applied to it
-  directly — Photoshop offers a smart filter instead, which the DOM accepts on 24.x
-  but not on every build. The copy is still made and blended.
-- **A layer is locked** or part of a linked set, so the copy cannot be moved into the
-  group. It stays above the photo, correctly ordered, and **Remove** still finds it
-  by name.
-- **The document has no layers** other than a previous retouch. The panel says so
-  instead of guessing.
-
-Everything the plugin makes is named `FR · …`, which is how **Compare** and
-**Remove** find it again after you have renamed nothing and moved everything.
+**Compare and Remove match names, not ownership.** They can affect any group
+named `Face Retouch` or any layer starting with `FR · `, including layers you
+created yourself; deleting a matching group also deletes all its contents. The
+panel requires a second confirmation for Remove. Rename your own matching
+layers or groups before using these controls.
 
 ---
 

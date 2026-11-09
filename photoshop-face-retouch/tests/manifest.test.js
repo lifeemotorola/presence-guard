@@ -1,6 +1,6 @@
 /*
-Face Retouch for Photoshop — checks the things Photoshop checks, but in a place
-where the answer is a line number instead of "the plugin could not be loaded".
+Face Retouch for Photoshop — static manifest/resource checks only.
+A passing result does not prove Photoshop will load the plugin.
 */
 
 "use strict";
@@ -26,7 +26,7 @@ function pngSize(file) {
 	return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
 }
 
-test("the manifest is a loadable manifest version 5", () => {
+test("the manifest declares version 5 and the expected main file", () => {
 	assert.equal(manifest.manifestVersion, 5);
 	assert.match(manifest.id, /^com\.presenceguard\.[a-z]+$/, "the id is namespaced and lower case");
 	assert.equal(manifest.name, "Face Retouch");
@@ -41,7 +41,7 @@ test("it declares Photoshop 2023 or newer, and nothing older", () => {
 
 	assert.ok(photoshop, "Photoshop is the host");
 	assert.equal(photoshop.minVersion, "24.0.0", "24.0 is Photoshop 2023, the version the panel is written against");
-	assert.equal(photoshop.maxVersion, undefined, "no upper limit — newer versions keep working");
+	assert.equal(photoshop.maxVersion, undefined, "no configured upper limit");
 });
 
 test("the entry points the panel registers are the ones the manifest declares", () => {
@@ -83,7 +83,7 @@ test("the icons are the sizes the manifest claims", () => {
 });
 
 test("every file the panel loads is in the folder", () => {
-	for (const file of ["index.html", "styles.css", "src/panel.js", "src/core.js", "src/descriptors.js", "src/retouch.js", "README.md"]) {
+	for (const file of ["index.html", "index.js", "INSTALL.txt", "styles.css", "src/panel.js", "src/core.js", "src/descriptors.js", "src/retouch.js", "README.md"]) {
 		assert.ok(exists(file), `missing: ${file}`);
 	}
 
@@ -110,7 +110,8 @@ test("every element the panel looks up is in the page", () => {
 		assert.ok(ids.has(id), `index.html has no #${id}`);
 });
 
-test("the plugin never asks for a permission it does not use", () => {
+test("the plugin only requests its sandbox filesystem", () => {
+	assert.equal(manifest.requiredPermissions.localFileSystem, "plugin");
 	for (const permission of Object.keys(manifest.requiredPermissions || {}))
 		assert.equal(permission, "localFileSystem", `${permission} has no business here`);
 
