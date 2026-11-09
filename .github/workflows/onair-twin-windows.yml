@@ -63,7 +63,12 @@ jobs:
           # Qt 6.11.1 platform plugin from the pinned PySide6 wheel, while the
           # actual Qt runtime remains the OBS SDK used to build this plugin.
           $testQt = Join-Path $env:RUNNER_TEMP 'twin-qt-platform'
-          python -m pip install --disable-pip-version-check --no-deps --target $testQt 'PySide6-Essentials==6.11.1'
+          New-Item -ItemType Directory -Path $testQt -Force | Out-Null
+          python -m pip download --disable-pip-version-check --no-deps --only-binary=:all: --dest $testQt 'PySide6-Essentials==6.11.1'
+          if ($LASTEXITCODE -ne 0) { Write-Host '::error::Could not download the Qt offscreen test plugin.'; exit $LASTEXITCODE }
+          $wheel = Get-ChildItem $testQt -Filter '*.whl' | Select-Object -First 1
+          if (!$wheel) { Write-Host '::error::PySide6 test wheel missing.'; exit 1 }
+          python -c "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); p=next(n for n in z.namelist() if n.endswith('/platforms/qoffscreen.dll')); z.extract(p,sys.argv[2])" $wheel.FullName $testQt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $offscreen = Get-ChildItem $testQt -Recurse -Filter qoffscreen.dll | Select-Object -First 1
           if (!$offscreen) { Write-Host '::error::The pinned Qt offscreen plugin is missing.'; exit 1 }
@@ -73,13 +78,23 @@ jobs:
           $env:QT_QPA_PLATFORM_PLUGIN_PATH = Split-Path $offscreen.FullName
           $env:ONAIRTWIN_UI_SCREENSHOT = Join-Path $env:RUNNER_TEMP 'onair-twin-dock.png'
           function Invoke-Test([string] $exe) {
-            $output = & $exe 2>&1
-            $code = $LASTEXITCODE
-            $output | ForEach-Object { Write-Host $_ }
-            if ($code -ne 0) {
-              $detail = ($output | Out-String).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
-              Write-Host "::error title=Test failure::$exe exited $code. $detail"
-              exit $code
+            $tag = [IO.Path]::GetFileNameWithoutExtension($exe)
+            $outFile = Join-Path $env:RUNNER_TEMP "$tag.out.txt"
+            $errFile = Join-Path $env:RUNNER_TEMP "$tag.err.txt"
+            $process = Start-Process -FilePath (Resolve-Path $exe).Path -NoNewWindow -PassThru -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+            if (!$process.WaitForExit(60000)) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+              $detail = ((Get-Content $outFile -Raw -ErrorAction SilentlyContinue) + "`n" + (Get-Content $errFile -Raw -ErrorAction SilentlyContinue))
+              $escaped = $detail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Host "::error title=Test timeout::$tag timed out after 60 seconds. $escaped"
+              exit 1
+            }
+            $detail = ((Get-Content $outFile -Raw -ErrorAction SilentlyContinue) + "`n" + (Get-Content $errFile -Raw -ErrorAction SilentlyContinue))
+            Write-Host $detail
+            if ($process.ExitCode -ne 0) {
+              $escaped = $detail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Host "::error title=Test failure::$tag exited $($process.ExitCode). $escaped"
+              exit 1
             }
           }
           Invoke-Test '.\build_x64\RelWithDebInfo\onair-twin-qt-tests.exe'
@@ -100,6 +115,13 @@ jobs:
           $hash = (Get-FileHash "$package\bin\64bit\obs-onair-twin.dll" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  obs-onair-twin.dll" | Set-Content -Encoding ASCII "$package\SHA256SUMS.txt"
           "### OnAirTwin DLL`nSHA-256: ``$hash```nBuilt for OBS 33.0.1 headers. This build is unsigned." >> $env:GITHUB_STEP_SUMMARY
+      - name: Smoke-test packaged DLL in OBS 33.0.1
+        shell: pwsh
+        run: |
+          $offscreen = Get-ChildItem "$env:RUNNER_TEMP\twin-qt-platform" -Recurse -Filter qoffscreen.dll | Select-Object -First 1
+          if (!$offscreen) { throw 'Qt offscreen plugin not found.' }
+          & .\tests\real-obs-smoke.ps1 -PackagePath "$env:RUNNER_TEMP\install\obs-onair-twin" -PlatformPluginPath (Split-Path $offscreen.FullName)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload Windows plugin
         uses: actions/upload-artifact@v4
         with:

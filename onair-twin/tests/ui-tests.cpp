@@ -12,10 +12,12 @@ Licensed under GPL-2.0-or-later; this program comes WITHOUT ANY WARRANTY.
 #include <QFileInfo>
 #include <QFontMetrics>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QTemporaryDir>
 #include <QTextBrowser>
+#include <QTimer>
 #include <cstdio>
 #include <string>
 
@@ -45,6 +47,18 @@ static QPushButton *findButton(TwinDock &dock, const QString &text)
 int main(int argc, char **argv)
 {
 	QApplication app(argc, argv);
+	QString unexpectedDialog;
+	QTimer dialogGuard;
+	QObject::connect(&dialogGuard, &QTimer::timeout, [&unexpectedDialog]() {
+		for (QWidget *widget : QApplication::topLevelWidgets()) {
+			auto *box = qobject_cast<QMessageBox *>(widget);
+			if (box && box->isVisible()) {
+				unexpectedDialog += box->windowTitle() + ": " + box->text();
+				box->done(QDialog::Rejected);
+			}
+		}
+	});
+	dialogGuard.start(250);
 	QTemporaryDir config;
 	check(config.isValid(), "temporary plugin config folder created");
 	fakeSetConfigRoot(config.path().toUtf8().toStdString());
@@ -112,6 +126,9 @@ int main(int argc, char **argv)
 		app.processEvents();
 		check(dock.grab().save(QString::fromUtf8(screenshotPath)), "UI screenshot captured");
 	}
+	if (!unexpectedDialog.isEmpty())
+		std::printf("Unexpected dialog: %s\n", unexpectedDialog.toUtf8().constData());
+	check(unexpectedDialog.isEmpty(), "no unexpected error or confirmation dialogs occurred");
 	std::printf("\n%d UI checks, %d failures\n", checks, failures);
 	return failures ? 1 : 0;
 }
