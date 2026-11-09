@@ -47,7 +47,13 @@ jobs:
         with:
           path: onair-twin/.deps/windows-deps-qt6-*-x64.zip
           key: onair-twin-qt6-windows-${{ hashFiles('onair-twin/buildspec.json') }}-v1
-      - name: Fetch OBS Qt SDK via GitHub API
+      - name: Restore verified OBS dependencies archive
+        id: deps-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: onair-twin/.deps/windows-deps-20*-x64.zip
+          key: onair-twin-deps-windows-${{ hashFiles('onair-twin/buildspec.json') }}-v1
+      - name: Fetch OBS build dependencies via GitHub API
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -55,14 +61,18 @@ jobs:
           # The API resolves to the same official asset even when the public
           # release-download endpoint returns HTTP 5xx. The helper verifies SHA-256.
           $spec = Get-Content buildspec.json -Raw | ConvertFrom-Json
-          $tag = $spec.dependencies.qt6.version
-          $name = "windows-deps-qt6-$tag-x64.zip"
           try {
+            $tag = $spec.dependencies.prebuilt.version
+            $name = "windows-deps-$tag-x64.zip"
+            & .\tests\fetch-release-asset.ps1 -Repository 'obsproject/obs-deps' -Tag $tag -AssetName $name `
+              -ExpectedHash $spec.dependencies.prebuilt.hashes.'windows-x64' -Destination (Join-Path (Get-Location) ".deps\$name")
+            $tag = $spec.dependencies.qt6.version
+            $name = "windows-deps-qt6-$tag-x64.zip"
             & .\tests\fetch-release-asset.ps1 -Repository 'obsproject/obs-deps' -Tag $tag -AssetName $name `
               -ExpectedHash $spec.dependencies.qt6.hashes.'windows-x64' -Destination (Join-Path (Get-Location) ".deps\$name")
           } catch {
             $message = $_.Exception.Message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
-            Write-Host "::error title=OBS Qt asset download failed::$message"
+            Write-Host "::error title=OBS dependency download failed::$message"
             throw
           }
       - name: Save verified OBS Qt SDK archive
@@ -71,6 +81,12 @@ jobs:
         with:
           path: onair-twin/.deps/windows-deps-qt6-*-x64.zip
           key: onair-twin-qt6-windows-${{ hashFiles('onair-twin/buildspec.json') }}-v1
+      - name: Save verified OBS dependencies archive
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: onair-twin/.deps/windows-deps-20*-x64.zip
+          key: onair-twin-deps-windows-${{ hashFiles('onair-twin/buildspec.json') }}-v1
       - name: Configure
         shell: pwsh
         run: |
