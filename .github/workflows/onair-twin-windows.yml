@@ -87,6 +87,50 @@ jobs:
         with:
           path: onair-twin/.deps/windows-deps-20*-x64.zip
           key: onair-twin-deps-windows-${{ hashFiles('onair-twin/buildspec.json') }}-v1
+      - name: Prepare verified OBS source and nested dependencies
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          try {
+            # OBS's own x64 build also configures its small x86 helper targets.
+            # Pre-stage their official archive in OBS's nested .deps directory.
+            $spec = Get-Content buildspec.json -Raw | ConvertFrom-Json
+            $version = $spec.dependencies.'obs-studio'.version
+            $expected = $spec.dependencies.'obs-studio'.hashes.'windows-x64'
+            $deps = Join-Path (Get-Location) '.deps'
+            $sourceZip = Join-Path $deps "$version.zip"
+            if (!(Test-Path $sourceZip) -or (Get-FileHash $sourceZip -Algorithm SHA256).Hash -ne $expected) {
+              Invoke-WebRequest -Uri "https://codeload.github.com/obsproject/obs-studio/zip/refs/tags/$version" -OutFile "$sourceZip.part"
+              if ((Get-FileHash "$sourceZip.part" -Algorithm SHA256).Hash -ne $expected) { throw 'OBS source archive checksum mismatch.' }
+              Move-Item "$sourceZip.part" $sourceZip -Force
+            }
+            & tar.exe -xf $sourceZip -C $deps
+            if ($LASTEXITCODE -ne 0) { throw "OBS source extraction failed: $LASTEXITCODE" }
+            $sourceDir = Join-Path $deps "obs-studio-$version"
+            $sourcePresets = Get-Content (Join-Path $sourceDir 'CMakePresets.json') -Raw | ConvertFrom-Json
+            $dependencyPreset = $sourcePresets.configurePresets | Where-Object { $_.name -eq 'dependencies' } | Select-Object -First 1
+            if (!$dependencyPreset) { throw 'OBS source dependency preset not found.' }
+            $innerSpec = $dependencyPreset.vendor.'obsproject.com/obs-studio'.dependencies
+            $innerDeps = Join-Path $sourceDir '.deps'
+            New-Item -ItemType Directory -Path $innerDeps -Force | Out-Null
+            $x86Tag = $innerSpec.prebuilt.version
+            $x86Name = "windows-deps-$x86Tag-x86.zip"
+            & .\tests\fetch-release-asset.ps1 -Repository 'obsproject/obs-deps' -Tag $x86Tag -AssetName $x86Name `
+              -ExpectedHash $innerSpec.prebuilt.hashes.'windows-x86' -Destination (Join-Path $innerDeps $x86Name)
+            foreach ($pattern in @('windows-deps-20*-x64.zip', 'windows-deps-qt6-*-x64.zip')) {
+              Get-ChildItem $deps -Filter $pattern | Copy-Item -Destination $innerDeps -Force
+            }
+            # CMake removes an unmarked source directory. This marker is safe
+            # only after the source ZIP was verified and extracted above.
+            Set-Content (Join-Path $deps '.dependency_obs-studio_x64.sha256') -Value $expected -NoNewline -Encoding ascii
+          } catch {
+            $message = $_.Exception.Message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=OBS source preparation failed::$message"
+            throw
+          }
       - name: Configure
         shell: pwsh
         run: |
