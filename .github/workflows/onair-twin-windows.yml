@@ -41,6 +41,36 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+      - name: Restore verified OBS Qt SDK archive
+        id: qt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: onair-twin/.deps/windows-deps-qt6-*-x64.zip
+          key: onair-twin-qt6-windows-${{ hashFiles('onair-twin/buildspec.json') }}-v1
+      - name: Fetch OBS Qt SDK via GitHub API
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The API resolves to the same official asset even when the public
+          # release-download endpoint returns HTTP 5xx. The helper verifies SHA-256.
+          $spec = Get-Content buildspec.json -Raw | ConvertFrom-Json
+          $tag = $spec.dependencies.qt6.version
+          $name = "windows-deps-qt6-$tag-x64.zip"
+          try {
+            & .\tests\fetch-release-asset.ps1 -Repository 'obsproject/obs-deps' -Tag $tag -AssetName $name `
+              -ExpectedHash $spec.dependencies.qt6.hashes.'windows-x64' -Destination (Join-Path (Get-Location) ".deps\$name")
+          } catch {
+            $message = $_.Exception.Message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=OBS Qt asset download failed::$message"
+            throw
+          }
+      - name: Save verified OBS Qt SDK archive
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: onair-twin/.deps/windows-deps-qt6-*-x64.zip
+          key: onair-twin-qt6-windows-${{ hashFiles('onair-twin/buildspec.json') }}-v1
       - name: Configure
         shell: pwsh
         run: |
@@ -56,7 +86,18 @@ jobs:
             # download/hash transport failures, never compiler/config errors.
             if ($attempt -lt 3 -and $detail -match 'file DOWNLOAD|Unable to download|HTTP response') {
               Write-Host "::warning::Dependency download failed (attempt $attempt); retrying."
-              Remove-Item .deps\*.zip -Force -ErrorAction SilentlyContinue
+              $spec = Get-Content buildspec.json -Raw | ConvertFrom-Json
+              $archives = @{
+                "windows-deps-$($spec.dependencies.prebuilt.version)-x64.zip" = $spec.dependencies.prebuilt.hashes.'windows-x64'
+                "windows-deps-qt6-$($spec.dependencies.qt6.version)-x64.zip" = $spec.dependencies.qt6.hashes.'windows-x64'
+                "$($spec.dependencies.'obs-studio'.version).zip" = $spec.dependencies.'obs-studio'.hashes.'windows-x64'
+              }
+              foreach ($entry in $archives.GetEnumerator()) {
+                $path = Join-Path '.deps' $entry.Key
+                if ((Test-Path $path) -and ((Get-FileHash $path -Algorithm SHA256).Hash -ne $entry.Value)) {
+                  Remove-Item $path -Force
+                }
+              }
               Start-Sleep -Seconds 10
               continue
             }
@@ -128,10 +169,38 @@ jobs:
           $hash = (Get-FileHash "$package\bin\64bit\obs-onair-twin.dll" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  obs-onair-twin.dll" | Set-Content -Encoding ASCII "$package\SHA256SUMS.txt"
           "### OnAirTwin DLL`nSHA-256: ``$hash```nBuilt for OBS 33.0.1 headers. This build is unsigned." >> $env:GITHUB_STEP_SUMMARY
+      - name: Restore OBS portable archive
+        id: obs-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/obs-studio-33.0.1.zip
+          key: onair-twin-obs-portable-33.0.1-0d9436451c2d-v1
+      - name: Fetch verified OBS 33.0.1 portable
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          try {
+            & .\tests\fetch-release-asset.ps1 -Repository 'obsproject/obs-studio' -Tag '33.0.1' `
+              -AssetName 'OBS-Studio-33.0.1-Windows-x64.zip' `
+              -ExpectedHash '0d9436451c2d772b33428e3fdae9776f071895c335de17283176306fb72651d3' `
+              -Destination "$env:RUNNER_TEMP\obs-studio-33.0.1.zip"
+          } catch {
+            $message = $_.Exception.Message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=OBS portable download failed::$message"
+            throw
+          }
+      - name: Save verified OBS portable archive
+        if: steps.obs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/obs-studio-33.0.1.zip
+          key: onair-twin-obs-portable-33.0.1-0d9436451c2d-v1
       - name: Smoke-test packaged DLL in OBS 33.0.1
         shell: pwsh
         run: |
-          & .\tests\real-obs-smoke.ps1 -PackagePath "$env:RUNNER_TEMP\install\obs-onair-twin"
+          & .\tests\real-obs-smoke.ps1 -PackagePath "$env:RUNNER_TEMP\install\obs-onair-twin" `
+            -ArchivePath "$env:RUNNER_TEMP\obs-studio-33.0.1.zip"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload Windows plugin
         uses: actions/upload-artifact@v4

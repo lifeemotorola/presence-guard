@@ -2,20 +2,19 @@
 # Smoke-test the packaged DLL's actual load in a disposable OBS Studio 33.0.1
 # portable installation. No streaming or recording is started.
 param(
-    [Parameter(Mandatory=$true)] [string] $PackagePath
+    [Parameter(Mandatory=$true)] [string] $PackagePath,
+    [Parameter(Mandatory=$true)] [string] $ArchivePath
 )
 $ErrorActionPreference = 'Stop'
 $work = Join-Path $env:RUNNER_TEMP 'onair-twin-real-obs'
-$archive = Join-Path $env:RUNNER_TEMP 'obs-studio-33.0.1.zip'
 $expectedHash = '0d9436451c2d772b33428e3fdae9776f071895c335de17283176306fb72651d3'
 $obs = $null
 $logDir = $null
 try {
-    Invoke-WebRequest -Uri 'https://github.com/obsproject/obs-studio/releases/download/33.0.1/OBS-Studio-33.0.1-Windows-x64.zip' -OutFile $archive
-    $actual = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    $actual = (Get-FileHash $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $expectedHash) { throw "OBS download checksum mismatch: $actual" }
     New-Item -ItemType Directory -Path $work -Force | Out-Null
-    & tar.exe -xf $archive -C $work
+    & tar.exe -xf $ArchivePath -C $work
     if ($LASTEXITCODE -ne 0) { throw "Cannot extract OBS archive: $LASTEXITCODE" }
     $exe = Get-ChildItem $work -Recurse -Filter obs64.exe | Select-Object -First 1
     if (!$exe) { throw 'obs64.exe not found in the OBS archive.' }
