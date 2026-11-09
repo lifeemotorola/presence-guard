@@ -109,8 +109,8 @@ advice before committing to a business model.
 
 `./tests/run-tests.sh` runs the pure C++ model and the real snapshot adapter
 against fake OBS. The Windows workflow also builds Qt JSON/report tests and
-runs the actual dock against fake OBS using the OBS SDK’s Windows Qt platform. These tests do
-not replace a real OBS/device/output test. Build with `cmake --preset windows-x64`
+runs the actual dock against fake OBS using the OBS SDK's Windows Qt platform.
+These tests do not replace a real OBS/device/output test. Build with `cmake --preset windows-x64`
 and `cmake --build --preset windows-x64 --config RelWithDebInfo` after installing
 Visual Studio 2022 and CMake 3.28+. Distributed under GPL-2.0-or-later; see
 `LICENSE` and `SOURCE-CODE.txt` in the build artifact.

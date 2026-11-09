@@ -44,8 +44,26 @@ jobs:
       - name: Configure
         shell: pwsh
         run: |
-          cmake --preset windows-x64 -DBUILD_TWIN_TESTS=ON
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $log = Join-Path $env:RUNNER_TEMP 'onair-twin-configure.log'
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            cmake --preset windows-x64 -DBUILD_TWIN_TESTS=ON 2>&1 | Tee-Object -FilePath $log
+            $code = $LASTEXITCODE
+            if ($code -eq 0) { break }
+            $detail = Get-Content $log -Raw
+            # A failed CMake download can leave a partial archive. Retry only
+            # download/hash transport failures, never compiler/config errors.
+            if ($attempt -lt 3 -and $detail -match 'file DOWNLOAD|Unable to download|HTTP response') {
+              Write-Host "::warning::Dependency download failed (attempt $attempt); retrying."
+              Remove-Item .deps\*.zip -Force -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds 10
+              continue
+            }
+            $tail = ((Get-Content $log -Tail 45) -join "`n").Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Configure failed::$tail"
+            exit $code
+          }
       - name: Build
         shell: pwsh
         run: |
