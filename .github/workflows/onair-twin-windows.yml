@@ -1,0 +1,96 @@
+name: OnAirTwin
+run-name: OnAirTwin · ${{ github.ref_name }}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'onair-twin/**'
+      - '.github/workflows/onair-twin-windows.yml'
+  pull_request:
+    paths:
+      - 'onair-twin/**'
+      - '.github/workflows/onair-twin-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.ref }}'
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: onair-twin
+
+jobs:
+  model-tests:
+    name: Rehearsal and snapshot tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run model and fake-OBS adapter tests
+        run: ./tests/run-tests.sh
+
+  windows-build:
+    name: Windows x64 / OBS 33.0.1
+    needs: model-tests
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake --preset windows-x64 -DBUILD_TWIN_TESTS=ON
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build --preset windows-x64 --config RelWithDebInfo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test report, baseline and dock
+        shell: pwsh
+        run: |
+          # Run the real Qt widget with fake OBS data, on the offscreen platform.
+          $qtCore = Get-ChildItem .deps -Recurse -Filter Qt6Core.dll | Select-Object -First 1
+          $offscreen = Get-ChildItem .deps -Recurse -Filter qoffscreen.dll | Select-Object -First 1
+          if (!$qtCore -or !$offscreen) { throw 'Qt runtime or offscreen platform plugin missing.' }
+          $env:PATH = "$(Split-Path $qtCore.FullName);$env:PATH"
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $env:QT_QPA_PLATFORM_PLUGIN_PATH = Split-Path $offscreen.FullName
+          $env:ONAIRTWIN_UI_SCREENSHOT = Join-Path $env:RUNNER_TEMP 'onair-twin-dock.png'
+          & .\build_x64\RelWithDebInfo\onair-twin-qt-tests.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\build_x64\RelWithDebInfo\onair-twin-ui-tests.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Assemble installable package
+        shell: pwsh
+        run: |
+          $install = "$env:RUNNER_TEMP\install"
+          cmake --install build_x64 --config RelWithDebInfo --prefix $install
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $package = "$install\obs-onair-twin"
+          if (!(Test-Path "$package\bin\64bit\obs-onair-twin.dll")) { throw 'Plugin DLL missing.' }
+          if (!(Test-Path "$package\data\locale\en-US.ini")) { throw 'Locale data missing.' }
+          Copy-Item windows\Install.ps1, windows\Install.bat, windows\Uninstall.ps1, windows\Uninstall.bat, README.md, LICENSE $package
+          $sha = '${{ github.event.pull_request.head.sha || github.sha }}'
+          "Source corresponding to this build: https://github.com/${{ github.repository }}/tree/$sha/onair-twin`nGPL-2.0-or-later; see LICENSE." |
+            Set-Content -Encoding UTF8 "$package\SOURCE-CODE.txt"
+          $hash = (Get-FileHash "$package\bin\64bit\obs-onair-twin.dll" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  obs-onair-twin.dll" | Set-Content -Encoding ASCII "$package\SHA256SUMS.txt"
+          "### OnAirTwin DLL`nSHA-256: ``$hash```nBuilt for OBS 33.0.1 headers. This build is unsigned." >> $env:GITHUB_STEP_SUMMARY
+      - name: Upload Windows plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-onair-twin-windows-x64
+          path: ${{ runner.temp }}/install/obs-onair-twin/
+          if-no-files-found: error
+      - name: Upload UI test screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: onair-twin-ui-test
+          path: ${{ runner.temp }}/onair-twin-dock.png
+          if-no-files-found: error
