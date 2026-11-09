@@ -34,6 +34,7 @@ static void check(bool value, const char *description)
 		std::printf("FAIL  %s\n", description);
 	} else
 		std::printf("PASS  %s\n", description);
+	std::fflush(stdout);
 }
 
 static QPushButton *findButton(TwinDock &dock, const QString &text)
@@ -46,7 +47,11 @@ static QPushButton *findButton(TwinDock &dock, const QString &text)
 
 int main(int argc, char **argv)
 {
+	std::printf("Starting QApplication\n");
+	std::fflush(stdout);
 	QApplication app(argc, argv);
+	std::printf("QApplication started\n");
+	std::fflush(stdout);
 	QString unexpectedDialog;
 	QTimer dialogGuard;
 	QObject::connect(&dialogGuard, &QTimer::timeout, [&unexpectedDialog]() {
