@@ -62,10 +62,18 @@ jobs:
           $env:QT_QPA_PLATFORM = 'offscreen'
           $env:QT_QPA_PLATFORM_PLUGIN_PATH = Split-Path $offscreen.FullName
           $env:ONAIRTWIN_UI_SCREENSHOT = Join-Path $env:RUNNER_TEMP 'onair-twin-dock.png'
-          & .\build_x64\RelWithDebInfo\onair-twin-qt-tests.exe
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & .\build_x64\RelWithDebInfo\onair-twin-ui-tests.exe
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          function Invoke-Test([string] $exe) {
+            $output = & $exe 2>&1
+            $code = $LASTEXITCODE
+            $output | ForEach-Object { Write-Host $_ }
+            if ($code -ne 0) {
+              $detail = ($output | Out-String).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Host "::error title=Test failure::$exe exited $code. $detail"
+              exit $code
+            }
+          }
+          Invoke-Test '.\build_x64\RelWithDebInfo\onair-twin-qt-tests.exe'
+          Invoke-Test '.\build_x64\RelWithDebInfo\onair-twin-ui-tests.exe'
       - name: Assemble installable package
         shell: pwsh
         run: |

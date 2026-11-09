@@ -28,6 +28,11 @@ establishes consistency with that artifact, not publisher identity or safety.
 To uninstall, close OBS and run `Uninstall.bat` as administrator. Your locally
 saved baseline remains under OBS's `plugin_config\obs-onair-twin` folder.
 
+For a **portable OBS 33** installation, its plugin loader uses that portable
+copy's `plugins` folder instead of ProgramData. Close OBS and run the extracted
+`Install.ps1` with `-PluginRoot` pointing to the `plugins` folder in the portable
+OBS root (the folder containing `bin`).
+
 For OBS 32 or older, the optional PowerShell `-LegacyLayout` switch uses the
 old `bin\64bit` layout, but **compatibility with older OBS versions is not
 verified**. This beta is intended for OBS 33.0.1.

@@ -83,7 +83,7 @@ void TwinDock::buildUi()
 	setObjectName("onairTwinRoot");
 	setStyleSheet(R"(
 		QWidget#onairTwinRoot { background: #0a101d; }
-		QWidget#onairTwinRoot QWidget { color: #e5eefb; font-family: 'Segoe UI'; font-size: 13px; }
+		QWidget { color: #e5eefb; font-family: 'Segoe UI'; font-size: 13px; }
 		QScrollArea { border: none; background: transparent; }
 		QWidget#scrollBody { background: #0a101d; }
 		QFrame#twinHero { background: #12283a; border: 1px solid #29495b; border-radius: 12px; }
