@@ -55,9 +55,17 @@ jobs:
         shell: pwsh
         run: |
           # Run the real Qt widget with fake OBS data, on the offscreen platform.
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
           $qtCore = Get-ChildItem .deps -Recurse -Filter Qt6Core.dll | Select-Object -First 1
           $offscreen = Get-ChildItem .deps -Recurse -Filter qoffscreen.dll | Select-Object -First 1
-          if (!$qtCore -or !$offscreen) { throw 'Qt runtime or offscreen platform plugin missing.' }
+          if (!$qtCore) { Write-Host '::error::Qt6Core.dll missing in .deps'; exit 1 }
+          if (!$offscreen) {
+            $platforms = (Get-ChildItem .deps -Recurse -Filter 'q*.dll' | Select-Object -First 25 -ExpandProperty FullName) -join ', '
+            Write-Host "::error::qoffscreen.dll missing. Available Qt-like DLLs: $platforms"
+            exit 1
+          }
+          Write-Host "::notice::Qt runtime: $($qtCore.FullName); offscreen: $($offscreen.FullName)"
           $env:PATH = "$(Split-Path $qtCore.FullName);$env:PATH"
           $env:QT_QPA_PLATFORM = 'offscreen'
           $env:QT_QPA_PLATFORM_PLUGIN_PATH = Split-Path $offscreen.FullName
