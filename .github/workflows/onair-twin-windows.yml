@@ -58,13 +58,15 @@ jobs:
           $ErrorActionPreference = 'Continue'
           $PSNativeCommandUseErrorActionPreference = $false
           $qtCore = Get-ChildItem .deps -Recurse -Filter Qt6Core.dll | Select-Object -First 1
-          $offscreen = Get-ChildItem .deps -Recurse -Filter qoffscreen.dll | Select-Object -First 1
           if (!$qtCore) { Write-Host '::error::Qt6Core.dll missing in .deps'; exit 1 }
-          if (!$offscreen) {
-            $platforms = (Get-ChildItem .deps -Recurse -Filter 'q*.dll' | Select-Object -First 25 -ExpandProperty FullName) -join ', '
-            Write-Host "::error::qoffscreen.dll missing. Available Qt-like DLLs: $platforms"
-            exit 1
-          }
+          # OBS's Windows Qt SDK does not bundle qoffscreen. Use the matching
+          # Qt 6.11.1 platform plugin from the pinned PySide6 wheel, while the
+          # actual Qt runtime remains the OBS SDK used to build this plugin.
+          $testQt = Join-Path $env:RUNNER_TEMP 'twin-qt-platform'
+          python -m pip install --disable-pip-version-check --no-deps --target $testQt 'PySide6-Essentials==6.11.1'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $offscreen = Get-ChildItem $testQt -Recurse -Filter qoffscreen.dll | Select-Object -First 1
+          if (!$offscreen) { Write-Host '::error::The pinned Qt offscreen plugin is missing.'; exit 1 }
           Write-Host "::notice::Qt runtime: $($qtCore.FullName); offscreen: $($offscreen.FullName)"
           $env:PATH = "$(Split-Path $qtCore.FullName);$env:PATH"
           $env:QT_QPA_PLATFORM = 'offscreen'
