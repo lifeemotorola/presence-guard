@@ -322,3 +322,20 @@ Get the prebuilt DLL via **Actions → OnAirTwin → a successful run → Artifa
 `obs-onair-twin-windows-x64`**. Extract it and run `Install.bat` as administrator
 with OBS closed; restart OBS and open **Docks → OnAirTwin**. This is an unsigned
 build. The plugin's model and UI are tested against fake OBS, not a real show.
+
+## The Windows typing tutor: KeyBloom
+
+`keybloom/` is an original, offline typing tutor with 21 lessons, timed tests,
+a word game, an on-screen US QWERTY keyboard and locally saved progress. It is
+not Mavis Beacon and is not affiliated with it.
+
+| | KeyBloom (`keybloom/`) |
+|---|---|
+| Computer | Windows 10/11, 64-bit |
+| Download | **Actions → KeyBloom** → `keybloom-windows-x64` |
+| Use it | Extract the ZIP and run `KeyBloom.exe` from the extracted folder; keep the other files beside it |
+| Privacy | No account or network needed after download; progress is saved locally |
+
+See [`keybloom/README.md`](keybloom/README.md) for instructions, scoring, data
+storage, and limitations. The executable is unsigned; a checksum identifies a
+build but is not a digital signature.

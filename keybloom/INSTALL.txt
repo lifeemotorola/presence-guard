@@ -1,0 +1,36 @@
+KEYBLOOM 1.0 — WINDOWS QUICK START
+By Emmanuel Suah
+
+REQUIREMENTS: 64-bit Windows 10 or Windows 11, a physical keyboard, and enough
+space for the extracted app. No compiler, Node.js, account, or subscription is
+needed. The app works offline after download.
+
+1. Download keybloom-windows-x64 from the KeyBloom GitHub Actions run.
+2. Right-click the downloaded ZIP and choose Extract All. Choose a folder you
+   can keep, such as Documents\KeyBloom. Do not run it from inside the ZIP.
+3. Open the extracted folder and double-click KeyBloom.exe.
+   KEEP ALL THE OTHER FILES AND FOLDERS BESIDE THE EXE: the executable is not a
+   single-file app. To move it, move the whole extracted folder.
+4. Choose "Start your first lesson". Type into the box, following the text and
+   the highlighted key. The timer begins with your first keystroke. Correct
+   errors with Backspace; corrected errors still count in accuracy.
+5. Open Lessons for the full course, Practice for a timed test or Word Sprint,
+   and My progress for your history. Use Settings to change the daily goal,
+   show or hide the keyboard, or reset your locally saved progress.
+
+WINDOWS SECURITY
+This build is not digitally signed. Windows may show a publisher/reputation
+warning. Only run a download you trust; compare its SHA-256 with SHA256SUMS.txt
+and the checksum published on the matching Actions run. A matching checksum
+identifies the file; it does not prove the app is safe. Do not turn off Windows
+security globally.
+
+PRIVACY AND LIMITS
+- Progress summaries and settings are saved in your Windows user profile under
+  %APPDATA%\KeyBloom. The words you type are not saved. Resetting or deleting
+  this data permanently removes the history; reinstalling can also lose it if
+  you remove the profile. There is no account or cloud backup.
+- The course and visual keyboard use an English (US) QWERTY layout. Other
+  physical layouts may not match the on-screen key hints.
+- KeyBloom is an original, independent typing tutor; it is not Mavis Beacon
+  and is not affiliated with its publisher. It does not reproduce every feature.
