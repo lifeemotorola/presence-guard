@@ -16,6 +16,7 @@
 !/photoshop-export-kit
 !/photoshop-face-retouch
 !/screen-forge
+!/keybloom
 !/src
 !/tests
 !.clang-format
@@ -60,3 +61,9 @@
 
 # Python cache from the printable-guide tests
 /docs/__pycache__/
+
+# KeyBloom dependencies and packaged output are built in CI
+/keybloom/node_modules/
+/keybloom/out/
+/keybloom/artifacts/
+/keybloom/test-results/

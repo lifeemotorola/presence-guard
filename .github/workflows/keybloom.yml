@@ -1,0 +1,120 @@
+name: KeyBloom
+
+run-name: KeyBloom · ${{ github.ref_name }} 🌱
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'keybloom/**'
+      - '.github/workflows/keybloom.yml'
+  pull_request:
+    paths:
+      - 'keybloom/**'
+      - '.github/workflows/keybloom.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 'keybloom-${{ github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  logic:
+    name: Course and scoring tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run tests
+        working-directory: keybloom
+        run: npm test
+
+  windows:
+    name: Windows app and end-to-end test
+    runs-on: windows-latest
+    needs: logic
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: keybloom
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: keybloom/package-lock.json
+      - name: Install pinned build tools
+        run: npm ci --no-audit --no-fund
+      - name: Build the portable Windows app
+        run: npm run package:win
+      - name: Include instructions and licensing
+        shell: pwsh
+        run: |
+          $folder = 'out/KeyBloom-win32-x64'
+          Copy-Item INSTALL.txt "$folder/INSTALL.txt"
+          Copy-Item README.md "$folder/README.txt"
+          Copy-Item ../LICENSE "$folder/KEYBLOOM-LICENSE.txt"
+          foreach ($item in @('KeyBloom.exe', 'resources/app.asar', 'LICENSE', 'LICENSES.chromium.html', 'INSTALL.txt', 'KEYBLOOM-LICENSE.txt')) {
+            if (-not (Test-Path (Join-Path $folder $item))) { throw "Missing package file: $item" }
+          }
+          (Get-Item "$folder/KeyBloom.exe").VersionInfo | Format-List CompanyName,ProductName,FileDescription,FileVersion
+      - name: Exercise the packaged app on Windows
+        shell: pwsh
+        env:
+          KEYBLOOM_SCREENSHOT: ${{ runner.temp }}\keybloom-ui.png
+        run: npm run test:desktop
+      - name: Publish executable and app checksums
+        id: hashes
+        shell: pwsh
+        run: |
+          $folder = 'out/KeyBloom-win32-x64'
+          $exeHash = (Get-FileHash -Algorithm SHA256 "$folder/KeyBloom.exe").Hash.ToLowerInvariant()
+          $appHash = (Get-FileHash -Algorithm SHA256 "$folder/resources/app.asar").Hash.ToLowerInvariant()
+          @("$exeHash  KeyBloom.exe", "$appHash  resources/app.asar") | Set-Content "$folder/SHA256SUMS.txt" -Encoding ascii
+          "exe=$exeHash" >> $env:GITHUB_OUTPUT
+          "app=$appHash" >> $env:GITHUB_OUTPUT
+          $signature = (Get-AuthenticodeSignature "$folder/KeyBloom.exe").Status
+          Add-Content $env:GITHUB_STEP_SUMMARY '### KeyBloom Windows x64 checksums'
+          Add-Content $env:GITHUB_STEP_SUMMARY "- KeyBloom.exe: ``$exeHash``"
+          Add-Content $env:GITHUB_STEP_SUMMARY "- resources/app.asar: ``$appHash``"
+          Add-Content $env:GITHUB_STEP_SUMMARY "- Authenticode status: $signature. The app is unsigned."
+          Add-Content $env:GITHUB_STEP_SUMMARY 'Hashes identify these files from this run; they do not prove safety or code signing.'
+      - name: Upload Windows app
+        uses: actions/upload-artifact@v4
+        with:
+          name: keybloom-windows-x64
+          path: keybloom/out/KeyBloom-win32-x64/
+          if-no-files-found: error
+          compression-level: 6
+      - name: Upload UI screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: keybloom-windows-ui
+          path: ${{ runner.temp }}\keybloom-ui.png
+          if-no-files-found: error
+      - name: Download the uploaded app for integrity verification
+        uses: actions/download-artifact@v4
+        with:
+          name: keybloom-windows-x64
+          path: ${{ runner.temp }}\keybloom-integrity
+      - name: Verify the downloaded files
+        shell: pwsh
+        env:
+          EXPECTED_EXE: ${{ steps.hashes.outputs.exe }}
+          EXPECTED_APP: ${{ steps.hashes.outputs.app }}
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'keybloom-integrity'
+          $exe = (Get-FileHash -Algorithm SHA256 (Join-Path $folder 'KeyBloom.exe')).Hash.ToLowerInvariant()
+          $app = (Get-FileHash -Algorithm SHA256 (Join-Path $folder 'resources/app.asar')).Hash.ToLowerInvariant()
+          $lines = @(Get-Content (Join-Path $folder 'SHA256SUMS.txt'))
+          if ($exe -ne $env:EXPECTED_EXE -or $app -ne $env:EXPECTED_APP -or
+              $lines[0] -ne "$exe  KeyBloom.exe" -or $lines[1] -ne "$app  resources/app.asar") {
+            throw 'Downloaded artifact does not match the staged application.'
+          }
