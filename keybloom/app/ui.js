@@ -12,7 +12,7 @@
   const esc = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const ui = {
     profile: E.defaultProfile(), screen: 'home', run: null, runInfo: null, timer: null,
-    storageWarning: '', testSeconds: 60, dialogAction: null, dialogCancel: null, result: null, toastTimer: null,
+    storageWarning: '', testSeconds: 60, customDraft: '', dialogAction: null, dialogCancel: null, result: null, toastTimer: null,
   };
 
   function loadProfile() {
@@ -115,13 +115,35 @@
   }
 
   function renderPractice() {
-    return `${pageIntro('PRACTICE YOUR WAY', 'Find your flow.', 'A little challenge is a lovely way to see how far you have come. The timer starts when you type.')}
+    const weak = E.weakKeys(ui.profile);
+    const selected = weak.length ? weak[0].key : 'f';
+    const options = [...E.LETTERS].map((letter) => `<option value="${letter}" ${letter === selected ? 'selected' : ''}>${letter.toUpperCase()}</option>`).join('');
+    const lengths = [[30, '30 seconds'], [60, '1 minute'], [180, '3 minutes'], [300, '5 minutes']];
+    return `${pageIntro('PRACTICE YOUR WAY', 'Find your flow.', 'Choose a friendly challenge, work on a tricky key, or practice with your own words.')}
       <div class="practice-grid"><section class="card challenge-card"><div class="challenge-icon">${icon('clock')}</div><h2>Typing test</h2><p>Find a steady rhythm with a timed collection of short, original passages. Focus on accuracy and let your speed follow.</p>
-      <label class="select-label" for="test-duration">CHOOSE A TIME <select id="test-duration"><option value="60" ${ui.testSeconds === 60 ? 'selected' : ''}>1 minute</option><option value="180" ${ui.testSeconds === 180 ? 'selected' : ''}>3 minutes</option></select></label>
+      <label class="select-label" for="test-duration">CHOOSE A TIME <select id="test-duration">${lengths.map(([seconds, label]) => `<option value="${seconds}" ${ui.testSeconds === seconds ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></label>
       <button class="btn btn-dark" data-action="start-test">Start a typing test ${icon('arrow')}</button></section>
       <section class="card challenge-card"><div class="challenge-icon peach">${icon('spark')}</div><h2>Word sprint</h2><p>How many words can you type correctly in 45 seconds? A light-hearted game to build rhythm, one word at a time.</p>
-      <div class="mini-note">${icon('clock')} 45 seconds · no punctuation</div><button class="btn btn-dark" data-action="start-sprint">Play word sprint ${icon('arrow')}</button></section></div>
+      <div class="mini-note">${icon('clock')} 45 seconds · no punctuation</div><button class="btn btn-dark" data-action="start-sprint">Play word sprint ${icon('arrow')}</button></section>
+      <section class="card challenge-card"><div class="challenge-icon lavender">${icon('target')}</div><h2>Focus on a key</h2><p>Give a letter a little extra care with a short drill full of words that use it.</p>
+      <label class="select-label" for="focus-key">CHOOSE A LETTER <select id="focus-key">${options}</select></label>
+      <div class="mini-note focus-suggestion">${icon('leaf')} ${weak.length ? `Suggested from recent mistakes: ${esc(selected.toUpperCase())}` : 'Choose any letter you want to practice.'}</div><button class="btn btn-dark" data-action="start-focus">Practice this key ${icon('arrow')}</button></section>
+      <section class="card challenge-card"><div class="challenge-icon sky">${icon('book')}</div><h2>Practice your own text</h2><p>Paste or write a short passage and turn it into a personal, untimed typing exercise.</p>
+      <div class="mini-note">${icon('shield')} Your passage is never saved.</div><button class="btn btn-dark" data-action="open-custom">Add your text ${icon('arrow')}</button></section></div>
       <div class="tip-strip">${icon('leaf')} Your progress is personal. You can retry any activity as often as you like.</div>`;
+  }
+
+  function renderCustom() {
+    const result = E.prepareCustomText(ui.customDraft);
+    return `<div class="run-top"><button class="back-link" data-action="navigate" data-screen="practice">${icon('back')} Back to practice</button><span class="quiet-pill">Your words, your pace</span></div>
+      ${pageIntro('MAKE IT PERSONAL', 'Practice with your own text.', 'Write or paste a short passage below, then type it out as a new exercise.')}
+      <div class="custom-layout"><section class="card custom-card"><div class="custom-card-heading"><div class="challenge-icon sky">${icon('book')}</div><div><h2>Your passage</h2><p>Choose something you are comfortable typing.</p></div></div>
+        <label class="custom-label" for="custom-text">Paste or type your text</label>
+        <textarea id="custom-text" class="custom-text" maxlength="${E.CUSTOM_MAX}" rows="5" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="custom-help custom-error" placeholder="A few sentences you would like to practice...">${esc(ui.customDraft)}</textarea>
+        <div class="custom-foot"><span id="custom-help">${E.CUSTOM_MIN}–${E.CUSTOM_MAX} printable US keyboard characters. Extra spaces and line breaks become single spaces.</span><strong id="custom-count">${ui.customDraft.length} / ${E.CUSTOM_MAX}</strong></div>
+        <div class="custom-error" id="custom-error" role="status" aria-live="polite">${ui.customDraft ? esc(result.error) : ''}</div>
+        <button class="btn btn-dark" id="start-custom" data-action="start-custom" ${result.error ? 'disabled' : ''}>Start my practice ${icon('arrow')}</button></section>
+        <aside class="privacy-box custom-privacy">${icon('shield')}<h3>Just between us.</h3><p>Your passage stays in memory only while you use it. KeyBloom saves a session summary, but not your passage or its letter counts.</p><p>Paste is allowed here, but not in the practice box.</p></aside></div>`;
   }
 
   function dateLabel(day) {
@@ -143,13 +165,27 @@
     const history = ui.profile.records.slice(-6).reverse();
     const historyMarkup = history.length ? history.map((row) => {
       const lesson = lessonById(row.lessonId);
-      const title = row.kind === 'lesson' ? (lesson ? lesson.title : 'Lesson') : row.kind === 'sprint' ? 'Word sprint' : 'Typing test';
+      const title = row.kind === 'lesson' ? (lesson ? lesson.title : 'Lesson') :
+        row.kind === 'sprint' ? 'Word sprint' : row.kind === 'focus' ? 'Focused key practice' :
+          row.kind === 'custom' ? 'Custom practice' : 'Typing test';
       return `<div class="history-row"><div><div class="history-title">${esc(title)}</div><div class="history-meta">${esc(dateLabel(row.day))} · ${row.accuracy}% accuracy</div></div><span class="history-score">${row.wpm} WPM</span></div>`;
     }).join('') : '<div class="empty-history">Your completed lessons and practice sessions will appear here.</div>';
+    const weak = E.weakKeys(ui.profile).slice(0, 4);
+    const hasKeyData = ui.profile.records.some((row) => Object.keys(row.keyStats || {}).length);
+    const insightMarkup = weak.length ? weak.map((row) => `<button class="focus-insight" data-action="start-focus" data-key="${esc(row.key)}" aria-label="Practice ${esc(row.key.toUpperCase())}, ${row.mistakes} ${row.mistakes === 1 ? 'mistake' : 'mistakes'} in ${row.attempts} attempts">
+      <span class="focus-letter">${esc(row.key.toUpperCase())}</span><span class="focus-copy"><strong>${row.errorRate}% errors</strong><small>${row.mistakes} of ${row.attempts} attempts</small></span><span class="focus-go">Practice ${icon('arrow')}</span></button>`).join('') :
+      `<div class="insight-empty">${hasKeyData ? 'No letter mistakes in your recent analyzed sessions. Keep exploring!' : 'Complete a new lesson, test, sprint, or key drill to build letter insights. Older sessions do not have this detail.'}</div>`;
+    const milestones = E.milestones(ui.profile);
+    const earned = milestones.filter((item) => item.earned).length;
+    const milestoneMarkup = milestones.map((item) => `<article class="card milestone ${item.earned ? 'earned' : ''}">
+      <div class="milestone-top"><div class="milestone-icon">${icon(item.icon)}</div><span class="milestone-status">${item.earned ? `${icon('check')} Reached` : `${item.current} / ${item.target}`}</span></div>
+      <h3>${esc(item.title)}</h3><p>${esc(item.description)}</p></article>`).join('');
     return `${pageIntro('YOUR PERSONAL PROGRESS', 'Look how far you\'ve come.', 'This is your space to notice the small improvements. All progress stays on this device.', `${summary.sessions} session${summary.sessions === 1 ? '' : 's'}`)}
       <div class="stats-grid">${statCard('bolt', '', 'Best speed', summary.bestWpm, 'WPM')}${statCard('target', 'peach', 'Average accuracy', summary.accuracy, '%')}${statCard('clock', 'lavender', 'Time practiced', minutes(summary.totalMs), 'min')}</div>
       <div class="progress-grid"><section class="card chart-card"><h2>Speed over time</h2><p>Your most recent sessions, in words per minute.</p>${chartMarkup(ui.profile.records)}</section>
-      <section class="card history-card"><h2>Recent sessions</h2><p>Your latest steps forward.</p><div class="history-list">${historyMarkup}</div></section></div>`;
+      <section class="card history-card"><h2>Recent sessions</h2><p>Your latest steps forward.</p><div class="history-list">${historyMarkup}</div></section></div>
+      <section class="card insights-card"><div class="insights-intro"><div class="challenge-icon lavender">${icon('target')}</div><div><div class="eyebrow">PRACTICE WITH PURPOSE</div><h2>Keys to give a little care</h2><p>Based on letter mistakes in recent completed built-in exercises. Your custom text is excluded.</p></div></div><div class="focus-list">${insightMarkup}</div></section>
+      <section class="milestones-section"><div class="section-head"><div><div class="eyebrow">LITTLE WINS, BIG GROWTH</div><h2>Your milestones</h2><p>Based on your most recent ${E.MAX_RECORDS} saved sessions.</p></div><span class="quiet-pill">${earned} / ${milestones.length} reached</span></div><div class="milestone-grid">${milestoneMarkup}</div></section>`;
   }
 
   function renderSettings() {
@@ -157,8 +193,9 @@
       <div class="settings-layout"><section class="card settings-card"><h2>Your preferences</h2><p>Make a little room for the way you like to practice.</p>
       <div class="setting-row"><div><strong>Daily practice goal</strong><p>Completed sessions count toward this goal.</p></div><label for="goal-select" class="sr-only">Daily practice goal in minutes</label><select id="goal-select">${E.GOALS.map((goal) => `<option value="${goal}" ${goal === ui.profile.settings.goalMinutes ? 'selected' : ''}>${goal} minutes</option>`).join('')}</select></div>
       <div class="setting-row"><div><strong>On-screen keyboard</strong><p>Show the next key and a finger hint during practice.</p></div><label class="switch"><input type="checkbox" id="keyboard-setting" ${ui.profile.settings.keyboard ? 'checked' : ''}> Show</label></div>
+      <div class="setting-row"><div><strong>Practice text size</strong><p>Make the practice text and typing box easier to read.</p></div><label for="practice-size" class="sr-only">Practice text size</label><select id="practice-size">${[['standard', 'Standard'], ['large', 'Large'], ['extra-large', 'Extra large']].map(([value, label]) => `<option value="${value}" ${ui.profile.settings.practiceSize === value ? 'selected' : ''}>${label}</option>`).join('')}</select></div>
       <div class="setting-row"><div><strong>Reset this device</strong><p>Remove all saved sessions and preferences. This cannot be undone.</p></div></div><button class="btn btn-danger" data-action="reset">Reset progress</button></section>
-      <aside class="privacy-box">${icon('shield')}<h3>Just for you.</h3><p>No account, tracking, or internet connection is needed. KeyBloom stores session summaries on this device, not the text you type.</p><small>KeyBloom · made by Emmanuel Suah</small></aside></div>`;
+      <aside class="privacy-box">${icon('shield')}<h3>Just for you.</h3><p>No account, tracking, or internet connection is needed. KeyBloom stores session summaries and aggregate letter counts from built-in exercises, not the text you type. Your custom passages and their letter counts are not saved.</p><small>KeyBloom · made by Emmanuel Suah</small></aside></div>`;
   }
 
   const rows = [
@@ -196,17 +233,17 @@
   function currentSnapshot() { return ui.run.snapshot(performance.now()); }
   function selectedScreen() {
     if (ui.screen === 'session' || ui.screen === 'result') return ui.runInfo && ui.runInfo.kind === 'lesson' ? 'lessons' : 'practice';
-    return ui.screen;
+    return ui.screen === 'custom' ? 'practice' : ui.screen;
   }
 
   function renderSession() {
     const info = ui.runInfo;
     const snap = currentSnapshot();
     const lesson = info.kind === 'lesson' ? lessonById(info.lessonId) : null;
-    const title = lesson ? lesson.title : info.kind === 'sprint' ? 'Word sprint' : 'Typing test';
-    const group = lesson ? `LESSON ${String(lessonNum(lesson.id)).padStart(2, '0')} · ${lesson.group}` : info.kind === 'sprint' ? 'THE 45-SECOND GAME' : `${info.seconds / 60}-MINUTE PRACTICE`;
-    const description = lesson ? lesson.tip : info.kind === 'sprint' ? 'Type as many words correctly as you can. The timer starts with your first key.' : 'Type at a comfortable pace. The timer starts with your first key.';
-    return `<div class="run-top"><button class="back-link" data-action="navigate" data-screen="${lesson ? 'lessons' : 'practice'}">${icon('back')} Back to ${lesson ? 'lessons' : 'practice'}</button><span class="quiet-pill">${lesson ? `${lessonNum(lesson.id)} of ${C.lessons.length} lessons` : 'Timed practice'}</span></div>
+    const title = lesson ? lesson.title : info.kind === 'sprint' ? 'Word sprint' : info.kind === 'focus' ? `Focus on ${info.focusKey.toUpperCase()}` : info.kind === 'custom' ? 'Your custom practice' : 'Typing test';
+    const group = lesson ? `LESSON ${String(lessonNum(lesson.id)).padStart(2, '0')} · ${lesson.group}` : info.kind === 'sprint' ? 'THE 45-SECOND GAME' : info.kind === 'focus' ? 'FOCUSED KEY DRILL' : info.kind === 'custom' ? 'YOUR OWN WORDS' : info.seconds === 30 ? '30-SECOND PRACTICE' : `${info.seconds / 60}-MINUTE PRACTICE`;
+    const description = lesson ? lesson.tip : info.kind === 'sprint' ? 'Type as many words correctly as you can. The timer starts with your first key.' : info.kind === 'focus' ? 'Take your time. Every word includes your chosen letter.' : info.kind === 'custom' ? 'Your passage is not saved. Take your time and type at a comfortable pace.' : 'Type at a comfortable pace. The timer starts with your first key.';
+    return `<div class="run-top"><button class="back-link" data-action="navigate" data-screen="${lesson ? 'lessons' : 'practice'}">${icon('back')} Back to ${lesson ? 'lessons' : 'practice'}</button><span class="quiet-pill">${lesson ? `${lessonNum(lesson.id)} of ${C.lessons.length} lessons` : snap.remainingMs === null ? 'Untimed practice' : 'Timed practice'}</span></div>
       <div class="run-heading"><div><div class="eyebrow">${esc(group)}</div><h1>${esc(title)}</h1><p>${esc(description)}</p></div><button class="btn btn-subtle" data-action="toggle-keyboard" id="keyboard-toggle">${icon('keyboard')} ${ui.profile.settings.keyboard ? 'Hide keyboard' : 'Show keyboard'}</button></div>
       <div class="run-stats"><div class="run-stat"><div class="eyebrow">SPEED</div><strong><span id="run-wpm">—</span> <small>WPM</small></strong></div>
         <div class="run-stat"><div class="eyebrow">ACCURACY</div><strong><span id="run-accuracy">—</span><small>%</small></strong></div>
@@ -228,7 +265,7 @@
     const next = lesson ? C.lessons[lessonNum(lesson.id)] : null;
     const advice = result.accuracy >= 95 ? 'Beautifully done. You kept a careful, steady rhythm.' : result.accuracy >= 80 ? 'Nice work. A steady pace can help those tricky keys feel easier.' : 'You showed up and practiced. Try slowing down and letting accuracy lead.';
     return `<div class="run-top"><button class="back-link" data-action="navigate" data-screen="${lesson ? 'lessons' : 'practice'}">${icon('back')} Back to ${lesson ? 'lessons' : 'practice'}</button></div><div class="result-wrap"><section class="card result-card">
-      <div class="result-emblem">${icon('spark')}</div><div class="eyebrow">${info.kind === 'sprint' ? 'SPRINT COMPLETE' : lesson ? 'LESSON COMPLETE' : 'TEST COMPLETE'}</div><h1>A little better, already.</h1><p>${esc(advice)}</p>
+      <div class="result-emblem">${icon('spark')}</div><div class="eyebrow">${info.kind === 'sprint' ? 'SPRINT COMPLETE' : lesson ? 'LESSON COMPLETE' : info.kind === 'focus' ? 'FOCUS DRILL COMPLETE' : info.kind === 'custom' ? 'CUSTOM PRACTICE COMPLETE' : 'TEST COMPLETE'}</div><h1>A little better, already.</h1><p>${esc(advice)}</p>
       <div class="result-metrics"><div class="result-metric"><strong>${result.wpm}</strong><span>words per minute</span></div><div class="result-metric"><strong>${result.accuracy}%</strong><span>accuracy</span></div><div class="result-metric"><strong>${info.kind === 'sprint' ? result.words : clock(result.elapsedMs, true)}</strong><span>${info.kind === 'sprint' ? 'correct words' : 'time practiced'}</span></div></div>
       <div class="result-actions"><button class="btn btn-subtle" data-action="retry">${icon('refresh')} Try again</button>${next ? `<button class="btn btn-dark" data-action="lesson" data-id="${esc(next.id)}">Next lesson ${icon('arrow')}</button>` : `<button class="btn btn-dark" data-action="navigate" data-screen="progress">See your progress ${icon('arrow')}</button>`}</div>
       <div class="result-detail">${result.mistakes} mistake${result.mistakes === 1 ? '' : 's'} across ${result.attempts} character attempts; ${result.uncorrected} uncorrected. Corrected mistakes still count in accuracy.</div></section></div>`;
@@ -236,8 +273,9 @@
 
   function render() {
     updateWarning();
+    document.documentElement.dataset.practiceSize = ui.profile.settings.practiceSize;
     const page = { home: renderHome, lessons: renderLessons, practice: renderPractice, progress: renderProgress,
-      settings: renderSettings, session: renderSession, result: renderResult }[ui.screen] || renderHome;
+      settings: renderSettings, custom: renderCustom, session: renderSession, result: renderResult }[ui.screen] || renderHome;
     $('view').innerHTML = page();
     for (const node of document.querySelectorAll('.nav-item')) {
       if (node.dataset.screen === selectedScreen()) node.setAttribute('aria-current', 'page');
@@ -255,12 +293,17 @@
   function stopTimer() { if (ui.timer) { clearInterval(ui.timer); ui.timer = null; } }
 
   function navigate(screen, force = false) {
-    if (!['home', 'lessons', 'practice', 'progress', 'settings'].includes(screen)) return;
+    if (!['home', 'lessons', 'practice', 'progress', 'settings', 'custom'].includes(screen)) return;
+    if (!force && ui.screen === 'custom' && ui.customDraft.trim()) {
+      confirmDialog('Discard your text?', 'Your custom passage is not saved. Leaving will discard it.', 'Discard text', () => navigate(screen, true));
+      return;
+    }
     if (!force && ui.screen === 'session' && ui.run && ui.run.started && !ui.run.finished) {
       confirmDialog('Leave this practice?', 'Your current session is not saved until you finish it.', 'Leave practice', () => navigate(screen, true));
       return;
     }
     stopTimer();
+    if (ui.screen === 'custom' || (ui.runInfo && ui.runInfo.kind === 'custom')) ui.customDraft = '';
     ui.run = null; ui.result = null; ui.runInfo = null;
     ui.screen = screen;
     $('workspace').scrollTop = 0;
@@ -270,12 +313,20 @@
   function startRun(info) {
     const lesson = info.kind === 'lesson' ? lessonById(info.lessonId) : null;
     if (info.kind === 'lesson' && !lesson) return;
+    const custom = info.kind === 'custom' ? E.prepareCustomText(info.customText) : null;
+    if (custom && custom.error) return;
+    const focusedText = info.kind === 'focus' ? C.makeFocusText(info.focusKey) : '';
+    if (info.kind === 'focus' && !focusedText) return;
+    if (info.kind === 'test' && ![30, 60, 180, 300].includes(info.seconds)) return;
+    if (info.kind === 'sprint' && info.seconds !== 45) return;
+    const texts = lesson ? [lesson.text] : info.kind === 'focus' ? [focusedText] :
+      custom ? [custom.text] : info.kind === 'sprint' ? C.sprintPassages : C.passages;
     stopTimer();
-    ui.runInfo = { ...info };
+    ui.runInfo = custom ? { ...info, customText: custom.text } : { ...info };
+    ui.customDraft = '';
     ui.run = new E.TypingRun({
-      kind: info.kind,
-      texts: lesson ? [lesson.text] : info.kind === 'sprint' ? C.sprintPassages : C.passages,
-      durationMs: info.kind === 'lesson' ? null : info.seconds * 1000,
+      kind: info.kind, texts,
+      durationMs: info.kind === 'test' || info.kind === 'sprint' ? info.seconds * 1000 : null,
     });
     ui.result = null;
     ui.screen = 'session';
@@ -370,8 +421,11 @@
     const action = button.dataset.action;
     if (action === 'navigate') navigate(button.dataset.screen);
     else if (action === 'lesson') startRun({ kind: 'lesson', lessonId: button.dataset.id });
-    else if (action === 'start-test') { ui.testSeconds = Number($('test-duration').value) === 180 ? 180 : 60; startRun({ kind: 'test', seconds: ui.testSeconds }); }
+    else if (action === 'start-test') { ui.testSeconds = Number($('test-duration').value); startRun({ kind: 'test', seconds: ui.testSeconds }); }
     else if (action === 'start-sprint') startRun({ kind: 'sprint', seconds: 45 });
+    else if (action === 'open-custom') navigate('custom');
+    else if (action === 'start-custom') startRun({ kind: 'custom', customText: ui.customDraft });
+    else if (action === 'start-focus') startRun({ kind: 'focus', focusKey: button.dataset.key || ($('focus-key') && $('focus-key').value) });
     else if (action === 'retry' && ui.runInfo) startRun(ui.runInfo);
     else if (action === 'toggle-keyboard') {
       ui.profile.settings.keyboard = !ui.profile.settings.keyboard; persist();
@@ -392,6 +446,14 @@
   });
 
   document.addEventListener('input', (event) => {
+    if (event.target.id === 'custom-text' && ui.screen === 'custom') {
+      ui.customDraft = event.target.value;
+      const result = E.prepareCustomText(ui.customDraft);
+      $('custom-count').textContent = `${ui.customDraft.length} / ${E.CUSTOM_MAX}`;
+      $('custom-error').textContent = ui.customDraft ? result.error : '';
+      $('start-custom').disabled = Boolean(result.error);
+      return;
+    }
     if (event.target.id !== 'typing-input' || ui.screen !== 'session' || !ui.run) return;
     const snapshot = ui.run.input(event.target.value, performance.now());
     if (snapshot.finished) finishRun(snapshot);
@@ -403,6 +465,10 @@
       if (E.GOALS.includes(value)) { ui.profile.settings.goalMinutes = value; persist(); toast('Daily goal updated.'); }
     } else if (event.target.id === 'keyboard-setting') {
       ui.profile.settings.keyboard = event.target.checked; persist(); toast('Keyboard preference saved.');
+    } else if (event.target.id === 'practice-size' && E.PRACTICE_SIZES.includes(event.target.value)) {
+      ui.profile.settings.practiceSize = event.target.value;
+      document.documentElement.dataset.practiceSize = event.target.value;
+      persist(); toast('Practice text size saved.');
     }
   });
   for (const name of ['paste', 'drop']) document.addEventListener(name, (event) => {

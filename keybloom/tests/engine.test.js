@@ -194,3 +194,103 @@ test('stats use weighted accuracy and unique completed lessons', () => {
   assert.equal(stats.streak, 1);
   assert.equal(E.recommendedLesson(C.lessons, state).id, 'home-dk');
 });
+
+test('custom passages normalize whitespace and reject empty, oversized, or unsupported text', () => {
+  assert.deepEqual(E.prepareCustomText('  One\n\tbright  day.  '), { text: 'One bright day.', error: '' });
+  assert.match(E.prepareCustomText('short').error, /at least 10/);
+  assert.match(E.prepareCustomText('x'.repeat(501)).error, /no more than 500/);
+  assert.match(E.prepareCustomText('Hello there ☀').error, /printable US keyboard/);
+  assert.match(E.prepareCustomText('Hello\u0000 there').error, /printable US keyboard/);
+  assert.equal(E.prepareCustomText('x'.repeat(500)).error, '');
+});
+
+test('custom runs finish without a timer and never store passage or letter statistics', () => {
+  const text = 'Private words here.';
+  const run = new E.TypingRun({ kind: 'custom', texts: [text] });
+  run.input('X', 0);
+  run.input('', 100);
+  const result = run.input(text, 5000);
+  assert.equal(result.finished, true);
+  assert.equal(result.remainingMs, null);
+  assert.deepEqual(result.keyStats, {});
+  const stored = E.addRecord(E.defaultProfile(), { ...result, keyStats: { p: { attempts: 1, mistakes: 1 } } }, new Date(2026, 0, 2), 'private-words');
+  assert.equal(stored.records[0].kind, 'custom');
+  assert.deepEqual(stored.records[0].keyStats, {});
+  assert.equal(stored.records[0].lessonId, '');
+  assert.ok(!JSON.stringify(stored).includes(text));
+  assert.ok(!JSON.stringify(stored).includes('private-words'));
+});
+
+test('focused drills are valid, untimed, and provide words for every letter', () => {
+  for (const key of E.LETTERS) {
+    const text = C.makeFocusText(key);
+    assert.match(text, /^[a-z ]+$/);
+    assert.ok(text.length >= 20, key);
+    assert.ok(text.split(' ').every((word) => word.includes(key)), `all words should include ${key}`);
+    const run = new E.TypingRun({ kind: 'focus', texts: [text] });
+    assert.equal(run.input(text, 100).finished, true);
+  }
+  assert.equal(C.makeFocusText('<'), '');
+  assert.equal(C.makeFocusText('AA'), '');
+});
+
+test('per-letter counts use the expected key and retain corrected mistakes', () => {
+  const run = new E.TypingRun({ kind: 'lesson', texts: ['Aa b'] });
+  run.input('x', 0); // Expected capital A; the wrong typed character is not stored.
+  run.input('', 10);
+  run.input('A', 20);
+  run.input('Aa', 30);
+  const result = run.input('Aa b', 1000);
+  assert.deepEqual(result.keyStats, { a: { attempts: 3, mistakes: 1 }, b: { attempts: 1, mistakes: 0 } });
+  assert.equal(result.keyStats.x, undefined);
+  const before = result.keyStats.a.attempts;
+  result.keyStats.a.attempts = 999;
+  assert.equal(run.snapshot(1000).keyStats.a.attempts, before, 'snapshots must not expose mutable engine state');
+});
+
+test('per-letter summaries are bounded and invalid or custom data is dropped', () => {
+  const record = { kind: 'lesson', day: '2026-01-02', wpm: 20, accuracy: 80, durationMs: 5000, attempts: 5, mistakes: 1 };
+  const valid = { a: { attempts: 3, mistakes: 1 }, b: { attempts: 1, mistakes: 0 }, secret: { attempts: 1, mistakes: 0 } };
+  const profile = E.sanitizeProfile({ records: [
+    { ...record, keyStats: valid },
+    { ...record, kind: 'custom', keyStats: valid },
+    { ...record, keyStats: { a: { attempts: 6, mistakes: 1 } } },
+    { ...record, keyStats: { a: { attempts: 4, mistakes: 2 } } },
+    { ...record, keyStats: { a: { attempts: 1.5, mistakes: 0 } } },
+  ] });
+  assert.deepEqual(profile.records[0].keyStats, { a: valid.a, b: valid.b });
+  for (const item of profile.records.slice(1)) assert.deepEqual(item.keyStats, {});
+  assert.ok(!JSON.stringify(profile).includes('secret'));
+});
+
+test('weak-key insights aggregate only retained mistakes and rank by error rate', () => {
+  const record = { kind: 'test', day: '2026-01-02', wpm: 20, accuracy: 70, durationMs: 5000, attempts: 10, mistakes: 3 };
+  const profile = { records: [
+    { ...record, keyStats: { a: { attempts: 4, mistakes: 2 }, b: { attempts: 2, mistakes: 1 } } },
+    { ...record, keyStats: { a: { attempts: 2, mistakes: 0 }, c: { attempts: 3, mistakes: 2 } } },
+    { ...record, kind: 'custom', keyStats: { z: { attempts: 2, mistakes: 2 } } },
+  ] };
+  const weak = E.weakKeys(profile);
+  assert.deepEqual(weak.map((row) => row.key), ['c', 'b', 'a']);
+  assert.deepEqual(weak.find((row) => row.key === 'a'), { key: 'a', attempts: 6, mistakes: 2, errorRate: 33 });
+});
+
+test('milestones work with old records, earned past streaks, and new focus sessions', () => {
+  const row = { kind: 'lesson', lessonId: 'home-fj', day: '2025-12-31', wpm: 32, accuracy: 96, durationMs: 20000, attempts: 100, mistakes: 4 };
+  const profile = { records: [row, { ...row, day: '2026-01-01' }, { ...row, day: '2026-01-02', kind: 'focus', lessonId: '' }] };
+  const milestones = Object.fromEntries(E.milestones(profile).map((item) => [item.id, item]));
+  assert.equal(milestones.first.earned, true);
+  assert.equal(milestones.lessons.current, 1);
+  assert.equal(milestones.lessons.earned, false);
+  assert.equal(milestones.accuracy.earned, true);
+  assert.equal(milestones.speed.earned, true);
+  assert.equal(milestones.focus.earned, true);
+  assert.equal(milestones.streak.earned, true, 'a past 3-day streak counts even after a missed day');
+  assert.equal(E.longestStreak([...profile.records, { day: '2026-01-02' }, { day: '2026-01-04' }]), 3);
+});
+
+test('old profiles gain a default text size and invalid sizes are ignored', () => {
+  assert.equal(E.sanitizeProfile({ settings: { keyboard: false }, records: [] }).settings.practiceSize, 'standard');
+  assert.equal(E.sanitizeProfile({ settings: { practiceSize: 'extra-large' } }).settings.practiceSize, 'extra-large');
+  assert.equal(E.sanitizeProfile({ settings: { practiceSize: 'giant' } }).settings.practiceSize, 'standard');
+});

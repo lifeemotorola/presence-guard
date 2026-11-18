@@ -64,11 +64,16 @@ jobs:
           foreach ($item in @('KeyBloom.exe', 'resources/app.asar', 'LICENSE', 'LICENSES.chromium.html', 'INSTALL.txt', 'KEYBLOOM-LICENSE.txt')) {
             if (-not (Test-Path (Join-Path $folder $item))) { throw "Missing package file: $item" }
           }
-          (Get-Item "$folder/KeyBloom.exe").VersionInfo | Format-List CompanyName,ProductName,FileDescription,FileVersion
+          $info = (Get-Item "$folder/KeyBloom.exe").VersionInfo
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $info | Format-List CompanyName,ProductName,FileDescription,FileVersion
+          if ($info.CompanyName -ne 'Emmanuel Suah' -or $info.ProductName -ne 'KeyBloom' -or
+              -not $info.FileVersion.StartsWith($package.version)) { throw 'Incorrect Windows publisher or version metadata.' }
       - name: Exercise the packaged app on Windows
         shell: pwsh
         env:
           KEYBLOOM_SCREENSHOT: ${{ runner.temp }}\keybloom-ui.png
+          KEYBLOOM_FEATURE_SCREENSHOT: ${{ runner.temp }}\keybloom-features.png
         run: npm run test:desktop
       - name: Publish executable and app checksums
         id: hashes
@@ -97,7 +102,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: keybloom-windows-ui
-          path: ${{ runner.temp }}\keybloom-ui.png
+          path: |
+            ${{ runner.temp }}\keybloom-ui.png
+            ${{ runner.temp }}\keybloom-features.png
           if-no-files-found: error
       - name: Download the uploaded app for integrity verification
         uses: actions/download-artifact@v4

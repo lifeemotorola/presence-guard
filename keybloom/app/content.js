@@ -94,5 +94,24 @@
     'orange smile ready world pause level rhythm listen lesson journey soft faster future',
   ];
 
-  return { lessons, passages, sprintPassages };
+  // Original, approachable words for short targeted drills. Every word chosen
+  // for a drill contains the selected key, without using any personal text.
+  const focusWords = [
+    'apple', 'anchor', 'garden', 'bright', 'bloom', 'breeze', 'cloud', 'calm',
+    'day', 'dream', 'eager', 'early', 'focus', 'flower', 'gentle', 'green',
+    'happy', 'home', 'idea', 'island', 'joy', 'journey', 'kind', 'keyboard',
+    'light', 'learn', 'morning', 'music', 'new', 'nature', 'open', 'orange',
+    'practice', 'paper', 'quiet', 'quick', 'river', 'ready', 'smile', 'steady',
+    'typing', 'together', 'under', 'useful', 'value', 'vivid', 'window', 'warm',
+    'extra', 'relax', 'yellow', 'your', 'zebra', 'zero', 'jazz', 'mix', 'zone',
+    'visit', 'view', 'quest', 'quote', 'jump', 'jewel', 'box', 'exact',
+  ];
+
+  function makeFocusText(key) {
+    if (typeof key !== 'string' || !/^[a-z]$/.test(key)) return '';
+    const words = focusWords.filter((word) => word.includes(key)).slice(0, 5);
+    return `${key} ${key} ${key}${key} ${words.join(' ')} ${key}${key} ${words.slice(0, 3).join(' ')}`;
+  }
+
+  return { lessons, passages, sprintPassages, makeFocusText };
 });

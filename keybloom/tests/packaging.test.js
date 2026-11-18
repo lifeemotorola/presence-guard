@@ -38,6 +38,9 @@ test('Windows package has an explicit publisher and pinned dependencies', () => 
   assert.equal(pkg.author, 'Emmanuel Suah');
   assert.equal(pkg.license, 'GPL-2.0-or-later');
   assert.equal(pkg.main, 'desktop/main.js');
+  assert.equal(pkg.version, '1.1.0');
+  assert.equal(lock.version, pkg.version);
+  assert.equal(lock.packages[''].version, pkg.version);
   for (const [name, version] of Object.entries(pkg.devDependencies)) {
     assert.match(version, /^\d+\.\d+\.\d+$/);
     assert.equal(lock.packages[`node_modules/${name}`].version, version);

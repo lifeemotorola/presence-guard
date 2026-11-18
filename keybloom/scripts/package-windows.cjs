@@ -2,6 +2,7 @@
 'use strict';
 const path = require('node:path');
 const { packager } = require('@electron/packager');
+const { version } = require('../package.json');
 
 (async () => {
   const root = path.resolve(__dirname, '..');
@@ -16,7 +17,7 @@ const { packager } = require('@electron/packager');
     asar: true,
     prune: true,
     icon: path.join(root, 'app', 'assets', 'icon.ico'),
-    appVersion: '1.0.0',
+    appVersion: version,
     appCopyright: 'Copyright © 2026 Emmanuel Suah',
     win32metadata: {
       CompanyName: 'Emmanuel Suah',
