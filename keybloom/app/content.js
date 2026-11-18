@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.KeyBloomContent = factory();
-})(typeof globalThis === 'undefined' ? this : globalThis, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./course.js'));
+  else root.KeyBloomContent = factory(root.KeyBloomCourse);
+})(typeof globalThis === 'undefined' ? this : globalThis, function (course) {
   'use strict';
 
   const lessons = [
@@ -74,6 +74,9 @@
       tip: 'Let your hands do the work. Accuracy comes first; speed will follow with practice.',
       text: 'Small steps add up. Take a breath, sit comfortably, and let each word flow onto the page.' },
   ];
+
+  // Keep the first 21 IDs and texts unchanged for existing progress.
+  lessons.push(...course.createExtendedLessons());
 
   const passages = [
     'Every new skill begins with a small step. Give your hands time to find their rhythm, and celebrate the progress you make today.',

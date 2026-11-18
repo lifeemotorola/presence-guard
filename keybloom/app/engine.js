@@ -11,6 +11,8 @@
 
   const STORAGE_KEY = 'keybloom.progress.v1';
   const MAX_RECORDS = 500;
+  // Course completion is separate from the rolling session history.
+  const MAX_COMPLETED_LESSONS = 2000;
   const GOALS = [5, 10, 15, 20];
   const PRACTICE_SIZES = ['standard', 'large', 'extra-large'];
   const CUSTOM_MIN = 10;
@@ -197,7 +199,7 @@
   }
 
   function defaultProfile() {
-    return { version: 1, settings: { goalMinutes: 10, keyboard: true, practiceSize: 'standard' }, records: [] };
+    return { version: 1, settings: { goalMinutes: 10, keyboard: true, practiceSize: 'standard' }, records: [], completedLessons: [] };
   }
 
   // Retain only bounded counts for known ASCII letters. Never retain a
@@ -221,6 +223,8 @@
     return result;
   }
 
+  function validLessonId(value) { return typeof value === 'string' && /^[a-z0-9-]{1,60}$/.test(value); }
+
   function sanitizeProfile(value) {
     const profile = defaultProfile();
     if (!value || typeof value !== 'object') return profile;
@@ -228,6 +232,8 @@
     profile.settings.goalMinutes = GOALS.includes(settings.goalMinutes) ? settings.goalMinutes : 10;
     profile.settings.keyboard = typeof settings.keyboard === 'boolean' ? settings.keyboard : true;
     profile.settings.practiceSize = PRACTICE_SIZES.includes(settings.practiceSize) ? settings.practiceSize : 'standard';
+    const savedCompleted = Array.isArray(value.completedLessons) ? value.completedLessons.slice(-MAX_COMPLETED_LESSONS).filter(validLessonId) : [];
+    profile.completedLessons = [...new Set(savedCompleted)];
     if (!Array.isArray(value.records)) return profile;
     profile.records = value.records.slice(-MAX_RECORDS).filter((item) =>
       item && typeof item === 'object' && KINDS.has(item.kind) && dayNumber(item.day) !== null &&
@@ -240,7 +246,7 @@
       const mistakes = clamp(Math.round(item.mistakes), 0, attempts);
       return {
         kind: item.kind, day: item.day,
-        lessonId: item.kind === 'lesson' && typeof item.lessonId === 'string' && /^[a-z0-9-]{1,60}$/.test(item.lessonId) ? item.lessonId : '',
+        lessonId: item.kind === 'lesson' && validLessonId(item.lessonId) ? item.lessonId : '',
         wpm: clamp(Math.round(item.wpm), 0, 9999), accuracy: clamp(Math.round(item.accuracy), 0, 100),
         durationMs: clamp(Math.round(item.durationMs), 0, 5 * 60 * 60 * 1000),
         attempts, mistakes,
@@ -249,6 +255,10 @@
         keyStats: item.kind === 'custom' ? {} : sanitizeKeyStats(item.keyStats, attempts, mistakes),
       };
     });
+    // Import previous versions' completed lessons from their saved records.
+    const completed = new Set(profile.completedLessons);
+    for (const record of profile.records) if (record.kind === 'lesson' && record.lessonId) completed.add(record.lessonId);
+    profile.completedLessons = [...completed].slice(-MAX_COMPLETED_LESSONS);
     return profile;
   }
 
@@ -275,7 +285,11 @@
     return count;
   }
 
-  function stats(profile, today = new Date()) {
+  function completionCount(completedLessons, allowedIds) {
+    return allowedIds instanceof Set ? completedLessons.filter((id) => allowedIds.has(id)).length : completedLessons.length;
+  }
+
+  function stats(profile, today = new Date(), allowedLessonIds = null) {
     const cleaned = sanitizeProfile(profile);
     const records = cleaned.records;
     const attempts = records.reduce((sum, item) => sum + item.attempts, 0);
@@ -286,7 +300,7 @@
       sessions: records.length,
       bestWpm: records.length ? Math.max(...records.map((item) => item.wpm)) : null,
       accuracy: attempts ? Math.round((attempts - mistakes) * 100 / attempts) : null,
-      lessonsCompleted: new Set(records.filter((item) => item.kind === 'lesson' && item.lessonId).map((item) => item.lessonId)).size,
+      lessonsCompleted: completionCount(cleaned.completedLessons, allowedLessonIds),
       todayMs, totalMs: records.reduce((sum, item) => sum + item.durationMs, 0),
       streak: streak(records, today),
     };
@@ -320,11 +334,12 @@
     return longest;
   }
 
-  // Milestones are computed from the retained recent history, not separately
-  // stored; old profiles therefore acquire them without data migration.
-  function milestones(profile) {
-    const records = sanitizeProfile(profile).records;
-    const uniqueLessons = new Set(records.filter((row) => row.kind === 'lesson' && row.lessonId).map((row) => row.lessonId)).size;
+  // Lesson milestones use durable completions; other milestones use recent
+  // history. Earlier profiles automatically import IDs from their records.
+  function milestones(profile, allowedLessonIds = null) {
+    const cleaned = sanitizeProfile(profile);
+    const records = cleaned.records;
+    const uniqueLessons = completionCount(cleaned.completedLessons, allowedLessonIds);
     const definitions = [
       ['first', 'First bloom', 'Complete your first practice session.', records.length, 1, 'leaf'],
       ['lessons', 'Lesson explorer', 'Practice five different lessons.', uniqueLessons, 5, 'book'],
@@ -339,12 +354,11 @@
   }
 
   function recommendedLesson(lessons, profile) {
-    const records = sanitizeProfile(profile).records;
-    const completed = new Set(records.filter((item) => item.kind === 'lesson').map((item) => item.lessonId));
+    const completed = new Set(sanitizeProfile(profile).completedLessons);
     return lessons.find((item) => !completed.has(item.id)) || lessons[0] || null;
   }
 
-  return { STORAGE_KEY, MAX_RECORDS, GOALS, PRACTICE_SIZES, CUSTOM_MIN, CUSTOM_MAX, LETTERS,
+  return { STORAGE_KEY, MAX_RECORDS, MAX_COMPLETED_LESSONS, GOALS, PRACTICE_SIZES, CUSTOM_MIN, CUSTOM_MAX, LETTERS,
     TypingRun, prepareCustomText, correctPositions, correctWords, insertedRange, sanitizeKeyStats,
     localDay, dayNumber, defaultProfile, sanitizeProfile, addRecord, streak, longestStreak, stats, weakKeys, milestones, recommendedLesson };
 });

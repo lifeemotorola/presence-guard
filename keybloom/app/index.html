@@ -7,6 +7,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>KeyBloom — Your typing studio</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="course.js" defer></script>
   <script src="content.js" defer></script>
   <script src="engine.js" defer></script>
   <script src="ui.js" defer></script>
@@ -42,7 +43,7 @@
       <div class="nav-caption">YOUR SPACE</div>
       <nav class="nav-list" aria-label="Pages">
         <button class="nav-item" data-action="navigate" data-screen="home"><svg><use href="#i-home"/></svg><span>Overview</span></button>
-        <button class="nav-item" data-action="navigate" data-screen="lessons"><svg><use href="#i-book"/></svg><span>Lessons</span><span class="nav-number" aria-hidden="true">21</span></button>
+        <button class="nav-item" data-action="navigate" data-screen="lessons"><svg><use href="#i-book"/></svg><span>Lessons</span><span class="nav-number" id="lesson-nav-count" aria-hidden="true"></span></button>
         <button class="nav-item" data-action="navigate" data-screen="practice"><svg><use href="#i-bolt"/></svg><span>Practice</span></button>
         <button class="nav-item" data-action="navigate" data-screen="progress"><svg><use href="#i-chart"/></svg><span>My progress</span></button>
       </nav>
