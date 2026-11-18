@@ -283,3 +283,64 @@ dialog p { color: #829286; font-size: 12px; line-height: 1.6; margin: 0; }
   .sidebar-card p { margin-top: 7px; }
   .private-note { padding-top: 16px; }
 }
+
+/* More ways to practice, designed to work at the minimum window size. */
+.challenge-icon.lavender { background: #eeeaf5; color: #8976a7; }
+.challenge-icon.sky { background: #e6f0ee; color: #668f8b; }
+.challenge-card .mini-note { margin: 0 0 17px; color: #687f6e; }
+.challenge-card .focus-suggestion { margin-top: -6px; }
+.challenge-card p { color: #667c6c; }
+.custom-layout { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(210px, .85fr); gap: 16px; align-items: start; }
+.custom-card { padding: 25px; min-width: 0; }
+.custom-card-heading { display: flex; align-items: center; gap: 15px; margin-bottom: 23px; }
+.custom-card-heading h2 { font: 400 23px Georgia, serif; margin: 0 0 5px; }
+.custom-card-heading p { color: #6e8172; font-size: 11px; line-height: 1.5; margin: 0; }
+.custom-label { display: block; color: #405b48; font-size: 12px; font-weight: 750; margin-bottom: 9px; }
+.custom-text { display: block; width: 100%; min-height: 160px; resize: vertical; border: 1px solid #dce8dc; border-radius: 10px; background: #f9fbf7; padding: 14px; color: #2d4b36; font: 15px/1.6 Consolas, 'Courier New', monospace; }
+.custom-text::placeholder { color: #849789; }
+.custom-text:focus { border-color: #9ebea2; outline: 2px solid #dcebdd; }
+.custom-foot { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; color: #637b69; font-size: 11px; line-height: 1.5; margin-top: 10px; }
+.custom-foot strong { color: #597460; white-space: nowrap; }
+.custom-error { min-height: 30px; padding-top: 7px; color: #a84f34; font-size: 11px; line-height: 1.45; }
+.custom-privacy p { color: #607a66; }
+.insights-card { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.5fr); align-items: start; gap: 24px; padding: 22px; margin-top: 17px; }
+.insights-intro { display: flex; align-items: flex-start; gap: 14px; min-width: 0; }
+.insights-intro .challenge-icon { flex: none; width: 45px; height: 45px; border-radius: 13px; }
+.insights-intro .challenge-icon svg { width: 21px; height: 21px; }
+.insights-intro h2 { font: 400 21px Georgia, serif; margin: 7px 0; line-height: 1.2; }
+.insights-intro p { color: #657c6a; font-size: 11px; line-height: 1.55; margin: 0; }
+.focus-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; }
+.focus-insight { display: flex; text-align: left; align-items: center; gap: 10px; width: 100%; min-width: 0; border: 1px solid #e8efe6; border-radius: 10px; padding: 10px; background: #f8faf6; color: #3c5b45; }
+.focus-insight:hover { background: #edf5ec; border-color: #cee0cc; }
+.focus-letter { display: grid; place-items: center; flex: none; width: 34px; height: 34px; background: #e9e5f2; color: #75658e; border-radius: 9px; font-size: 15px; font-weight: 800; }
+.focus-copy { display: flex; flex-direction: column; min-width: 0; line-height: 1.4; }
+.focus-copy strong { font-size: 11px; }
+.focus-copy small { color: #6a8170; font-size: 10px; }
+.focus-go { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; color: #52795e; font-size: 10px; font-weight: 700; }
+.focus-go svg { width: 13px; height: 13px; }
+.insight-empty { grid-column: 1 / -1; color: #657b69; background: #f7faf5; border: 1px dashed #dbe7da; border-radius: 10px; padding: 16px; line-height: 1.55; font-size: 11px; }
+.milestones-section { margin-top: 27px; }
+.milestone-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.milestone { padding: 17px; min-width: 0; }
+.milestone.earned { border-color: #dbeadc; background: #fbfdf9; }
+.milestone-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.milestone-icon { display: grid; place-items: center; width: 37px; height: 37px; border-radius: 11px; color: #8a9c8b; background: #f0f3ed; }
+.milestone.earned .milestone-icon { color: #608d69; background: #e3f0e1; }
+.milestone-icon svg { width: 19px; height: 19px; }
+.milestone-status { display: inline-flex; align-items: center; gap: 4px; color: #718678; font-size: 10px; font-weight: 750; }
+.milestone.earned .milestone-status { color: #4e805b; }
+.milestone-status svg { width: 14px; height: 14px; }
+.milestone h3 { font-size: 12px; margin: 13px 0 5px; color: #35523c; }
+.milestone p { color: #6b806e; font-size: 11px; line-height: 1.5; margin: 0; overflow-wrap: anywhere; }
+html[data-practice-size="large"] .target-text { font-size: 26px; }
+html[data-practice-size="large"] .typing-input { font-size: 20px; }
+html[data-practice-size="extra-large"] .target-text { font-size: 30px; }
+html[data-practice-size="extra-large"] .typing-input { font-size: 23px; }
+@media (max-width: 1100px) {
+  .insights-card { grid-template-columns: 1fr; gap: 16px; }
+  .milestone-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .custom-layout, .milestone-grid { grid-template-columns: 1fr; }
+  .focus-list { grid-template-columns: 1fr; }
+}

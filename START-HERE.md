@@ -326,8 +326,9 @@ build. The plugin's model and UI are tested against fake OBS, not a real show.
 ## The Windows typing tutor: KeyBloom
 
 `keybloom/` is an original, offline typing tutor with 21 lessons, timed tests,
-a word game, an on-screen US QWERTY keyboard and locally saved progress. It is
-not Mavis Beacon and is not affiliated with it.
+a word game, focused-letter drills, your own practice text, milestones, an
+on-screen US QWERTY keyboard and locally saved progress. It is not Mavis Beacon
+and is not affiliated with it.
 
 | | KeyBloom (`keybloom/`) |
 |---|---|

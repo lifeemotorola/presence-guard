@@ -1,4 +1,4 @@
-KEYBLOOM 1.0 — WINDOWS QUICK START
+KEYBLOOM 1.1 — WINDOWS QUICK START
 By Emmanuel Suah
 
 REQUIREMENTS: 64-bit Windows 10 or Windows 11, a physical keyboard, and enough
@@ -14,9 +14,20 @@ needed. The app works offline after download.
 4. Choose "Start your first lesson". Type into the box, following the text and
    the highlighted key. The timer begins with your first keystroke. Correct
    errors with Backspace; corrected errors still count in accuracy.
-5. Open Lessons for the full course, Practice for a timed test or Word Sprint,
-   and My progress for your history. Use Settings to change the daily goal,
+5. Open Lessons for the full course. In Practice, choose a timed test, Word
+   Sprint, a focused letter drill, or Practice your own text. Your passage is
+   10–500 printable US keyboard characters and is never saved.
+6. Open My progress to see recent results, letters to practice and milestones.
+   In Settings you can choose a larger practice text size, change the daily goal,
    show or hide the keyboard, or reset your locally saved progress.
+
+UPDATING FROM KEYBLOOM 1.0
+Close the old app, extract this version into a new folder, and open its
+KeyBloom.exe. Your existing progress is stored separately in your Windows
+profile and stays there; do not delete %APPDATA%\KeyBloom if you want to keep
+it. Older sessions did not record letter counts, so new sessions build the
+letter suggestions. After upgrading, use 1.1: saving with the old 1.0 app may
+discard sessions from the new modes. There is no automatic update or cloud backup.
 
 WINDOWS SECURITY
 This build is not digitally signed. Windows may show a publisher/reputation
@@ -27,9 +38,10 @@ security globally.
 
 PRIVACY AND LIMITS
 - Progress summaries and settings are saved in your Windows user profile under
-  %APPDATA%\KeyBloom. The words you type are not saved. Resetting or deleting
-  this data permanently removes the history; reinstalling can also lose it if
-  you remove the profile. There is no account or cloud backup.
+  %APPDATA%\KeyBloom. KeyBloom saves aggregate letter attempt and error counts
+  for built-in exercises, not the words you type. Your own passages and their
+  letter counts are never saved. Resetting or deleting the profile permanently
+  removes history. There is no account or cloud backup.
 - The course and visual keyboard use an English (US) QWERTY layout. Other
   physical layouts may not match the on-screen key hints.
 - KeyBloom is an original, independent typing tutor; it is not Mavis Beacon

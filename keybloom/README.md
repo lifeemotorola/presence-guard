@@ -15,6 +15,14 @@ and is not affiliated with it.
    and folders beside it. This is a portable folder, **not a single-file EXE**;
    move the complete folder if you want to move the app.
 
+If you are updating from version 1.0, close KeyBloom first, extract the new
+build into a separate folder, and start its `KeyBloom.exe`. Your existing
+progress remains in your Windows user profile; do not delete
+`%APPDATA%\KeyBloom` if you want to keep it. Older sessions will not have
+per-letter insights, because version 1.0 did not collect those counts. After
+upgrading, continue using 1.1: reopening 1.0 and saving progress can discard
+sessions from modes that did not exist in 1.0.
+
 Requires **64-bit Windows 10 or 11** and a physical keyboard. No Node.js,
 compiler, account or internet connection is required after downloading it. The
 Windows x64 build is not a native ARM or 32-bit build. `INSTALL.txt` inside the
@@ -30,17 +38,31 @@ Windows security globally.
 
 - **21 original lessons** covering home, top and bottom rows, capital letters,
   numbers, punctuation and everyday sentences. Start or repeat any lesson.
-- **Typing tests** with one- or three-minute choices and original passages.
+- **Typing tests** with 30-second, one-, three- and five-minute choices and
+  original passages.
 - **Word Sprint**, a 45-second word game scored by correctly completed words.
+- **Focus on a key** lets you choose any letter for a short, untimed drill.
+  Recent error counts can suggest letters to practice; select an insight in
+  My progress to start a matching drill.
+- **Practice your own text** turns a passage you type or paste into an untimed
+  exercise. Passages are kept only in memory and are not saved. Use 10–500
+  printable US keyboard characters; extra spaces and line breaks become single
+  spaces. Emoji and accented characters are not supported in custom text yet.
 - A US QWERTY **on-screen keyboard**, next-key and finger hints, plus live speed,
   accuracy and timer. Pause as needed; the app pauses if its window loses focus.
 - **Progress** with recent sessions, speed trend, accuracy, a daily practice
-  goal and a day streak. Settings can show/hide keyboard hints and reset data.
+  goal, day streak, tricky-letter insights and six milestones. Milestones and
+  insights are based on the most recent 500 retained sessions, not lifetime
+  totals, so they can change as older sessions fall off or after reset.
+- **Settings** to show/hide keyboard hints, choose a larger practice text size,
+  change a daily goal or reset local data.
 - No account, ads or intentional network calls. The app blocks HTTP/WebSocket
-  requests in its desktop session. It stores only session summaries and
-  settings in the current Windows profile, not what you type.
+  requests in its desktop session. It stores session summaries and settings
+  locally, plus aggregate expected-letter attempt/error counts from built-in
+  exercises. It never stores what you typed or any letter counts from custom
+  passages.
 
-This is a first release, not feature parity with Mavis Beacon: there are no
+This is not feature parity with Mavis Beacon: there are no
 separate learner profiles, dictation, cloud sync, adaptive curriculum, 3-D
 racing games or languages other than the included English/US QWERTY content.
 Hints may not match a different physical keyboard layout. There is no automatic
@@ -50,6 +72,7 @@ update service or cloud backup.
 
 - The timer starts on the first typed character. A completed lesson stops when
   the practice text has been entered, even if it contains uncorrected mistakes.
+  Focus drills and custom exercises also stop when their text has been entered.
   A timed activity stops at its time limit; passages repeat if needed.
 - **WPM** is the number of correctly placed characters divided by five, then
   divided by active minutes. This is a simple net speed measure, not a certified
@@ -61,6 +84,10 @@ update service or cloud backup.
 - A lesson counts as practiced after it is finished, without an accuracy
   threshold. Daily goals count completed sessions, and the streak counts
   consecutive local calendar days with at least one completed session.
+- **Letter insights** count each attempt at an expected A–Z letter in completed
+  built-in exercises, including corrected errors. Letters are ranked by error
+  rate; small samples may not reflect your overall skill. Custom passages are
+  excluded, as are records created by version 1.0.
 - Up to 500 recent session summaries are kept in local app storage under
   `%APPDATA%\KeyBloom`. Deleting that profile or using **Settings → Reset
   progress** permanently deletes local history; there is no recovery or sync.
@@ -73,13 +100,15 @@ npm ci
 npm test
 ```
 
-The Node tests cover the course, scoring, corrections, timed sessions, pause,
-calendar streaks, data limits and persistence sanitization. The Windows Actions
-job builds the actual portable app, launches it with Playwright, exercises a
-lesson, a typing test and Word Sprint, checks saving across a restart, and tests
-security settings and a small window. A screenshot is uploaded separately. The
-prebuilt download is available in the Actions artifact; users do not need these
-developer steps.
+The Node tests cover the course, scoring, corrections, letter insights, custom
+text privacy, milestones, timed sessions, calendar streaks, data limits and
+persistence sanitization. The Windows Actions job builds the actual portable
+app and uses Playwright to exercise lessons, Word Sprint, focused drills,
+custom text, old-profile migration, both new test lengths, and text-size
+settings. It checks the sandbox, a 900 × 640 layout and saved progress after
+restarting from a different folder. Screenshots are uploaded separately.
+Automated tests do not replace human usability testing. The prebuilt download
+is available in the Actions artifact; users do not need these developer steps.
 
 ## Licence
 

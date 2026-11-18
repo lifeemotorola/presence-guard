@@ -12,9 +12,24 @@
   const STORAGE_KEY = 'keybloom.progress.v1';
   const MAX_RECORDS = 500;
   const GOALS = [5, 10, 15, 20];
-  const KINDS = new Set(['lesson', 'test', 'sprint']);
+  const PRACTICE_SIZES = ['standard', 'large', 'extra-large'];
+  const CUSTOM_MIN = 10;
+  const CUSTOM_MAX = 500;
+  const LETTERS = 'abcdefghijklmnopqrstuvwxyz';
+  const KINDS = new Set(['lesson', 'test', 'sprint', 'focus', 'custom']);
+  const UNTIMED = new Set(['lesson', 'focus', 'custom']);
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+
+  // Custom exercises stay in memory only. Limiting these to printable US
+  // keyboard characters also keeps character positions and hints consistent.
+  function prepareCustomText(value) {
+    const text = typeof value === 'string' ? value.replace(/[\t\r\n]+/g, ' ').replace(/ +/g, ' ').trim() : '';
+    if (text.length < CUSTOM_MIN) return { text, error: `Please enter at least ${CUSTOM_MIN} characters.` };
+    if (text.length > CUSTOM_MAX) return { text, error: `Please use no more than ${CUSTOM_MAX} characters.` };
+    if (!/^[\x20-\x7e]+$/.test(text)) return { text, error: 'Use printable US keyboard characters only; emojis and accented characters are not supported yet.' };
+    return { text, error: '' };
+  }
 
   function correctPositions(target, typed) {
     let count = 0;
@@ -49,16 +64,17 @@
         throw new Error('A typing run needs non-empty practice text.');
       }
       if (!KINDS.has(kind)) throw new Error('Unknown practice kind.');
-      if (kind !== 'lesson' && (!Number.isFinite(durationMs) || durationMs <= 0)) {
+      if (!UNTIMED.has(kind) && (!Number.isFinite(durationMs) || durationMs <= 0)) {
         throw new Error('A timed run needs a positive duration.');
       }
       this.texts = texts.slice();
       this.kind = kind;
-      this.durationMs = kind === 'lesson' ? null : durationMs;
+      this.durationMs = UNTIMED.has(kind) ? null : durationMs;
       this.index = 0;
       this.typed = '';
       this.attempts = 0;
       this.mistakes = 0;
+      this.keyStats = {};
       this.finishedCorrect = 0;
       this.finishedWords = 0;
       this.finishedIncorrect = 0;
@@ -117,11 +133,21 @@
       }
       for (let i = 0; i < change.text.length; i += 1) {
         this.attempts += 1;
-        if (change.text[i] !== this.target[change.start + i]) this.mistakes += 1;
+        const expected = this.target[change.start + i];
+        const wrong = change.text[i] !== expected;
+        if (wrong) this.mistakes += 1;
+        // Never derive or save per-letter data from personal custom text.
+        const letter = expected && expected.toLowerCase();
+        if (this.kind !== 'custom' && letter && /^[a-z]$/.test(letter)) {
+          const counts = this.keyStats[letter] || { attempts: 0, mistakes: 0 };
+          counts.attempts += 1;
+          if (wrong) counts.mistakes += 1;
+          this.keyStats[letter] = counts;
+        }
       }
       this.typed = next;
       if (this.typed.length === this.target.length) {
-        if (this.kind === 'lesson') {
+        if (UNTIMED.has(this.kind)) {
           this.finalElapsed = this.elapsed(now);
           this.finished = true;
           this.reason = 'complete';
@@ -150,6 +176,7 @@
         uncorrected: this.finishedIncorrect + currentIncorrect,
         words: this.finishedWords + correctWords(this.target, this.typed),
         accuracy, wpm,
+        keyStats: Object.fromEntries(Object.entries(this.keyStats).map(([key, counts]) => [key, { ...counts }])),
       };
     }
   }
@@ -170,7 +197,28 @@
   }
 
   function defaultProfile() {
-    return { version: 1, settings: { goalMinutes: 10, keyboard: true }, records: [] };
+    return { version: 1, settings: { goalMinutes: 10, keyboard: true, practiceSize: 'standard' }, records: [] };
+  }
+
+  // Retain only bounded counts for known ASCII letters. Never retain a
+  // passage, the keys actually typed, or custom-exercise letter statistics.
+  function sanitizeKeyStats(value, attempts, mistakes) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const result = {};
+    let totalAttempts = 0;
+    let totalMistakes = 0;
+    for (const key of LETTERS) {
+      const row = value[key];
+      if (row === undefined) continue;
+      if (!row || typeof row !== 'object' || !Number.isSafeInteger(row.attempts) ||
+          !Number.isSafeInteger(row.mistakes) || row.attempts < 1 || row.mistakes < 0 ||
+          row.mistakes > row.attempts) return {};
+      totalAttempts += row.attempts;
+      totalMistakes += row.mistakes;
+      if (totalAttempts > attempts || totalMistakes > mistakes) return {};
+      result[key] = { attempts: row.attempts, mistakes: row.mistakes };
+    }
+    return result;
   }
 
   function sanitizeProfile(value) {
@@ -179,6 +227,7 @@
     const settings = value.settings && typeof value.settings === 'object' ? value.settings : {};
     profile.settings.goalMinutes = GOALS.includes(settings.goalMinutes) ? settings.goalMinutes : 10;
     profile.settings.keyboard = typeof settings.keyboard === 'boolean' ? settings.keyboard : true;
+    profile.settings.practiceSize = PRACTICE_SIZES.includes(settings.practiceSize) ? settings.practiceSize : 'standard';
     if (!Array.isArray(value.records)) return profile;
     profile.records = value.records.slice(-MAX_RECORDS).filter((item) =>
       item && typeof item === 'object' && KINDS.has(item.kind) && dayNumber(item.day) !== null &&
@@ -186,16 +235,20 @@
       Number.isFinite(item.attempts) && Number.isFinite(item.mistakes) &&
       item.wpm >= 0 && item.accuracy >= 0 && item.accuracy <= 100 && item.durationMs >= 0 &&
       item.attempts >= 0 && item.mistakes >= 0 && item.mistakes <= item.attempts
-    ).map((item) => ({
-      kind: item.kind, day: item.day,
-      lessonId: typeof item.lessonId === 'string' && /^[a-z0-9-]{1,60}$/.test(item.lessonId) ? item.lessonId : '',
-      wpm: clamp(Math.round(item.wpm), 0, 9999), accuracy: clamp(Math.round(item.accuracy), 0, 100),
-      durationMs: clamp(Math.round(item.durationMs), 0, 5 * 60 * 60 * 1000),
-      attempts: clamp(Math.round(item.attempts), 0, 1000000),
-      mistakes: clamp(Math.round(item.mistakes), 0, 1000000),
-      words: clamp(Math.round(finite(item.words)), 0, 1000000),
-      uncorrected: clamp(Math.round(finite(item.uncorrected)), 0, 1000000),
-    }));
+    ).map((item) => {
+      const attempts = clamp(Math.round(item.attempts), 0, 1000000);
+      const mistakes = clamp(Math.round(item.mistakes), 0, attempts);
+      return {
+        kind: item.kind, day: item.day,
+        lessonId: item.kind === 'lesson' && typeof item.lessonId === 'string' && /^[a-z0-9-]{1,60}$/.test(item.lessonId) ? item.lessonId : '',
+        wpm: clamp(Math.round(item.wpm), 0, 9999), accuracy: clamp(Math.round(item.accuracy), 0, 100),
+        durationMs: clamp(Math.round(item.durationMs), 0, 5 * 60 * 60 * 1000),
+        attempts, mistakes,
+        words: clamp(Math.round(finite(item.words)), 0, 1000000),
+        uncorrected: clamp(Math.round(finite(item.uncorrected)), 0, 1000000),
+        keyStats: item.kind === 'custom' ? {} : sanitizeKeyStats(item.keyStats, attempts, mistakes),
+      };
+    });
     return profile;
   }
 
@@ -207,6 +260,7 @@
       wpm: result.wpm, accuracy: result.accuracy, durationMs: result.elapsedMs,
       attempts: result.attempts, mistakes: result.mistakes, words: result.words,
       uncorrected: result.uncorrected,
+      keyStats: result.kind === 'custom' ? {} : result.keyStats,
     };
     return sanitizeProfile({ ...cleaned, records: [...cleaned.records, raw] });
   }
@@ -238,12 +292,59 @@
     };
   }
 
+  function weakKeys(profile) {
+    const totals = {};
+    for (const record of sanitizeProfile(profile).records) {
+      for (const [key, counts] of Object.entries(record.keyStats)) {
+        const total = totals[key] || { key, attempts: 0, mistakes: 0 };
+        total.attempts += counts.attempts;
+        total.mistakes += counts.mistakes;
+        totals[key] = total;
+      }
+    }
+    return Object.values(totals).filter((row) => row.mistakes > 0)
+      .map((row) => ({ ...row, errorRate: Math.round(row.mistakes * 100 / row.attempts) }))
+      .sort((a, b) => (b.mistakes / b.attempts) - (a.mistakes / a.attempts) || b.mistakes - a.mistakes || a.key.localeCompare(b.key));
+  }
+
+  function longestStreak(records) {
+    const days = [...new Set(records.map((item) => dayNumber(item.day)).filter((day) => day !== null))].sort((a, b) => a - b);
+    let longest = 0;
+    let current = 0;
+    let previous = null;
+    for (const day of days) {
+      current = previous !== null && day === previous + 1 ? current + 1 : 1;
+      longest = Math.max(longest, current);
+      previous = day;
+    }
+    return longest;
+  }
+
+  // Milestones are computed from the retained recent history, not separately
+  // stored; old profiles therefore acquire them without data migration.
+  function milestones(profile) {
+    const records = sanitizeProfile(profile).records;
+    const uniqueLessons = new Set(records.filter((row) => row.kind === 'lesson' && row.lessonId).map((row) => row.lessonId)).size;
+    const definitions = [
+      ['first', 'First bloom', 'Complete your first practice session.', records.length, 1, 'leaf'],
+      ['lessons', 'Lesson explorer', 'Practice five different lessons.', uniqueLessons, 5, 'book'],
+      ['accuracy', 'Careful hands', 'Finish a session at 95% accuracy or better (20+ attempts).', Number(records.some((row) => row.attempts >= 20 && row.accuracy >= 95)), 1, 'target'],
+      ['speed', 'Finding your flow', 'Reach 30 WPM in a session of at least 10 seconds.', Number(records.some((row) => row.wpm >= 30 && row.durationMs >= 10000)), 1, 'bolt'],
+      ['focus', 'Practice with purpose', 'Complete a focused key drill.', Number(records.some((row) => row.kind === 'focus')), 1, 'keyboard'],
+      ['streak', 'Three-day rhythm', 'Practice on three consecutive days.', longestStreak(records), 3, 'flame'],
+    ];
+    return definitions.map(([id, title, description, value, target, icon]) => ({
+      id, title, description, current: Math.min(value, target), target, icon, earned: value >= target,
+    }));
+  }
+
   function recommendedLesson(lessons, profile) {
     const records = sanitizeProfile(profile).records;
     const completed = new Set(records.filter((item) => item.kind === 'lesson').map((item) => item.lessonId));
     return lessons.find((item) => !completed.has(item.id)) || lessons[0] || null;
   }
 
-  return { STORAGE_KEY, MAX_RECORDS, GOALS, TypingRun, correctPositions, correctWords, insertedRange,
-    localDay, dayNumber, defaultProfile, sanitizeProfile, addRecord, streak, stats, recommendedLesson };
+  return { STORAGE_KEY, MAX_RECORDS, GOALS, PRACTICE_SIZES, CUSTOM_MIN, CUSTOM_MAX, LETTERS,
+    TypingRun, prepareCustomText, correctPositions, correctWords, insertedRange, sanitizeKeyStats,
+    localDay, dayNumber, defaultProfile, sanitizeProfile, addRecord, streak, longestStreak, stats, weakKeys, milestones, recommendedLesson };
 });
