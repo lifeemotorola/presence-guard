@@ -74,6 +74,7 @@ jobs:
         env:
           KEYBLOOM_SCREENSHOT: ${{ runner.temp }}\keybloom-ui.png
           KEYBLOOM_FEATURE_SCREENSHOT: ${{ runner.temp }}\keybloom-features.png
+          KEYBLOOM_COURSE_SCREENSHOT: ${{ runner.temp }}\keybloom-course.png
         run: npm run test:desktop
       - name: Publish executable and app checksums
         id: hashes
@@ -105,6 +106,7 @@ jobs:
           path: |
             ${{ runner.temp }}\keybloom-ui.png
             ${{ runner.temp }}\keybloom-features.png
+            ${{ runner.temp }}\keybloom-course.png
           if-no-files-found: error
       - name: Download the uploaded app for integrity verification
         uses: actions/download-artifact@v4

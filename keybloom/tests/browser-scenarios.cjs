@@ -34,7 +34,9 @@ async function runScenarios(page, options = {}) {
   await noHorizontalOverflow(page, 'dashboard');
 
   await nav(page, 'Lessons').click();
-  assert.equal(await page.locator('.lesson-card').count(), 21);
+  assert.equal(await page.locator('.lesson-card').count(), 12, 'course is paged rather than rendering 500 cards');
+  assert.equal(await page.locator('#lesson-nav-count').textContent(), '500');
+  assert.match(await page.locator('#lesson-result-count').textContent(), /1–12 of 500/);
   await noHorizontalOverflow(page, 'lessons');
   await page.getByRole('button', { name: 'Start: Find your anchors' }).click();
   await expectVisible(heading(page, 'Find your anchors'));
@@ -71,6 +73,7 @@ async function runScenarios(page, options = {}) {
   assert.equal((await recordData(page)).records.length, 1, 'progress survives a reload');
 
   await nav(page, 'Lessons').click();
+  await page.locator('#lesson-page-select').selectOption('2');
   await page.getByRole('button', { name: 'Start: Make it a capital' }).click();
   assert.equal(await page.locator('.key.next').innerText(), 'A');
   assert.equal(await page.locator('.key.shift-needed').count(), 2);
@@ -104,6 +107,7 @@ async function runScenarios(page, options = {}) {
   await page.getByRole('dialog').getByRole('button', { name: 'Reset progress' }).click();
   saved = await recordData(page);
   assert.equal(saved.records.length, 0);
+  assert.deepEqual(saved.completedLessons, [], 'reset also removes durable lesson completions');
   assert.equal(saved.settings.goalMinutes, 10);
   assert.equal(saved.settings.keyboard, true);
 
@@ -150,6 +154,7 @@ async function runAdvancedScenarios(page, options = {}) {
   // text-size preference do not. Old progress must survive the upgrade.
   const old = await recordData(page);
   delete old.settings.practiceSize;
+  delete old.completedLessons;
   for (const record of old.records) delete record.keyStats;
   await page.evaluate(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: old });
   await page.reload();
@@ -161,6 +166,7 @@ async function runAdvancedScenarios(page, options = {}) {
 
   // A corrected error is attributed to the expected F, and can launch a drill.
   await nav(page, 'Lessons').click();
+  await page.locator('#lesson-page-select').selectOption('1');
   await page.getByRole('button', { name: 'Start: Find your anchors' }).click();
   const lessonTarget = (await page.locator('#target-accessible').textContent()).replace('Practice text: ', '');
   await page.locator('#typing-input').pressSequentially('x');
@@ -278,9 +284,9 @@ async function runLayoutScenarios(page) {
       .filter((node) => { const r = node.getBoundingClientRect(); return r.width && (r.left < 0 || r.right > innerWidth + 1); })
       .map((node) => node.textContent.trim().slice(0, 50)));
     assert.deepEqual(bad, [], `${name}: controls extend beyond the window`);
-    const clipped = await page.evaluate(() => [...document.querySelectorAll('.challenge-card button, .challenge-card select, .custom-card textarea, .custom-card button, .focus-insight')]
+    const clipped = await page.evaluate(() => [...document.querySelectorAll('.challenge-card button, .challenge-card select, .custom-card textarea, .custom-card button, .focus-insight, .course-toolbar input, .course-toolbar select, .lesson-card button')]
       .filter((node) => {
-        const parent = node.closest('.challenge-card, .custom-card, .insights-card');
+        const parent = node.closest('.challenge-card, .custom-card, .insights-card, .course-toolbar, .lesson-card');
         if (!parent) return false;
         const r = node.getBoundingClientRect(), p = parent.getBoundingClientRect();
         return r.width && (r.left < p.left - 1 || r.right > p.right + 1 || r.top < p.top - 1 || r.bottom > p.bottom + 1);
@@ -315,6 +321,170 @@ async function runLayoutScenarios(page) {
   const dialog = await page.getByRole('dialog').boundingBox();
   assert.ok(dialog.x >= 0 && dialog.y >= 0 && dialog.x + dialog.width <= 900 && dialog.y + dialog.height <= 640, 'confirmation dialog fits the window');
   await page.getByRole('button', { name: 'Leave practice' }).click();
-  console.log('Minimum-sized layouts and controls: passed (900 × 640).');
+  await nav(page, 'Lessons').click();
+  await page.locator('#lesson-page-select').selectOption('42');
+  await check('minimum-size final course page');
+  await page.getByRole('button', { name: 'Start: Community life · paragraph 07' }).click();
+  await check('minimum-size long paragraph with extra-large text');
+  await page.waitForTimeout(100); // let the input's requestAnimationFrame focus complete
+  const firstPosition = await page.evaluate(() => {
+    const current = document.querySelector('#target-text .current').getBoundingClientRect();
+    const input = document.querySelector('#typing-input').getBoundingClientRect();
+    return { currentTop: current.top, currentBottom: current.bottom, inputTop: input.top, inputBottom: input.bottom, height: innerHeight };
+  });
+  assert.ok(firstPosition.currentTop >= 0 && firstPosition.currentBottom <= firstPosition.height &&
+    firstPosition.inputTop >= 0 && firstPosition.inputBottom <= firstPosition.height,
+    `the first character and typing box should be visible together: ${JSON.stringify(firstPosition)}`);
+  const longText = (await page.locator('#target-accessible').textContent()).replace('Practice text: ', '');
+  await page.locator('#typing-input').pressSequentially(longText.slice(0, 110));
+  const following = await page.evaluate(() => {
+    const box = document.querySelector('#target-text');
+    const current = box.querySelector('.current').getBoundingClientRect();
+    const bounds = box.getBoundingClientRect();
+    return { scrollTop: box.scrollTop, currentTop: current.top, currentBottom: current.bottom, top: bounds.top, bottom: bounds.bottom };
+  });
+  assert.ok(following.scrollTop > 0 && following.currentTop >= following.top - 1 && following.currentBottom <= following.bottom + 1,
+    `the current character should follow the passage scroll: ${JSON.stringify(following)}`);
+  await nav(page, 'Overview').click();
+  await page.getByRole('button', { name: 'Leave practice' }).click();
+  console.log('Minimum-sized layouts and controls: passed (900 × 640, including long-passage scrolling).');
 }
-module.exports = { runScenarios, runAdvancedScenarios, runLayoutScenarios, noHorizontalOverflow };
+
+async function runCourseScenarios(page, options = {}) {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const baseline = await recordData(page);
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.stack || error.message));
+  // A 1.1 profile with 500 recent records and a single old lesson. The next
+  // completed session will evict its detailed record, but not its completion.
+  const lesson = { kind: 'lesson', day: '2026-01-02', lessonId: 'home-fj', wpm: 30, accuracy: 90, durationMs: 10000, attempts: 10, mistakes: 1 };
+  const other = { ...lesson, kind: 'test', lessonId: '' };
+  const old = { version: 1, settings: { goalMinutes: 10, keyboard: true, practiceSize: 'standard' }, records: [lesson, ...Array(499).fill(other)] };
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: old });
+  await page.reload();
+  await expectVisible(heading(page, 'Good to see you.'));
+  assert.match(await page.locator('.stat-card').filter({ hasText: 'Lessons practiced' }).textContent(), /1\s*\/ 500/);
+  assert.match(await page.locator('.path-row').first().textContent(), /Meet D and K/, '1.1 completion is imported');
+  await nav(page, 'Lessons').click();
+  assert.equal(await page.locator('.lesson-card').count(), 12);
+  assert.match(await page.locator('#lesson-result-count').textContent(), /1–12 of 500/);
+  if (options.screenshot) {
+    fs.mkdirSync(path.dirname(options.screenshot), { recursive: true });
+    await page.screenshot({ path: options.screenshot });
+  }
+  const controls = page.getByRole('navigation', { name: 'Course pages', exact: true });
+  assert.equal(await controls.getByRole('button', { name: 'Previous page' }).isDisabled(), true);
+  await controls.getByRole('button', { name: 'Next page' }).click();
+  assert.match(await page.locator('#lesson-result-count').textContent(), /13–24 of 500/);
+  assert.equal(await page.locator('#lesson-page-select').inputValue(), '2');
+  await controls.getByRole('button', { name: 'Previous page' }).click();
+  assert.match(await page.locator('#lesson-result-count').textContent(), /1–12 of 500/);
+  await page.locator('#lesson-page-select').selectOption('42');
+  assert.match(await page.locator('#lesson-result-count').textContent(), /493–500 of 500/);
+  assert.equal(await page.locator('.lesson-card').count(), 8);
+  assert.equal(await controls.getByRole('button', { name: 'Next page' }).isDisabled(), true);
+  assert.equal(await page.locator('.lesson-number').last().textContent(), '500');
+  await page.getByRole('button', { name: 'Start: Community life · paragraph 07' }).click();
+  const target = (await page.locator('#target-accessible').textContent()).replace('Practice text: ', '');
+  assert.ok(target.length > 100, 'the last practice is a longer paragraph');
+  await page.locator('#typing-input').pressSequentially(target);
+  await expectVisible(heading(page, 'A little better, already.'));
+  let saved = await recordData(page);
+  assert.equal(saved.records.length, 500);
+  assert.ok(!saved.records.some((row) => row.lessonId === 'home-fj'), 'old detailed record rolled off');
+  assert.ok(saved.completedLessons.includes('home-fj'));
+  assert.ok(saved.completedLessons.includes('paragraph-community-07'));
+  assert.ok(!JSON.stringify(saved).includes(target), 'course text is not saved with progress');
+  await nav(page, 'Lessons').click();
+  await page.locator('#lesson-status').selectOption('practiced');
+  assert.match(await page.locator('#lesson-result-count').textContent(), /1–2 of 2/);
+  assert.equal(await page.locator('.lesson-card').count(), 2);
+  assert.match(await page.locator('.lesson-card').filter({ hasText: 'Find your anchors' }).textContent(), /Practiced/);
+  assert.equal(await page.getByRole('button', { name: 'Practice again: Community life · paragraph 07' }).count(), 1);
+  await page.locator('#lesson-status').selectOption('new');
+  assert.match(await page.locator('#lesson-result-count').textContent(), /1–12 of 498/);
+  await page.locator('#lesson-group').selectOption('Letter warm-ups');
+  assert.match(await page.locator('#lesson-result-count').textContent(), /1–12 of 26/);
+  await page.locator('#lesson-search').fill('Z');
+  assert.equal(await page.locator('.lesson-card').count(), 1);
+  assert.match(await page.locator('.lesson-card').textContent(), /Z · Warm-up/);
+  await page.locator('#lesson-group').selectOption('');
+  await page.locator('#lesson-status').selectOption('all');
+  await page.locator('#lesson-search').fill('500');
+  assert.equal(await page.locator('.lesson-card').count(), 1, 'find lesson by its course number');
+  assert.equal(await page.locator('.lesson-number').textContent(), '500');
+  await page.locator('#lesson-search').fill('nothing-matches-this-lesson');
+  assert.equal(await page.locator('.lesson-card').count(), 0);
+  await page.getByRole('button', { name: 'Clear filters' }).click();
+  assert.equal(await page.locator('.lesson-card').count(), 12);
+  await page.reload();
+  await nav(page, 'Lessons').click();
+  await page.locator('#lesson-status').selectOption('practiced');
+  assert.equal(await page.locator('.lesson-card').count(), 2, 'completions survive reload');
+
+  // Exercise the completed-course state and ignore unrelated/future IDs when
+  // displaying the count, while preserving them in storage for compatibility.
+  await page.evaluate((key) => {
+    const data = JSON.parse(localStorage.getItem(key));
+    data.completedLessons = [...window.KeyBloomContent.lessons.map((item) => item.id), 'future-course'];
+    localStorage.setItem(key, JSON.stringify(data));
+  }, STORAGE_KEY);
+  await page.reload();
+  assert.match(await page.locator('.stat-card').filter({ hasText: 'Lessons practiced' }).textContent(), /500\s*\/ 500/);
+  await expectVisible(page.getByRole('button', { name: /Review the course/ }));
+  await page.getByRole('button', { name: /Review the course/ }).click();
+  assert.match(await page.locator('.page-intro').textContent(), /500 \/ 500 practiced/);
+  await page.locator('#lesson-status').selectOption('new');
+  assert.match(await page.locator('#lesson-result-count').textContent(), /No practices found/);
+  await page.getByRole('button', { name: 'Clear filters' }).click();
+  await page.locator('#lesson-status').selectOption('practiced');
+  assert.match(await page.locator('#lesson-result-count').textContent(), /1–12 of 500/);
+  await nav(page, 'Settings').click();
+  await page.getByRole('button', { name: 'Reset progress', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Reset progress' }).click();
+  saved = await recordData(page);
+  assert.deepEqual(saved.completedLessons, []);
+  assert.deepEqual(saved.records, []);
+  await page.reload();
+  assert.match(await page.locator('.stat-card').filter({ hasText: 'Lessons practiced' }).textContent(), /0\s*\/ 500/);
+  assert.deepEqual(errors, [], 'no course renderer errors');
+  // Restore the original set of records for the shared moved-folder restart.
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: baseline });
+  await page.reload();
+  console.log('500-practice course: passed (paging, search, filters, old-profile migration, rolling history, completion and reset).');
+}
+async function runNarrowPreviewScenarios(page) {
+  await page.setViewportSize({ width: 375, height: 740 });
+  await page.reload();
+  for (const name of ['Overview', 'Lessons', 'Practice', 'My progress', 'Settings']) {
+    await nav(page, name).click();
+    await noHorizontalOverflow(page, `narrow preview ${name}`);
+  }
+  const navigation = await page.evaluate(() => [...document.querySelectorAll('.nav-item')].map((item) => {
+    const rect = item.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, width: rect.width };
+  }));
+  assert.ok(navigation.every((item) => item.width > 0 && item.left >= 0 && item.right <= 375 + 1), 'all navigation buttons fit');
+  for (let i = 1; i < navigation.length; i += 1) assert.ok(navigation[i].left >= navigation[i - 1].right - 1, 'navigation buttons do not overlap');
+  await nav(page, 'Lessons').click();
+  await page.locator('#lesson-page-select').selectOption('42');
+  await page.getByRole('button', { name: 'Start: Community life · paragraph 07' }).click();
+  await page.waitForTimeout(100);
+  await noHorizontalOverflow(page, 'narrow preview long lesson');
+  const visible = await page.evaluate(() => {
+    const view = document.querySelector('#workspace').getBoundingClientRect();
+    const current = document.querySelector('#target-text .current').getBoundingClientRect();
+    const input = document.querySelector('#typing-input').getBoundingClientRect();
+    const keyboard = document.querySelector('.keyboard');
+    return { top: view.top, bottom: view.bottom, currentTop: current.top, currentBottom: current.bottom,
+      inputTop: input.top, inputBottom: input.bottom, keyboardWidth: keyboard.clientWidth, keyboardScroll: keyboard.scrollWidth };
+  });
+  assert.ok(visible.currentTop >= visible.top && visible.currentBottom <= visible.bottom &&
+    visible.inputTop >= visible.top && visible.inputBottom <= visible.bottom,
+    `the first character and input fit in the narrow preview: ${JSON.stringify(visible)}`);
+  assert.ok(visible.keyboardScroll <= visible.keyboardWidth + 2, 'the keyboard fits horizontally');
+  await nav(page, 'Overview').click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  console.log('Narrow browser preview: navigation and long-lesson layout passed.');
+}
+module.exports = { runScenarios, runAdvancedScenarios, runLayoutScenarios, runCourseScenarios, runNarrowPreviewScenarios, noHorizontalOverflow };

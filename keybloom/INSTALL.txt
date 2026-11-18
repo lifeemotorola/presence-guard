@@ -1,4 +1,4 @@
-KEYBLOOM 1.1 — WINDOWS QUICK START
+KEYBLOOM 1.2 — WINDOWS QUICK START
 By Emmanuel Suah
 
 REQUIREMENTS: 64-bit Windows 10 or Windows 11, a physical keyboard, and enough
@@ -14,20 +14,24 @@ needed. The app works offline after download.
 4. Choose "Start your first lesson". Type into the box, following the text and
    the highlighted key. The timer begins with your first keystroke. Correct
    errors with Backspace; corrected errors still count in accuracy.
-5. Open Lessons for the full course. In Practice, choose a timed test, Word
-   Sprint, a focused letter drill, or Practice your own text. Your passage is
-   10–500 printable US keyboard characters and is never saved.
+5. Open Lessons for all 500 practices, including the original 21. Search by
+   title, topic, key, or number; use the topic/progress filters and page controls
+   to browse. Each lesson may be repeated. In Practice, choose a timed test,
+   Word Sprint, a focused letter drill, or Practice your own text. Your passage
+   is 10–500 printable US keyboard characters and is never saved.
 6. Open My progress to see recent results, letters to practice and milestones.
    In Settings you can choose a larger practice text size, change the daily goal,
    show or hide the keyboard, or reset your locally saved progress.
 
-UPDATING FROM KEYBLOOM 1.0
+UPDATING FROM KEYBLOOM 1.0 OR 1.1
 Close the old app, extract this version into a new folder, and open its
-KeyBloom.exe. Your existing progress is stored separately in your Windows
-profile and stays there; do not delete %APPDATA%\KeyBloom if you want to keep
-it. Older sessions did not record letter counts, so new sessions build the
-letter suggestions. After upgrading, use 1.1: saving with the old 1.0 app may
-discard sessions from the new modes. There is no automatic update or cloud backup.
+KeyBloom.exe. Progress stays in your Windows profile; do not delete
+%APPDATA%\KeyBloom if you want to keep it. The original 21 lessons are
+unchanged. Lesson completions still in your recent session history are imported;
+completions already lost from the old 500-session history cannot be recovered.
+Sessions made in 1.0 did not record letter counts. After upgrading, use 1.2 or
+newer: an older version can erase the new completion list when it saves the
+shared profile. There is no automatic update or cloud backup.
 
 WINDOWS SECURITY
 This build is not digitally signed. Windows may show a publisher/reputation
@@ -37,11 +41,13 @@ identifies the file; it does not prove the app is safe. Do not turn off Windows
 security globally.
 
 PRIVACY AND LIMITS
-- Progress summaries and settings are saved in your Windows user profile under
-  %APPDATA%\KeyBloom. KeyBloom saves aggregate letter attempt and error counts
-  for built-in exercises, not the words you type. Your own passages and their
-  letter counts are never saved. Resetting or deleting the profile permanently
-  removes history. There is no account or cloud backup.
+- Practiced lesson IDs, up to 500 recent session summaries, and settings are
+  saved in your Windows user profile under %APPDATA%\KeyBloom. Completion IDs
+  are kept separately, even when old session details roll off. Other statistics
+  and most milestones reflect the retained 500 sessions. KeyBloom saves aggregate
+  letter attempt and error counts for built-in exercises, not the words you type.
+  Your own passages and their letter counts are never saved. Resetting or deleting
+  the profile permanently removes progress and history. There is no cloud backup.
 - The course and visual keyboard use an English (US) QWERTY layout. Other
   physical layouts may not match the on-screen key hints.
 - KeyBloom is an original, independent typing tutor; it is not Mavis Beacon

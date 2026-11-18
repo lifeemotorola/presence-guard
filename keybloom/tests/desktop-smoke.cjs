@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { _electron: electron } = require('playwright');
-const { runScenarios, runAdvancedScenarios, runLayoutScenarios } = require('./browser-scenarios.cjs');
+const { runScenarios, runAdvancedScenarios, runLayoutScenarios, runCourseScenarios, runNarrowPreviewScenarios } = require('./browser-scenarios.cjs');
 
 (async () => {
   const exe = path.resolve(process.env.KEYBLOOM_EXE || path.join(__dirname, '..', 'out', 'KeyBloom-win32-x64', 'KeyBloom.exe'));
@@ -26,6 +26,15 @@ const { runScenarios, runAdvancedScenarios, runLayoutScenarios } = require('./br
     await runScenarios(page, { screenshot: process.env.KEYBLOOM_SCREENSHOT });
     await runAdvancedScenarios(page, { screenshot: process.env.KEYBLOOM_FEATURE_SCREENSHOT });
     await runLayoutScenarios(page);
+    await runCourseScenarios(page, { screenshot: process.env.KEYBLOOM_COURSE_SCREENSHOT });
+    await runNarrowPreviewScenarios(page);
+    // Preserve all course completion IDs across an actual quit and move.
+    await page.evaluate(() => {
+      const key = 'keybloom.progress.v1';
+      const data = JSON.parse(localStorage.getItem(key));
+      data.completedLessons = window.KeyBloomContent.lessons.map((item) => item.id);
+      localStorage.setItem(key, JSON.stringify(data));
+    });
     await desktop.close();
     desktop = null;
     // Upgrades are often extracted to a new folder; verify that changing the
@@ -39,8 +48,11 @@ const { runScenarios, runAdvancedScenarios, runLayoutScenarios } = require('./br
     assert.deepEqual(data.records.map((row) => row.kind), ['test', 'sprint', 'lesson', 'focus', 'custom', 'test', 'test']);
     assert.deepEqual(data.records[4].keyStats, {}, 'custom passage letter counts must not be saved');
     assert.equal(data.settings.practiceSize, 'extra-large');
+    assert.equal(data.completedLessons.length, 500, 'all course completions must survive a moved-folder restart');
+    assert.match(await reopened.locator('.stat-card').filter({ hasText: 'Lessons practiced' }).textContent(), /500\s*\/ 500/);
+    assert.equal(await reopened.getByRole('button', { name: /Review the course/ }).count(), 1);
     assert.ok(!JSON.stringify(data).includes('A <script> grows.'), 'custom passage must not persist across restarts');
-    console.log('Packaged Windows app: security, new features, moved-folder restart, and progress passed.');
+    console.log('Packaged Windows app: 500 practices, security, moved-folder restart, and progress passed.');
   } finally {
     if (desktop) await desktop.close().catch(() => {});
     fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });

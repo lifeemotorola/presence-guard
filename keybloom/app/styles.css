@@ -196,7 +196,7 @@ select { border: 1px solid #e1e9df; border-radius: 8px; background: #fff; paddin
 .typing-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 13px; }
 .typing-header .eyebrow { color: #90a397; }
 .typing-count { color: #6d8572; font-size: 11px; font-weight: 700; }
-.target-text { font: 22px/1.8 Consolas, 'Courier New', monospace; letter-spacing: .1px; color: #687e6d; white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 0 16px; min-height: 82px; }
+.target-text { font: 22px/1.8 Consolas, 'Courier New', monospace; letter-spacing: .1px; color: #687e6d; white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 0 16px; min-height: 82px; max-height: clamp(120px, 25vh, 220px); overflow-y: auto; overscroll-behavior: contain; }
 .target-char.correct { color: #477a56; }
 .target-char.wrong { color: #ae543c; background: #f9ded2; border-radius: 3px; }
 .target-char.current { border-left: 2px solid #d47d5c; margin-left: -2px; background: #eef4e8; }
@@ -343,4 +343,51 @@ html[data-practice-size="extra-large"] .typing-input { font-size: 23px; }
 @media (max-width: 760px) {
   .custom-layout, .milestone-grid { grid-template-columns: 1fr; }
   .focus-list { grid-template-columns: 1fr; }
+}
+
+/* A searchable, paged course stays comfortable even with 500 practices. */
+.course-toolbar { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, .85fr); gap: 13px; align-items: end; padding: 17px; margin-bottom: 25px; }
+.course-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.course-field > span { color: #69816d; font-size: 9px; font-weight: 800; letter-spacing: 1.1px; }
+.course-field input, .course-field select { width: 100%; min-width: 0; height: 40px; border: 1px solid #dfe8dd; border-radius: 9px; background: #fafcf8; padding: 9px 11px; color: #365242; font-size: 12px; }
+.course-field select { padding-right: 25px; }
+.course-field input::placeholder { color: #788e7d; }
+.course-results-head { margin-bottom: 14px; }
+.course-results-head h2 { margin-top: 5px; }
+.course-results-head p { color: #657b6a; }
+.course-empty { padding: 25px; color: #667e6c; line-height: 1.6; font-size: 12px; }
+.course-pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 16px; margin: 20px 0 10px; color: #617b68; font-size: 11px; font-weight: 700; }
+.course-pagination .btn { min-width: 106px; }
+@media (max-width: 760px) {
+  .course-toolbar { grid-template-columns: 1fr; }
+}
+.course-pagination.top { justify-content: flex-start; margin: 0 0 14px; }
+.course-page-label { display: inline-flex; align-items: center; gap: 7px; }
+.course-page-label select { height: 38px; min-width: 64px; background: #fff; padding: 6px 24px 6px 9px; font-size: 12px; }
+.course-clear { border: 0; padding: 3px 5px; background: transparent; color: #416f51; text-decoration: underline; font-weight: 700; }
+@media (max-width: 760px) {
+  .page-intro { align-items: flex-start; flex-wrap: wrap; }
+}
+
+.typing-caption { display: inline-flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; color: #718478; font-size: 10px; text-align: right; }
+
+/* Keep the browser preview navigable on narrow displays; the desktop app's
+   supported minimum window remains 900 × 640. */
+@media (max-width: 600px) {
+  .shell { flex-direction: column; }
+  .sidebar { width: 100%; height: auto; flex: 0 0 auto; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 9px 12px; overflow: visible; }
+  .brand { flex: 0 0 100%; padding: 0 0 8px; }
+  .brand-mark { width: 30px; height: 30px; padding-bottom: 6px; }
+  .brand-mark i, .brand-mark b { top: 5px; }
+  .nav-caption, .sidebar-bottom, .nav-number { display: none; }
+  .nav-list { flex-direction: row; min-width: 0; gap: 2px; }
+  .nav-list[aria-label="Pages"] { flex: 0 0 80%; }
+  .nav-list[aria-label="Preferences"] { flex: 0 0 20%; }
+  .nav-item { flex: 1 1 0; min-width: 0; min-height: 34px; justify-content: center; gap: 4px; padding: 7px 2px; font-size: 9px; text-align: center; }
+  .nav-item svg { width: 14px; height: 14px; }
+  .workspace { height: auto; min-height: 0; }
+  .section-head, .run-heading, .run-top, .setting-row { flex-wrap: wrap; }
+  .key-row, .keyboard { gap: 3px; }
+  .key { font-size: 9px; }
+  .key.wide, .key.shift { font-size: 7px; }
 }

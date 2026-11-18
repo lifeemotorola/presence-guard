@@ -8,9 +8,11 @@ const C = require('../app/content.js');
 function lesson(text = 'abcd') { return new E.TypingRun({ texts: [text], kind: 'lesson' }); }
 function timed(durationMs = 60000) { return new E.TypingRun({ texts: ['ab', 'cd'], kind: 'test', durationMs }); }
 
-test('the original course covers the full alphabet and has unique, usable lessons', () => {
-  assert.equal(C.lessons.length, 21);
+test('the expanded course covers the full alphabet and has unique, usable lessons', () => {
+  assert.equal(C.lessons.length, 500);
   assert.equal(new Set(C.lessons.map((x) => x.id)).size, C.lessons.length);
+  assert.equal(new Set(C.lessons.map((x) => x.title)).size, C.lessons.length);
+  assert.equal(new Set(C.lessons.map((x) => x.text.toLowerCase())).size, C.lessons.length, 'each practice has distinct text');
   assert.ok(C.lessons.every((x) => /^[a-z0-9-]+$/.test(x.id) && x.title && x.group && x.tip && x.text.length > 20));
   assert.ok(C.lessons.every((x) => /^[\x20-\x7e]+$/.test(x.text)), 'the course uses printable US keyboard characters');
   const combined = C.lessons.map((x) => x.text.toLowerCase()).join('');
@@ -21,7 +23,7 @@ test('the original course covers the full alphabet and has unique, usable lesson
 test('course introduces letters before asking for them in drills', () => {
   const additions = ['fj', 'dk', 'sl', 'a;', 'gh', '', 'ru', 'ty', 'ei', 'wo', 'qp', '', 'vm', 'bn', 'c,', 'x.', 'z/', '', '0123456789', "'?!", ''];
   const available = new Set([' ']);
-  C.lessons.forEach((item, index) => {
+  C.lessons.slice(0, 21).forEach((item, index) => {
     for (const char of additions[index].toLowerCase()) available.add(char);
     for (const char of item.text.toLowerCase()) assert.ok(available.has(char), `${item.id} uses ${JSON.stringify(char)} too early`);
   });
@@ -293,4 +295,132 @@ test('old profiles gain a default text size and invalid sizes are ignored', () =
   assert.equal(E.sanitizeProfile({ settings: { keyboard: false }, records: [] }).settings.practiceSize, 'standard');
   assert.equal(E.sanitizeProfile({ settings: { practiceSize: 'extra-large' } }).settings.practiceSize, 'extra-large');
   assert.equal(E.sanitizeProfile({ settings: { practiceSize: 'giant' } }).settings.practiceSize, 'standard');
+});
+
+test('all 500 course practices have stable IDs, distinct text, and a usable typing run', () => {
+  const Course = require('../app/course.js');
+  const first = Course.createExtendedLessons();
+  const second = Course.createExtendedLessons();
+  assert.equal(first.length, 479);
+  assert.deepEqual(first, second, 'generated content must not change on restart');
+  const originalHash = require('node:crypto').createHash('sha256').update(JSON.stringify(C.lessons.slice(0, 21))).digest('hex');
+  assert.equal(originalHash, '24faa6ac225702d197d74d893244f79065631674aa9652d95a2eea0d1b6f5ec2', 'original 21 lessons remain unchanged');
+  assert.deepEqual(C.lessons.slice(0, 21).map((item) => item.id), [
+    'home-fj', 'home-dk', 'home-sl', 'home-a-semicolon', 'home-gh', 'home-words',
+    'top-ru', 'top-ty', 'top-ei', 'top-wo', 'top-qp', 'top-words',
+    'bottom-vm', 'bottom-bn', 'bottom-c-comma', 'bottom-x-period', 'bottom-z-slash',
+    'shift', 'numbers', 'punctuation', 'everyday',
+  ], 'existing lesson IDs and order are retained');
+  for (const item of C.lessons) {
+    assert.equal(item.text.trim(), item.text, item.id);
+    assert.ok(item.text.length >= 21 && item.text.length <= 500, item.id);
+    assert.ok(item.minutes >= 1 && item.minutes <= 4, item.id);
+    assert.ok(/^[\x20-\x7e]+$/.test(item.text), item.id);
+    const run = new E.TypingRun({ kind: 'lesson', texts: [item.text] });
+    run.input(item.text[0], 0);
+    const result = run.input(item.text, 10000);
+    assert.equal(result.finished, true, item.id);
+    assert.equal(result.correct, item.text.length, item.id);
+  }
+});
+
+test('the extended course has varied topics, valid target letters and punctuation', () => {
+  const Course = require('../app/course.js');
+  const extended = Course.createExtendedLessons();
+  const groups = Object.fromEntries([...new Set(extended.map((x) => x.group))]
+    .map((name) => [name, extended.filter((item) => item.group === name).length]));
+  assert.deepEqual(groups, {
+    'Letter warm-ups': 26, 'Letter combinations': 26, 'Letter word practice': 26,
+    'Capital letter practice': 26, 'Letter sentences': 26, 'Numbers and counting': 50,
+    'Punctuation practice': 50, 'Everyday sentences': 100, 'Real-world practice': 100, 'Paragraph practice': 49,
+  });
+  for (const [key, list, sentence] of Course.letterSets) {
+    const words = list.split(' ');
+    assert.equal(words.length, 10, key);
+    assert.equal(new Set(words).size, words.length, key);
+    assert.ok(words.every((word) => word.includes(key)), key);
+    assert.ok(sentence.toLowerCase().includes(key), key);
+  }
+  for (const [id, _title, symbol, texts] of Course.punctuationSets) {
+    assert.equal(texts.length, 5, id);
+    assert.ok(texts.every((text) => text.includes(symbol)), id);
+  }
+  for (const [id, _title, texts] of [...Course.everydaySets, ...Course.practicalSets]) {
+    assert.equal(texts.length, 10, id);
+    assert.equal(new Set(texts).size, 10, id);
+  }
+  const shortTexts = [...Course.everydaySets, ...Course.practicalSets, ...Course.punctuationSets].flatMap((set) => set.at(-1));
+  for (const [id, _title, paragraphs] of Course.paragraphSets) {
+    assert.equal(paragraphs.length, 7, id);
+    assert.ok(paragraphs.every((paragraph) => paragraph.length > 100 && !shortTexts.some((text) => paragraph.includes(text))), id);
+  }
+  for (const [key, words] of Object.entries(Course.capitalWords)) {
+    assert.equal(words.split(' ').length, 5, key);
+    assert.ok(words.split(' ').every((word) => word.startsWith(key.toUpperCase())), key);
+  }
+  for (const item of extended.filter((lesson) => lesson.id.startsWith('number-'))) {
+    assert.ok(item.text.includes(item.id.at(-1)), `${item.id} must include its target digit`);
+  }
+});
+
+test('completed lessons migrate from old history and survive the 500-record rolling limit', () => {
+  const lessonRecord = { kind: 'lesson', day: '2026-01-02', lessonId: 'home-fj', wpm: 30, accuracy: 90, durationMs: 10000, attempts: 10, mistakes: 1 };
+  const practiceRecord = { ...lessonRecord, kind: 'test', lessonId: '' };
+  const oldProfile = { records: [lessonRecord, ...Array(499).fill(practiceRecord)] };
+  const imported = E.sanitizeProfile(oldProfile);
+  assert.deepEqual(imported.completedLessons, ['home-fj']);
+  const newer = E.addRecord(imported, { kind: 'test', finished: true, attempts: 10, mistakes: 1, accuracy: 90, wpm: 30, elapsedMs: 10000 }, new Date(2026, 0, 3));
+  assert.equal(newer.records.length, 500);
+  assert.ok(!newer.records.some((item) => item.lessonId === 'home-fj'), 'old detailed session rolled off');
+  assert.deepEqual(newer.completedLessons, ['home-fj'], 'completion remains recorded');
+  assert.equal(E.stats(newer).lessonsCompleted, 1);
+  assert.equal(E.recommendedLesson(C.lessons, newer).id, 'home-dk');
+});
+
+test('all 500 distinct lessons can remain completed independently of recent sessions', () => {
+  const ids = C.lessons.map((item) => item.id);
+  const profile = E.sanitizeProfile({ completedLessons: [...ids, ids[0], '<script>'], records: [] });
+  assert.equal(profile.completedLessons.length, 500);
+  assert.equal(E.stats(profile).lessonsCompleted, 500);
+  assert.equal(E.milestones(profile).find((item) => item.id === 'lessons').earned, true);
+  assert.equal(E.recommendedLesson(C.lessons, profile).id, ids[0], 'completed course can be reviewed');
+  assert.ok(!JSON.stringify(profile).includes('<script>'));
+  const reset = E.defaultProfile();
+  assert.deepEqual(reset.completedLessons, []);
+});
+
+test('completion IDs are bounded, deduplicated, and survive even without session records', () => {
+  const many = Array.from({ length: E.MAX_COMPLETED_LESSONS + 10 }, (_, i) => `lesson-${i}`);
+  const clean = E.sanitizeProfile({ completedLessons: [...many, many.at(-1), null, 'unsafe/anything'] });
+  assert.ok(clean.completedLessons.length <= E.MAX_COMPLETED_LESSONS);
+  assert.equal(new Set(clean.completedLessons).size, clean.completedLessons.length);
+  assert.ok(clean.completedLessons.includes(many.at(-1)));
+  assert.ok(!clean.completedLessons.includes('unsafe/anything'));
+  assert.deepEqual(clean.records, []);
+});
+
+
+test('completing all 500 and repeating lessons beyond the history limit preserves every completion', () => {
+  const date = new Date(2026, 0, 2);
+  const done = { kind: 'lesson', finished: true, attempts: 20, mistakes: 0, accuracy: 100, wpm: 20, elapsedMs: 12000 };
+  let profile = E.defaultProfile();
+  for (const item of C.lessons) profile = E.addRecord(profile, done, date, item.id);
+  assert.equal(profile.records.length, 500);
+  assert.equal(profile.completedLessons.length, 500);
+  for (let index = 0; index < 505; index += 1) profile = E.addRecord(profile, done, date, 'home-fj');
+  profile = E.sanitizeProfile(JSON.parse(JSON.stringify(profile))); // quit and reload
+  assert.equal(profile.records.length, E.MAX_RECORDS);
+  assert.ok(profile.records.every((row) => row.lessonId === 'home-fj'), 'other detailed sessions rolled off');
+  assert.equal(profile.completedLessons.length, 500, 'repeats do not duplicate or erase completions');
+  assert.deepEqual(new Set(profile.completedLessons), new Set(C.lessons.map((item) => item.id)));
+  assert.equal(E.stats(profile).lessonsCompleted, 500);
+  assert.equal(E.recommendedLesson(C.lessons, profile).id, C.lessons[0].id);
+});
+
+test('a current course count ignores unknown IDs without throwing them away', () => {
+  const profile = E.sanitizeProfile({ completedLessons: ['home-fj', 'future-course', 'other-course'] });
+  const allowed = new Set(C.lessons.map((item) => item.id));
+  assert.equal(E.stats(profile, undefined, allowed).lessonsCompleted, 1);
+  assert.equal(E.milestones(profile, allowed).find((item) => item.id === 'lessons').current, 1);
+  assert.deepEqual(profile.completedLessons, ['home-fj', 'future-course', 'other-course']);
 });

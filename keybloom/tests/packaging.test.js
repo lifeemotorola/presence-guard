@@ -14,6 +14,8 @@ test('the app has a local entry, stylesheet, scripts, icons and illustration', (
     assert.ok(!/^[a-z]+:/i.test(match[1]), `remote resource: ${match[1]}`);
     assert.ok(fs.existsSync(path.join(ROOT, 'app', match[1])), `missing: ${match[1]}`);
   }
+  assert.ok(html.indexOf('course.js') < html.indexOf('content.js'), 'course must load before the content module');
+  assert.match(html, /src="course\.js"/);
   for (const file of ['app/assets/studio-illustration.jpg', 'app/assets/icon.ico', 'app/assets/icon.png', 'desktop/main.js', 'INSTALL.txt']) {
     assert.ok(fs.existsSync(path.join(ROOT, file)), `missing: ${file}`);
   }
@@ -38,7 +40,7 @@ test('Windows package has an explicit publisher and pinned dependencies', () => 
   assert.equal(pkg.author, 'Emmanuel Suah');
   assert.equal(pkg.license, 'GPL-2.0-or-later');
   assert.equal(pkg.main, 'desktop/main.js');
-  assert.equal(pkg.version, '1.1.0');
+  assert.equal(pkg.version, '1.2.0');
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[''].version, pkg.version);
   for (const [name, version] of Object.entries(pkg.devDependencies)) {
