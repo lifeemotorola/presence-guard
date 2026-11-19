@@ -1,3 +1,4 @@
+/* Test-only OBS declarations. Copyright (C) 2026 Emmanuel Suah. GPL-2.0-or-later. */
 #pragma once
 #include <cstdint>
 

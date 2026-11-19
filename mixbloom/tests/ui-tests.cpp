@@ -256,6 +256,23 @@ int main(int argc, char **argv)
 	check(fakeMeters() == 0 && fakeAcquired() == fakeReleased(),
 	      "closing the dock detaches meters and releases references");
 	fakeReset();
+	{
+		MixDock emptyDock;
+		emptyDock.resize(320, 600);
+		emptyDock.show();
+		app.processEvents();
+		auto *empty = emptyDock.findChild<QFrame *>("emptyCard");
+		check(empty && empty->isVisible() && fakeWrites() == 0, "empty setup explains how to add a source");
+		auto &newSource = fakeAdd("new", "New microphone", OBS_SOURCE_AUDIO);
+		waitMs(1200);
+		check(card(emptyDock, "new") && !empty->isVisible(), "new OBS audio sources appear automatically");
+		newSource.removed = true;
+		waitMs(1200);
+		check(!card(emptyDock, "new") && empty->isVisible(),
+		      "empty state returns when the last source disappears");
+	}
+	QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+	fakeReset();
 
 	/* A clean representative fixture for the CI screenshot. */
 	fakeAdd("mic", "Studio microphone", OBS_SOURCE_AUDIO).gain = 0.55f;

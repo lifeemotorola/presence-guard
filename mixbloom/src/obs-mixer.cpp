@@ -208,6 +208,9 @@ MeterTap::MeterTap(const std::string &uuid) : impl_(std::make_unique<Impl>())
 
 MeterTap::~MeterTap()
 {
+	/* Temporarily pin the original source while OBS disconnects the meter.
+	 * The dock does not hold strong references between refreshes. */
+	SourceRef source(impl_->source ? obs_weak_source_get_source(impl_->source) : nullptr);
 	if (impl_->meter) {
 		/* OBS serializes callback invocation/removal with its callback mutex. */
 		obs_volmeter_remove_callback(impl_->meter, &Impl::update, impl_.get());

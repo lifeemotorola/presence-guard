@@ -6,8 +6,10 @@ Copyright (C) 2026 Emmanuel Suah. GPL-2.0-or-later; no warranty.
 #include "fake-obs.hpp"
 #include <obs-module.h>
 
+#include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <memory>
 #include <thread>
 
 static int checks = 0, failures = 0;
@@ -93,6 +95,21 @@ int main()
 		      "audio-thread callback publishes the highest channel through atomics");
 	}
 	check(fakeMeters() == 0, "meter callback is removed and meter destroyed");
+	{
+		auto meter = std::make_unique<MeterTap>("mic-id");
+		std::atomic<bool> running{true}, started{false};
+		std::thread audio([&] {
+			started.store(true);
+			while (running.load())
+				fakeEmitPeak("mic-id", -20.0f, -10.0f);
+		});
+		while (!started.load())
+			std::this_thread::yield();
+		meter.reset();
+		running.store(false);
+		audio.join();
+		check(fakeMeters() == 0, "meter teardown is safe while simulated audio callbacks run");
+	}
 	{
 		SourceIdentity identity("mic-id");
 		check(identity.stillCurrent(), "confirmation identity initially matches the source");
