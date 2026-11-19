@@ -56,7 +56,22 @@ try {
         if ($obs.HasExited) { break }
     }
     if (!$found) { throw 'OBS did not log the MixBloom module load within 90 seconds.' }
-    Write-Host 'Real OBS 33.0.1 loaded the packaged MixBloom DLL in portable mode.'
+    # Module load occurs early in startup. Give the frontend and its initial
+    # scene collection time to initialize, and catch an immediate crash.
+    Start-Sleep -Seconds 5
+    $obs.Refresh()
+    if ($obs.HasExited) { throw "OBS exited shortly after module load (code $($obs.ExitCode))." }
+    Write-Host 'Real OBS 33.0.1 loaded the packaged MixBloom DLL and remained running in portable mode.'
+    # If the runner exposed a main window, also try a normal close. This is
+    # optional because hosted sessions can suppress windows or show first-run
+    # UI; the finally block force-cleans any process that remains.
+    if ($obs.CloseMainWindow() -and $obs.WaitForExit(15000)) {
+        $obs.Refresh()
+        if ($obs.ExitCode -ne 0) { throw "OBS exited with code $($obs.ExitCode) after a normal close request." }
+        Write-Host 'OBS exited cleanly after a normal window-close request.'
+    } else {
+        Write-Warning 'A normal window close was unavailable or timed out; cleanup will stop OBS.'
+    }
     Write-Host 'This is a load smoke test only; it does not test real devices or the viewer output.'
 }
 catch {

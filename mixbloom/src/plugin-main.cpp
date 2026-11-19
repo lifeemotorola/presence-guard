@@ -9,6 +9,7 @@ any later version. See LICENSE. This program comes WITHOUT ANY WARRANTY.
 #include <obs-frontend-api.h>
 #include <plugin-support.h>
 #include <QMetaObject>
+#include <QPointer>
 
 #include "mix-dock.hpp"
 
@@ -22,7 +23,7 @@ MODULE_EXPORT const char *obs_module_description(void)
 }
 
 #define MIXBLOOM_DOCK_ID "mixbloom-dock"
-static MixDock *dock = nullptr;
+static QPointer<MixDock> dock;
 
 static void frontendEvent(enum obs_frontend_event event, void *)
 {
@@ -35,12 +36,22 @@ static void frontendEvent(enum obs_frontend_event event, void *)
 		/* A receiver-bound queued call runs on the GUI thread and is dropped
 		 * by Qt if the dock has already been destroyed. */
 		QMetaObject::invokeMethod(
-			dock, [target = dock] { target->suspendForCollectionChange(); }, Qt::QueuedConnection);
+			dock.data(),
+			[target = dock] {
+				if (target)
+					target->suspendForCollectionChange();
+			},
+			Qt::QueuedConnection);
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
 	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
 		QMetaObject::invokeMethod(
-			dock, [target = dock] { target->resumeAfterCollectionChange(); }, Qt::QueuedConnection);
+			dock.data(),
+			[target = dock] {
+				if (target)
+					target->resumeAfterCollectionChange();
+			},
+			Qt::QueuedConnection);
 		break;
 	default:
 		break;
@@ -50,9 +61,9 @@ static void frontendEvent(enum obs_frontend_event event, void *)
 bool obs_module_load(void)
 {
 	dock = new MixDock();
-	if (!obs_frontend_add_dock_by_id(MIXBLOOM_DOCK_ID, obs_module_text("MixBloom.DockTitle"), dock)) {
+	if (!obs_frontend_add_dock_by_id(MIXBLOOM_DOCK_ID, obs_module_text("MixBloom.DockTitle"), dock.data())) {
 		obs_log(LOG_WARNING, "failed to register the MixBloom dock");
-		delete dock;
+		delete dock.data();
 		dock = nullptr;
 		return false;
 	}
