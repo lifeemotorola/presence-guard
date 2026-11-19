@@ -405,7 +405,7 @@ void MixDock::buildUi()
 	brandText->addWidget(makeLabel("Studio sound, beautifully routed.", "tagline", hero, true));
 	brandRow->addLayout(brandText, 1);
 	heroLayout->addLayout(brandRow);
-	heroLayout->addWidget(makeLabel("YOUR OBS SOURCES  /  NO EXTRA HARDWARE", "heroFoot", hero, true));
+	heroLayout->addWidget(makeLabel("EXISTING OBS SOURCES  /  LOCAL CONTROL", "heroFoot", hero, true));
 	content->addWidget(hero);
 
 	auto *noticeFrame = new QFrame(body);
