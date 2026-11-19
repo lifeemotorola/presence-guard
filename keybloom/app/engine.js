@@ -17,9 +17,12 @@
   const PRACTICE_SIZES = ['standard', 'large', 'extra-large'];
   const CUSTOM_MIN = 10;
   const CUSTOM_MAX = 500;
+  const IMPORT_MAX_BYTES = 256 * 1024;
+  const IMPORT_MAX_CHARS = 80000;
   const LETTERS = 'abcdefghijklmnopqrstuvwxyz';
-  const KINDS = new Set(['lesson', 'test', 'sprint', 'focus', 'custom']);
-  const UNTIMED = new Set(['lesson', 'focus', 'custom']);
+  const KINDS = new Set(['lesson', 'test', 'sprint', 'focus', 'custom', 'import', 'story']);
+  const UNTIMED = new Set(['lesson', 'focus', 'custom', 'import', 'story']);
+  const PRIVATE_KINDS = new Set(['custom', 'import']);
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
@@ -31,6 +34,25 @@
     if (text.length > CUSTOM_MAX) return { text, error: `Please use no more than ${CUSTOM_MAX} characters.` };
     if (!/^[\x20-\x7e]+$/.test(text)) return { text, error: 'Use printable US keyboard characters only; emojis and accented characters are not supported yet.' };
     return { text, error: '' };
+  }
+
+  // File content is never saved. Convert common word-processor punctuation,
+  // accents, and whitespace to typable US-QWERTY characters, but reject other
+  // characters instead of silently dropping or truncating the user's words.
+  function prepareImportedText(value) {
+    const original = typeof value === 'string' ? value.replace(/^\uFEFF/, '') : '';
+    const text = original
+      .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+      .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+      .replace(/\u2014/g, '--').replace(/[\u2010-\u2013\u2015]/g, '-')
+      .replace(/\u2026/g, '...')
+      .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ').trim();
+    const changed = text !== original.trim();
+    if (text.length < CUSTOM_MIN) return { text, changed, error: `Please choose a file with at least ${CUSTOM_MIN} characters of text.` };
+    if (text.length > IMPORT_MAX_CHARS) return { text: '', changed, error: `Please choose a file with no more than ${IMPORT_MAX_CHARS.toLocaleString('en-US')} characters after formatting.` };
+    if (!/^[\x20-\x7e]+$/.test(text)) return { text: '', changed, error: 'This file contains unsupported characters. Use English text and printable US keyboard characters; emoji and other scripts are not supported.' };
+    return { text, changed, error: '' };
   }
 
   function correctPositions(target, typed) {
@@ -45,7 +67,8 @@
     let count = 0;
     for (const match of target.matchAll(/[a-z0-9]+(?:'[a-z]+)?/gi)) {
       const end = match.index + match[0].length;
-      if (end <= typed.length && typed.slice(match.index, end) === match[0]) count += 1;
+      if (end > typed.length) break;
+      if (typed.slice(match.index, end) === match[0]) count += 1;
     }
     return count;
   }
@@ -87,6 +110,10 @@
       this.activeMs = 0;
       this.resumedAt = null;
       this.finalElapsed = null;
+      this.scoredTarget = null;
+      this.scoredTyped = null;
+      this.scoredCorrect = 0;
+      this.scoredWords = 0;
     }
 
     get target() { return this.texts[this.index]; }
@@ -123,6 +150,19 @@
       return this.snapshot(now);
     }
 
+    // Long imported texts and stories can take a while. Allow a user to finish
+    // an active session early and keep only its anonymous summary.
+    finishEarly(now) {
+      this.tick(now);
+      if (!this.finished && this.started && (this.kind === 'story' || this.kind === 'import')) {
+        this.finalElapsed = this.elapsed(now);
+        this.finished = true;
+        this.reason = 'stopped';
+        this.paused = false;
+      }
+      return this.snapshot(now);
+    }
+
     input(value, now) {
       this.tick(now);
       if (this.finished || this.paused) return this.snapshot(now);
@@ -138,9 +178,9 @@
         const expected = this.target[change.start + i];
         const wrong = change.text[i] !== expected;
         if (wrong) this.mistakes += 1;
-        // Never derive or save per-letter data from personal custom text.
+        // Never derive or save per-letter data from personal passages or files.
         const letter = expected && expected.toLowerCase();
-        if (this.kind !== 'custom' && letter && /^[a-z]$/.test(letter)) {
+        if (!PRIVATE_KINDS.has(this.kind) && letter && /^[a-z]$/.test(letter)) {
           const counts = this.keyStats[letter] || { attempts: 0, mistakes: 0 };
           counts.attempts += 1;
           if (wrong) counts.mistakes += 1;
@@ -166,8 +206,15 @@
 
     snapshot(now) {
       const elapsedMs = this.elapsed(now);
-      const correct = this.finishedCorrect + correctPositions(this.target, this.typed);
-      const currentIncorrect = this.typed.length - correctPositions(this.target, this.typed);
+      // Timer ticks should not rescan a long passage when nothing was typed.
+      if (this.scoredTarget !== this.target || this.scoredTyped !== this.typed) {
+        this.scoredTarget = this.target;
+        this.scoredTyped = this.typed;
+        this.scoredCorrect = correctPositions(this.target, this.typed);
+        this.scoredWords = correctWords(this.target, this.typed);
+      }
+      const correct = this.finishedCorrect + this.scoredCorrect;
+      const currentIncorrect = this.typed.length - this.scoredCorrect;
       const accuracy = this.attempts ? Math.round((this.attempts - this.mistakes) * 100 / this.attempts) : null;
       const wpm = elapsedMs >= 1000 ? Math.round(correct / 5 / (elapsedMs / 60000)) : 0;
       return {
@@ -176,7 +223,7 @@
         elapsedMs, remainingMs: this.durationMs === null ? null : Math.max(0, this.durationMs - elapsedMs),
         attempts: this.attempts, mistakes: this.mistakes, correct,
         uncorrected: this.finishedIncorrect + currentIncorrect,
-        words: this.finishedWords + correctWords(this.target, this.typed),
+        words: this.finishedWords + this.scoredWords,
         accuracy, wpm,
         keyStats: Object.fromEntries(Object.entries(this.keyStats).map(([key, counts]) => [key, { ...counts }])),
       };
@@ -203,7 +250,7 @@
   }
 
   // Retain only bounded counts for known ASCII letters. Never retain a
-  // passage, the keys actually typed, or custom-exercise letter statistics.
+  // passage, the keys actually typed, or personal-text letter statistics.
   function sanitizeKeyStats(value, attempts, mistakes) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
     const result = {};
@@ -252,7 +299,7 @@
         attempts, mistakes,
         words: clamp(Math.round(finite(item.words)), 0, 1000000),
         uncorrected: clamp(Math.round(finite(item.uncorrected)), 0, 1000000),
-        keyStats: item.kind === 'custom' ? {} : sanitizeKeyStats(item.keyStats, attempts, mistakes),
+        keyStats: PRIVATE_KINDS.has(item.kind) ? {} : sanitizeKeyStats(item.keyStats, attempts, mistakes),
       };
     });
     // Import previous versions' completed lessons from their saved records.
@@ -270,7 +317,7 @@
       wpm: result.wpm, accuracy: result.accuracy, durationMs: result.elapsedMs,
       attempts: result.attempts, mistakes: result.mistakes, words: result.words,
       uncorrected: result.uncorrected,
-      keyStats: result.kind === 'custom' ? {} : result.keyStats,
+      keyStats: PRIVATE_KINDS.has(result.kind) ? {} : result.keyStats,
     };
     return sanitizeProfile({ ...cleaned, records: [...cleaned.records, raw] });
   }
@@ -358,7 +405,7 @@
     return lessons.find((item) => !completed.has(item.id)) || lessons[0] || null;
   }
 
-  return { STORAGE_KEY, MAX_RECORDS, MAX_COMPLETED_LESSONS, GOALS, PRACTICE_SIZES, CUSTOM_MIN, CUSTOM_MAX, LETTERS,
-    TypingRun, prepareCustomText, correctPositions, correctWords, insertedRange, sanitizeKeyStats,
+  return { STORAGE_KEY, MAX_RECORDS, MAX_COMPLETED_LESSONS, GOALS, PRACTICE_SIZES, CUSTOM_MIN, CUSTOM_MAX, IMPORT_MAX_BYTES, IMPORT_MAX_CHARS, LETTERS,
+    TypingRun, prepareCustomText, prepareImportedText, correctPositions, correctWords, insertedRange, sanitizeKeyStats,
     localDay, dayNumber, defaultProfile, sanitizeProfile, addRecord, streak, longestStreak, stats, weakKeys, milestones, recommendedLesson };
 });

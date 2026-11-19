@@ -7,6 +7,7 @@
   'use strict';
   const E = window.KeyBloomEngine;
   const C = window.KeyBloomContent;
+  const S = window.KeyBloomStories;
   const $ = (id) => document.getElementById(id);
   const icon = (name) => `<svg aria-hidden="true"><use href="#i-${name}"></use></svg>`;
   const esc = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -14,6 +15,8 @@
     profile: E.defaultProfile(), screen: 'home', run: null, runInfo: null, timer: null,
     storageWarning: '', testSeconds: 60, customDraft: '', dialogAction: null, dialogCancel: null, result: null, toastTimer: null,
     lessonQuery: '', lessonGroup: '', lessonStatus: 'all', lessonPage: 1,
+    storyId: '', fileDraft: null, fileError: '', fileReading: false, fileReadToken: 0,
+    targetPaint: null,
   };
 
   function loadProfile() {
@@ -168,8 +171,12 @@
     const selected = weak.length ? weak[0].key : 'f';
     const options = [...E.LETTERS].map((letter) => `<option value="${letter}" ${letter === selected ? 'selected' : ''}>${letter.toUpperCase()}</option>`).join('');
     const lengths = [[30, '30 seconds'], [60, '1 minute'], [180, '3 minutes'], [300, '5 minutes']];
-    return `${pageIntro('PRACTICE YOUR WAY', 'Find your flow.', 'Choose a friendly challenge, work on a tricky key, or practice with your own words.')}
-      <div class="practice-grid"><section class="card challenge-card"><div class="challenge-icon">${icon('clock')}</div><h2>Typing test</h2><p>Find a steady rhythm with a timed collection of short, original passages. Focus on accuracy and let your speed follow.</p>
+    return `${pageIntro('PRACTICE YOUR WAY', 'Find your flow.', 'Choose a challenge, explore a story, or practice with your own words.')}
+      <div class="practice-grid"><section class="card challenge-card story-challenge"><div class="challenge-icon peach">${icon('book')}</div><div class="feature-tag">80 STORIES · 700+ WORDS EACH</div><h2>Story typing</h2><p>Discover a randomly chosen tale, from folk stories and adventures to science fiction and everyday life.</p>
+      <div class="mini-note">${icon('spark')} A different journey every time</div><button class="btn btn-dark" data-action="open-stories">Explore a story ${icon('arrow')}</button></section>
+      <section class="card challenge-card import-challenge"><div class="challenge-icon sky">${icon('upload')}</div><div class="feature-tag">YOUR WORDS · YOUR PACE</div><h2>Import a text file</h2><p>Turn a <strong>.txt</strong> file on your device into a longer, private typing practice.</p>
+      <div class="mini-note">${icon('shield')} File contents stay on this device</div><button class="btn btn-dark" data-action="open-import">Choose a file ${icon('arrow')}</button></section>
+      <section class="card challenge-card"><div class="challenge-icon">${icon('clock')}</div><h2>Typing test</h2><p>Find a steady rhythm with a timed collection of short, original passages. Focus on accuracy and let your speed follow.</p>
       <label class="select-label" for="test-duration">CHOOSE A TIME <select id="test-duration">${lengths.map(([seconds, label]) => `<option value="${seconds}" ${ui.testSeconds === seconds ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></label>
       <button class="btn btn-dark" data-action="start-test">Start a typing test ${icon('arrow')}</button></section>
       <section class="card challenge-card"><div class="challenge-icon peach">${icon('spark')}</div><h2>Word sprint</h2><p>How many words can you type correctly in 45 seconds? A light-hearted game to build rhythm, one word at a time.</p>
@@ -178,7 +185,8 @@
       <label class="select-label" for="focus-key">CHOOSE A LETTER <select id="focus-key">${options}</select></label>
       <div class="mini-note focus-suggestion">${icon('leaf')} ${weak.length ? `Suggested from recent mistakes: ${esc(selected.toUpperCase())}` : 'Choose any letter you want to practice.'}</div><button class="btn btn-dark" data-action="start-focus">Practice this key ${icon('arrow')}</button></section>
       <section class="card challenge-card"><div class="challenge-icon sky">${icon('book')}</div><h2>Practice your own text</h2><p>Paste or write a short passage and turn it into a personal, untimed typing exercise.</p>
-      <div class="mini-note">${icon('shield')} Your passage is never saved.</div><button class="btn btn-dark" data-action="open-custom">Add your text ${icon('arrow')}</button></section></div>
+      <div class="mini-note">${icon('shield')} Your passage is never saved.</div><button class="btn btn-dark" data-action="open-custom">Add your text ${icon('arrow')}</button></section>
+      </div>
       <div class="tip-strip">${icon('leaf')} Your progress is personal. You can retry any activity as often as you like.</div>`;
   }
 
@@ -193,6 +201,38 @@
         <div class="custom-error" id="custom-error" role="status" aria-live="polite">${ui.customDraft ? esc(result.error) : ''}</div>
         <button class="btn btn-dark" id="start-custom" data-action="start-custom" ${result.error ? 'disabled' : ''}>Start my practice ${icon('arrow')}</button></section>
         <aside class="privacy-box custom-privacy">${icon('shield')}<h3>Just between us.</h3><p>Your passage stays in memory only while you use it. KeyBloom saves a session summary, but not your passage or its letter counts.</p><p>Paste is allowed here, but not in the practice box.</p></aside></div>`;
+  }
+
+  function excerpt(text) {
+    if (text.length <= 230) return text;
+    return `${text.slice(0, 230).replace(/\s+\S*$/, '')}…`;
+  }
+
+  function renderStories() {
+    const story = S.all.find((item) => item.id === ui.storyId) || S.all[0];
+    ui.storyId = story.id;
+    return `<div class="run-top"><button class="back-link" data-action="navigate" data-screen="practice">${icon('back')} Back to practice</button><span class="quiet-pill">${S.all.length} stories to discover</span></div>
+      ${pageIntro('STORY TYPING', 'Let a story lead the way.', 'A new tale is chosen at random. Take your time, or find another before you begin.')}
+      <div class="story-layout"><section class="story-cover" aria-labelledby="story-title"><div class="story-cover-top"><div class="eyebrow">YOUR RANDOM STORY</div><span class="story-spark">${icon('spark')}</span></div>
+        <div class="story-topic">${esc(story.topic)}</div><h2 id="story-title" tabindex="-1">${esc(story.title)}</h2><p class="story-byline">${esc(story.source.author)}<br><span>From ${esc(story.source.book)}</span></p>
+        <div class="story-meta"><span>${story.wordCount.toLocaleString('en-US')} words</span><span>Untimed</span><span>US keyboard</span></div>
+        <div class="story-actions"><button class="btn btn-cream" data-action="start-story">Type this story ${icon('arrow')}</button><button class="btn btn-ghost" data-action="shuffle-story">${icon('refresh')} Another story</button></div>
+        <div class="story-rule"></div><div class="eyebrow">A GLIMPSE INSIDE</div><p class="story-excerpt">${esc(excerpt(story.text))}</p></section>
+        <aside class="story-aside"><div class="story-aside-icon">${icon('book')}</div><div class="eyebrow">A LITTLE READING ROOM</div><h3>Every story is a new path.</h3><p>Choose from ${S.all.length} complete historical stories, each at least 700 words, across different subjects and traditions.</p>
+        <div class="story-aside-rule"></div><p>These historical texts are public domain in the United States and adapted for a US keyboard. Some contain dated views or violence. See <strong>STORY-CREDITS.txt</strong> for sources and rights.</p><p>Pause any time or finish early for a summary. Your place in a story is not saved after leaving.</p></aside></div>`;
+  }
+
+  function renderImport() {
+    const file = ui.fileDraft;
+    const preview = file ? `<div class="file-preview"><div class="eyebrow">READY TO PRACTICE</div><strong class="file-name">${esc(file.name)}</strong><p>${file.text.length.toLocaleString('en-US')} characters · ${file.text.trim().split(/\s+/).length.toLocaleString('en-US')} words</p><blockquote>${esc(excerpt(file.text))}</blockquote><p class="file-format-note">${file.changed ? 'Spacing and compatible punctuation or accents were simplified for the US keyboard.' : 'No text formatting changes were needed.'}</p></div>` : '';
+    return `<div class="run-top"><button class="back-link" data-action="navigate" data-screen="practice">${icon('back')} Back to practice</button><span class="quiet-pill">Private, untimed practice</span></div>
+      ${pageIntro('IMPORT A TEXT FILE', 'Bring your own words.', 'Choose a text file from your device and turn it into a comfortable typing exercise.')}
+      <div class="custom-layout"><section class="card custom-card file-card"><div class="custom-card-heading"><div class="challenge-icon sky">${icon('upload')}</div><div><h2>Choose your file</h2><p>Read locally on this device.</p></div></div>
+        <label class="custom-label" for="file-picker">Text file (.txt)</label><div class="file-control"><input id="file-picker" class="file-picker" type="file" accept=".txt,text/plain" aria-describedby="file-help file-message" ${ui.fileReading ? 'disabled' : ''}><label class="file-select-button" for="file-picker">${file ? 'Choose another file' : 'Choose a file'}</label><span>${ui.fileReading ? 'Reading…' : file ? '1 file ready' : 'No file selected'}</span></div>
+        <p class="file-help" id="file-help">UTF-8 text, up to 256 KB (262,144 bytes) and 10–${E.IMPORT_MAX_CHARS.toLocaleString('en-US')} characters. Line breaks and extra spaces become spaces; common smart quotes, dashes and accents are simplified. Other scripts and emoji are not supported.</p>
+        <div class="file-message ${ui.fileError ? 'is-error' : ''}" id="file-message" role="status" aria-live="polite" tabindex="-1">${ui.fileReading ? 'Reading your file…' : esc(ui.fileError || (file ? 'File is ready. Check the preview below.' : ''))}</div>
+        <button class="btn btn-dark file-start" data-action="start-import" id="start-import" ${!file || ui.fileReading ? 'disabled' : ''}>Start file practice ${icon('arrow')}</button>${preview}</section>
+        <aside class="privacy-box custom-privacy">${icon('shield')}<h3>Your file stays yours.</h3><p>KeyBloom reads the file locally and never changes it. KeyBloom does not save or send its name, contents, or letter counts.</p><p>A completed or early-finished session saves only a summary. Your place and text are cleared when you leave this practice.</p></aside></div>`;
   }
 
   function dateLabel(day) {
@@ -216,7 +256,8 @@
       const lesson = lessonById(row.lessonId);
       const title = row.kind === 'lesson' ? (lesson ? lesson.title : 'Lesson') :
         row.kind === 'sprint' ? 'Word sprint' : row.kind === 'focus' ? 'Focused key practice' :
-          row.kind === 'custom' ? 'Custom practice' : 'Typing test';
+          row.kind === 'custom' ? 'Custom practice' : row.kind === 'import' ? 'File practice' :
+            row.kind === 'story' ? 'Story typing' : 'Typing test';
       return `<div class="history-row"><div><div class="history-title">${esc(title)}</div><div class="history-meta">${esc(dateLabel(row.day))} · ${row.accuracy}% accuracy</div></div><span class="history-score">${row.wpm} WPM</span></div>`;
     }).join('') : '<div class="empty-history">Your completed lessons and practice sessions will appear here.</div>';
     const weak = E.weakKeys(ui.profile).slice(0, 4);
@@ -233,7 +274,7 @@
       <div class="stats-grid">${statCard('bolt', '', 'Best speed', summary.bestWpm, 'WPM')}${statCard('target', 'peach', 'Average accuracy', summary.accuracy, '%')}${statCard('clock', 'lavender', 'Time practiced', minutes(summary.totalMs), 'min')}</div>
       <div class="progress-grid"><section class="card chart-card"><h2>Speed over time</h2><p>Your most recent sessions, in words per minute.</p>${chartMarkup(ui.profile.records)}</section>
       <section class="card history-card"><h2>Recent sessions</h2><p>Your latest steps forward.</p><div class="history-list">${historyMarkup}</div></section></div>
-      <section class="card insights-card"><div class="insights-intro"><div class="challenge-icon lavender">${icon('target')}</div><div><div class="eyebrow">PRACTICE WITH PURPOSE</div><h2>Keys to give a little care</h2><p>Based on letter mistakes in recent completed built-in exercises. Your custom text is excluded.</p></div></div><div class="focus-list">${insightMarkup}</div></section>
+      <section class="card insights-card"><div class="insights-intro"><div class="challenge-icon lavender">${icon('target')}</div><div><div class="eyebrow">PRACTICE WITH PURPOSE</div><h2>Keys to give a little care</h2><p>Based on letter mistakes in recent completed built-in exercises. Your custom and imported text is excluded.</p></div></div><div class="focus-list">${insightMarkup}</div></section>
       <section class="milestones-section"><div class="section-head"><div><div class="eyebrow">LITTLE WINS, BIG GROWTH</div><h2>Your milestones</h2><p>Lesson progress is kept; other milestones use your most recent ${E.MAX_RECORDS} sessions.</p></div><span class="quiet-pill">${earned} / ${milestones.length} reached</span></div><div class="milestone-grid">${milestoneMarkup}</div></section>`;
   }
 
@@ -244,7 +285,7 @@
       <div class="setting-row"><div><strong>On-screen keyboard</strong><p>Show the next key and a finger hint during practice.</p></div><label class="switch"><input type="checkbox" id="keyboard-setting" ${ui.profile.settings.keyboard ? 'checked' : ''}> Show</label></div>
       <div class="setting-row"><div><strong>Practice text size</strong><p>Make the practice text and typing box easier to read.</p></div><label for="practice-size" class="sr-only">Practice text size</label><select id="practice-size">${[['standard', 'Standard'], ['large', 'Large'], ['extra-large', 'Extra large']].map(([value, label]) => `<option value="${value}" ${ui.profile.settings.practiceSize === value ? 'selected' : ''}>${label}</option>`).join('')}</select></div>
       <div class="setting-row"><div><strong>Reset this device</strong><p>Remove lesson completions, saved sessions, and preferences. This cannot be undone.</p></div></div><button class="btn btn-danger" data-action="reset">Reset progress</button></section>
-      <aside class="privacy-box">${icon('shield')}<h3>Just for you.</h3><p>No account, tracking, or internet connection is needed. KeyBloom stores practiced lesson IDs, session summaries, and aggregate letter counts from built-in exercises, not the text you type. Your custom passages and their letter counts are not saved.</p><small>KeyBloom · made by Emmanuel Suah</small></aside></div>`;
+      <aside class="privacy-box">${icon('shield')}<h3>Just for you.</h3><p>No account, tracking, or internet connection is needed. KeyBloom stores practiced lesson IDs, session summaries, and aggregate letter counts from built-in exercises, not the text you type. Your custom passages, imported filenames, imported text, and their letter counts are not saved.</p><small>KeyBloom · made by Emmanuel Suah</small></aside></div>`;
   }
 
   const rows = [
@@ -282,28 +323,31 @@
   function currentSnapshot() { return ui.run.snapshot(performance.now()); }
   function selectedScreen() {
     if (ui.screen === 'session' || ui.screen === 'result') return ui.runInfo && ui.runInfo.kind === 'lesson' ? 'lessons' : 'practice';
-    return ui.screen === 'custom' ? 'practice' : ui.screen;
+    return ['custom', 'stories', 'import'].includes(ui.screen) ? 'practice' : ui.screen;
   }
 
   function renderSession() {
     const info = ui.runInfo;
     const snap = currentSnapshot();
     const lesson = info.kind === 'lesson' ? lessonById(info.lessonId) : null;
-    const title = lesson ? lesson.title : info.kind === 'sprint' ? 'Word sprint' : info.kind === 'focus' ? `Focus on ${info.focusKey.toUpperCase()}` : info.kind === 'custom' ? 'Your custom practice' : 'Typing test';
-    const group = lesson ? `LESSON ${lessonNumber(lesson.id)} · ${lesson.group}` : info.kind === 'sprint' ? 'THE 45-SECOND GAME' : info.kind === 'focus' ? 'FOCUSED KEY DRILL' : info.kind === 'custom' ? 'YOUR OWN WORDS' : info.seconds === 30 ? '30-SECOND PRACTICE' : `${info.seconds / 60}-MINUTE PRACTICE`;
-    const description = lesson ? lesson.tip : info.kind === 'sprint' ? 'Type as many words correctly as you can. The timer starts with your first key.' : info.kind === 'focus' ? 'Take your time. Every word includes your chosen letter.' : info.kind === 'custom' ? 'Your passage is not saved. Take your time and type at a comfortable pace.' : 'Type at a comfortable pace. The timer starts with your first key.';
+    const story = info.kind === 'story' ? S.all.find((item) => item.id === info.storyId) : null;
+    const title = lesson ? lesson.title : story ? story.title : info.kind === 'sprint' ? 'Word sprint' : info.kind === 'focus' ? `Focus on ${info.focusKey.toUpperCase()}` : info.kind === 'custom' ? 'Your custom practice' : info.kind === 'import' ? 'Your file practice' : 'Typing test';
+    const group = lesson ? `LESSON ${lessonNumber(lesson.id)} · ${lesson.group}` : story ? 'STORY TYPING' : info.kind === 'sprint' ? 'THE 45-SECOND GAME' : info.kind === 'focus' ? 'FOCUSED KEY DRILL' : info.kind === 'custom' ? 'YOUR OWN WORDS' : info.kind === 'import' ? 'YOUR TEXT FILE' : info.seconds === 30 ? '30-SECOND PRACTICE' : `${info.seconds / 60}-MINUTE PRACTICE`;
+    const description = lesson ? lesson.tip : story ? `${story.source.author} · ${story.source.book}. Pause or finish early whenever you need.` : info.kind === 'sprint' ? 'Type as many words correctly as you can. The timer starts with your first key.' : info.kind === 'focus' ? 'Take your time. Every word includes your chosen letter.' : info.kind === 'custom' ? 'Your passage is not saved. Take your time and type at a comfortable pace.' : info.kind === 'import' ? 'KeyBloom does not save or change your file. Pause or finish early whenever you need.' : 'Type at a comfortable pace. The timer starts with your first key.';
     return `<div class="run-top"><button class="back-link" data-action="navigate" data-screen="${lesson ? 'lessons' : 'practice'}">${icon('back')} Back to ${lesson ? 'lessons' : 'practice'}</button><span class="quiet-pill">${lesson ? `${lessonNum(lesson.id)} of ${C.lessons.length} lessons` : snap.remainingMs === null ? 'Untimed practice' : 'Timed practice'}</span></div>
       <div class="run-heading"><div><div class="eyebrow">${esc(group)}</div><h1>${esc(title)}</h1><p>${esc(description)}</p></div><button class="btn btn-subtle" data-action="toggle-keyboard" id="keyboard-toggle">${icon('keyboard')} ${ui.profile.settings.keyboard ? 'Hide keyboard' : 'Show keyboard'}</button></div>
       <div class="run-stats"><div class="run-stat"><div class="eyebrow">SPEED</div><strong><span id="run-wpm">—</span> <small>WPM</small></strong></div>
         <div class="run-stat"><div class="eyebrow">ACCURACY</div><strong><span id="run-accuracy">—</span><small>%</small></strong></div>
         <div class="run-stat"><div class="eyebrow">${snap.remainingMs === null ? 'ELAPSED' : 'TIME LEFT'}</div><strong id="run-time">${snap.remainingMs === null ? '0:00' : clock(snap.remainingMs)}</strong></div>
         ${info.kind === 'sprint' ? '<div class="run-stat"><div class="eyebrow">CORRECT WORDS</div><strong id="run-words">0</strong></div>' : ''}
-        <div class="run-stat action"><button class="btn btn-light" data-action="pause" id="pause-button">${icon('pause')} Pause</button></div></div>
-      <section class="card typing-card"><div class="typing-header"><div class="eyebrow">TYPE THE TEXT BELOW</div><div class="typing-caption">${snap.target.length > 110 ? '<span>Long passages scroll as you type</span>' : ''}<span class="typing-count" id="typing-count"></span></div></div>
+        <div class="run-stat action"><button class="btn btn-light" data-action="pause" id="pause-button">${icon('pause')} Pause</button></div>
+        ${info.kind === 'story' || info.kind === 'import' ? '<div class="run-stat action"><button class="btn btn-subtle" data-action="finish-early" id="finish-early">Finish early</button></div>' : ''}</div>
+      <section class="card typing-card"><div class="typing-header"><div class="eyebrow">TYPE THE TEXT BELOW</div><div class="typing-caption">${snap.target.length > 110 ? '<span id="typing-window-note">Long passages scroll as you type</span>' : ''}<span class="typing-count" id="typing-count"></span></div></div>
         <div class="target-text" id="target-text" aria-hidden="true"></div><p class="sr-only" id="target-accessible"></p>
         <label for="typing-input" class="input-label"><span>Your turn</span><span id="typing-state">Your timer starts when you type</span></label>
         <textarea id="typing-input" class="typing-input" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="target-accessible typing-help" placeholder="Click here and start typing…"></textarea>
-        <div class="typing-help" id="typing-help"><span>Backspace to correct. Pasting is disabled during practice.</span><span id="typing-status">You can pause whenever you need.</span></div><div class="run-message" id="run-message" role="status" aria-live="polite"></div></section>
+        <div class="typing-help" id="typing-help"><span>Backspace to correct. Pasting is disabled during practice.</span><span id="typing-status">You can pause whenever you need.</span></div><div class="run-message" id="run-message" role="status" aria-live="polite"></div>
+        ${snap.target.length > TARGET_WINDOW ? `<details class="full-passage"><summary>Read the full ${story ? 'story' : 'passage'}</summary><div id="full-passage-text" class="full-passage-text" tabindex="0" role="region" aria-label="Full practice text"></div></details>` : ''}</section>
       <section class="card keyboard-card" id="keyboard-card" ${ui.profile.settings.keyboard ? '' : 'hidden'}><div class="keyboard-head"><span class="eyebrow">YOUR KEYBOARD · US QWERTY</span><span class="keyboard-hint" id="keyboard-hint"></span></div><div class="keyboard" id="keyboard" aria-hidden="true">${keyboardMarkup()}</div></section>`;
   }
 
@@ -313,10 +357,11 @@
     const lesson = info.kind === 'lesson' ? lessonById(info.lessonId) : null;
     const next = lesson ? C.lessons[lessonNum(lesson.id)] : null;
     const advice = result.accuracy >= 95 ? 'Beautifully done. You kept a careful, steady rhythm.' : result.accuracy >= 80 ? 'Nice work. A steady pace can help those tricky keys feel easier.' : 'You showed up and practiced. Try slowing down and letting accuracy lead.';
+    const resultLabel = result.reason === 'stopped' ? 'PRACTICE FINISHED EARLY' : info.kind === 'sprint' ? 'SPRINT COMPLETE' : lesson ? 'LESSON COMPLETE' : info.kind === 'focus' ? 'FOCUS DRILL COMPLETE' : info.kind === 'custom' ? 'CUSTOM PRACTICE COMPLETE' : info.kind === 'import' ? 'FILE PRACTICE COMPLETE' : info.kind === 'story' ? 'STORY COMPLETE' : 'TEST COMPLETE';
     return `<div class="run-top"><button class="back-link" data-action="navigate" data-screen="${lesson ? 'lessons' : 'practice'}">${icon('back')} Back to ${lesson ? 'lessons' : 'practice'}</button></div><div class="result-wrap"><section class="card result-card">
-      <div class="result-emblem">${icon('spark')}</div><div class="eyebrow">${info.kind === 'sprint' ? 'SPRINT COMPLETE' : lesson ? 'LESSON COMPLETE' : info.kind === 'focus' ? 'FOCUS DRILL COMPLETE' : info.kind === 'custom' ? 'CUSTOM PRACTICE COMPLETE' : 'TEST COMPLETE'}</div><h1>A little better, already.</h1><p>${esc(advice)}</p>
+      <div class="result-emblem">${icon('spark')}</div><div class="eyebrow">${resultLabel}</div><h1>A little better, already.</h1><p>${esc(advice)}</p>
       <div class="result-metrics"><div class="result-metric"><strong>${result.wpm}</strong><span>words per minute</span></div><div class="result-metric"><strong>${result.accuracy}%</strong><span>accuracy</span></div><div class="result-metric"><strong>${info.kind === 'sprint' ? result.words : clock(result.elapsedMs, true)}</strong><span>${info.kind === 'sprint' ? 'correct words' : 'time practiced'}</span></div></div>
-      <div class="result-actions"><button class="btn btn-subtle" data-action="retry">${icon('refresh')} Try again</button>${next ? `<button class="btn btn-dark" data-action="lesson" data-id="${esc(next.id)}">Next lesson ${icon('arrow')}</button>` : `<button class="btn btn-dark" data-action="navigate" data-screen="progress">See your progress ${icon('arrow')}</button>`}</div>
+      <div class="result-actions"><button class="btn btn-subtle" data-action="retry">${icon('refresh')} Try again</button>${info.kind === 'story' ? `<button class="btn btn-subtle" data-action="next-story">Another story ${icon('arrow')}</button>` : ''}${next ? `<button class="btn btn-dark" data-action="lesson" data-id="${esc(next.id)}">Next lesson ${icon('arrow')}</button>` : `<button class="btn btn-dark" data-action="navigate" data-screen="progress">See your progress ${icon('arrow')}</button>`}</div>
       <div class="result-detail">${result.mistakes} mistake${result.mistakes === 1 ? '' : 's'} across ${result.attempts} character attempts; ${result.uncorrected} uncorrected. Corrected mistakes still count in accuracy.</div></section></div>`;
   }
 
@@ -324,8 +369,9 @@
     updateWarning();
     document.documentElement.dataset.practiceSize = ui.profile.settings.practiceSize;
     const page = { home: renderHome, lessons: renderLessons, practice: renderPractice, progress: renderProgress,
-      settings: renderSettings, custom: renderCustom, session: renderSession, result: renderResult }[ui.screen] || renderHome;
+      settings: renderSettings, custom: renderCustom, stories: renderStories, import: renderImport, session: renderSession, result: renderResult }[ui.screen] || renderHome;
     $('view').innerHTML = page();
+    ui.targetPaint = null;
     for (const node of document.querySelectorAll('.nav-item')) {
       if (node.dataset.screen === selectedScreen()) node.setAttribute('aria-current', 'page');
       else node.removeAttribute('aria-current');
@@ -354,9 +400,13 @@
   function stopTimer() { if (ui.timer) { clearInterval(ui.timer); ui.timer = null; } }
 
   function navigate(screen, force = false) {
-    if (!['home', 'lessons', 'practice', 'progress', 'settings', 'custom'].includes(screen)) return;
+    if (!['home', 'lessons', 'practice', 'progress', 'settings', 'custom', 'stories', 'import'].includes(screen)) return;
     if (!force && ui.screen === 'custom' && ui.customDraft.trim()) {
       confirmDialog('Discard your text?', 'Your custom passage is not saved. Leaving will discard it.', 'Discard text', () => navigate(screen, true));
+      return;
+    }
+    if (!force && ui.screen === 'import' && ui.fileDraft) {
+      confirmDialog('Discard this file?', 'The file stays unchanged on your device, but this unsaved practice will be cleared.', 'Discard file', () => navigate(screen, true));
       return;
     }
     if (!force && ui.screen === 'session' && ui.run && ui.run.started && !ui.run.finished) {
@@ -365,10 +415,43 @@
     }
     stopTimer();
     if (ui.screen === 'custom' || (ui.runInfo && ui.runInfo.kind === 'custom')) ui.customDraft = '';
+    // Invalidate a pending read as well as clearing the selected file; a slow
+    // read must not reappear after navigation or a newer selection.
+    ui.fileReadToken += 1;
+    ui.fileDraft = null; ui.fileError = ''; ui.fileReading = false;
     ui.run = null; ui.result = null; ui.runInfo = null;
     ui.screen = screen;
     $('workspace').scrollTop = 0;
     render();
+  }
+
+  async function readPracticeFile(file) {
+    const token = ++ui.fileReadToken;
+    ui.fileDraft = null; ui.fileError = ''; ui.fileReading = false;
+    const current = () => ui.screen === 'import' && token === ui.fileReadToken;
+    const report = (message) => {
+      if (!current()) return;
+      ui.fileError = message; ui.fileReading = false;
+      render(); $('file-message').focus({ preventScroll: true });
+    };
+    if (!file) { render(); return; }
+    if (!/\.txt$/i.test(file.name)) { report('Please choose a .txt file.'); return; }
+    if (file.size > E.IMPORT_MAX_BYTES) { report('This file is larger than 256 KB. Choose a smaller .txt file.'); return; }
+    ui.fileReading = true;
+    render();
+    let bytes;
+    try { bytes = await file.arrayBuffer(); }
+    catch (error) { report('The file could not be read. Please choose it again.'); return; }
+    if (!current()) return;
+    let contents;
+    try { contents = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+    catch (error) { report('This file is not valid UTF-8 text. Save it as UTF-8 and try again.'); return; }
+    const prepared = E.prepareImportedText(contents);
+    if (prepared.error) { report(prepared.error); return; }
+    if (!current()) return;
+    ui.fileDraft = { name: file.name, text: prepared.text, changed: prepared.changed };
+    ui.fileReading = false;
+    render(); $('file-message').focus({ preventScroll: true });
   }
 
   function startRun(info) {
@@ -376,15 +459,20 @@
     if (info.kind === 'lesson' && !lesson) return;
     const custom = info.kind === 'custom' ? E.prepareCustomText(info.customText) : null;
     if (custom && custom.error) return;
+    const imported = info.kind === 'import' ? E.prepareImportedText(info.importText) : null;
+    if (imported && imported.error) return;
+    const story = info.kind === 'story' ? S.all.find((item) => item.id === info.storyId) : null;
+    if (info.kind === 'story' && !story) return;
     const focusedText = info.kind === 'focus' ? C.makeFocusText(info.focusKey) : '';
     if (info.kind === 'focus' && !focusedText) return;
     if (info.kind === 'test' && ![30, 60, 180, 300].includes(info.seconds)) return;
     if (info.kind === 'sprint' && info.seconds !== 45) return;
-    const texts = lesson ? [lesson.text] : info.kind === 'focus' ? [focusedText] :
-      custom ? [custom.text] : info.kind === 'sprint' ? C.sprintPassages : C.passages;
+    const texts = lesson ? [lesson.text] : info.kind === 'focus' ? [focusedText] : story ? [story.text] :
+      custom ? [custom.text] : imported ? [imported.text] : info.kind === 'sprint' ? C.sprintPassages : C.passages;
     stopTimer();
-    ui.runInfo = custom ? { ...info, customText: custom.text } : { ...info };
+    ui.runInfo = custom ? { ...info, customText: custom.text } : imported ? { kind: 'import', importText: imported.text } : { ...info };
     ui.customDraft = '';
+    ui.fileReadToken += 1; ui.fileDraft = null; ui.fileError = ''; ui.fileReading = false;
     ui.run = new E.TypingRun({
       kind: info.kind, texts,
       durationMs: info.kind === 'test' || info.kind === 'sprint' ? info.seconds * 1000 : null,
@@ -413,6 +501,8 @@
     $('workspace').focus({ preventScroll: true });
   }
 
+  const TARGET_WINDOW = 600;
+  const TARGET_MARGIN = 80;
   function paintTarget(snapshot) {
     const input = $('typing-input');
     if (!input) return;
@@ -420,13 +510,44 @@
     const typed = snapshot.typed;
     const caret = document.activeElement === input ? input.selectionStart : typed.length;
     const targetBox = $('target-text');
-    targetBox.innerHTML = Array.from(target).map((char, index) => {
-      const state = index < typed.length ? (typed[index] === char ? 'correct' : 'wrong') : '';
-      const current = !snapshot.finished && index === caret ? 'current' : '';
-      return `<span class="target-char ${state} ${current}">${esc(char)}</span>`;
-    }).join('');
-    // Keep the current character visible inside a long passage without moving
-    // the page or stealing focus from the typing box.
+    let paint = ui.targetPaint;
+    const reset = !paint || paint.box !== targetBox || paint.target !== target;
+    let start = reset ? 0 : paint.start;
+    let end = Math.min(target.length, start + TARGET_WINDOW);
+    const beyondWindow = caret < start || caret >= end ||
+      (start > 0 && caret < start + TARGET_MARGIN) ||
+      (end < target.length && caret >= end - TARGET_MARGIN);
+    const rebuild = reset || beyondWindow;
+    if (rebuild) {
+      if (target.length > TARGET_WINDOW && beyondWindow) {
+        start = Math.max(0, Math.min(target.length - TARGET_WINDOW, caret - 200));
+      }
+      end = Math.min(target.length, start + TARGET_WINDOW);
+      targetBox.innerHTML = Array.from(target.slice(start, end)).map((char, offset) => {
+        const index = start + offset;
+        const state = index < typed.length ? (typed[index] === char ? 'correct' : 'wrong') : '';
+        const current = !snapshot.finished && index === caret ? 'current' : '';
+        return `<span class="target-char ${state} ${current}">${esc(char)}</span>`;
+      }).join('');
+      const visibleText = target.slice(start, end);
+      $('target-accessible').textContent = target.length > TARGET_WINDOW ?
+        `Practice text, characters ${start + 1} through ${end} of ${target.length}: ${visibleText}` : `Practice text: ${target}`;
+      if ($('typing-window-note') && target.length > TARGET_WINDOW) $('typing-window-note').textContent = `Showing characters ${start + 1}–${end} around your cursor`;
+      if (reset && $('full-passage-text')) $('full-passage-text').textContent = target;
+    } else {
+      // Most keystrokes only alter a character or two. Reuse the bounded DOM
+      // instead of rebuilding thousands of spans for every key or clock tick.
+      const children = targetBox.children;
+      for (let index = start; index < end; index += 1) {
+        if (paint.typed[index] === typed[index] && index !== paint.caret && index !== caret && paint.finished === snapshot.finished) continue;
+        const state = index < typed.length ? (typed[index] === target[index] ? 'correct' : 'wrong') : '';
+        const current = !snapshot.finished && index === caret ? 'current' : '';
+        children[index - start].className = `target-char ${state} ${current}`;
+      }
+    }
+    ui.targetPaint = { box: targetBox, target, typed, caret, start, end, finished: snapshot.finished };
+    // Keep the current character visible without moving the page or stealing
+    // focus from the typing box, including when the user moves the caret.
     const active = targetBox.querySelector('.current');
     if (active) {
       const box = targetBox.getBoundingClientRect();
@@ -434,7 +555,6 @@
       if (current.top < box.top) targetBox.scrollTop += current.top - box.top - 4;
       else if (current.bottom > box.bottom - 8) targetBox.scrollTop += current.bottom - box.bottom + 12;
     }
-    $('target-accessible').textContent = `Practice text: ${target}`;
     const character = target[Math.min(caret, target.length - 1)];
     const hint = keyInfo(character);
     if ($('keyboard-hint')) $('keyboard-hint').textContent = hint.hint;
@@ -455,6 +575,7 @@
     $('typing-status').textContent = snapshot.paused ? 'Press Resume when you are ready.' : 'You can pause whenever you need.';
     $('pause-button').innerHTML = snapshot.paused ? `${icon('play')} Resume` : `${icon('pause')} Pause`;
     $('pause-button').disabled = !snapshot.started;
+    if ($('finish-early')) $('finish-early').disabled = !snapshot.started;
     const input = $('typing-input');
     input.readOnly = snapshot.paused;
     if (input.maxLength !== snapshot.target.length) input.maxLength = snapshot.target.length;
@@ -503,8 +624,20 @@
     else if (action === 'start-sprint') startRun({ kind: 'sprint', seconds: 45 });
     else if (action === 'open-custom') navigate('custom');
     else if (action === 'start-custom') startRun({ kind: 'custom', customText: ui.customDraft });
+    else if (action === 'open-import') navigate('import');
+    else if (action === 'start-import' && ui.screen === 'import' && ui.fileDraft) startRun({ kind: 'import', importText: ui.fileDraft.text });
+    else if (action === 'open-stories' || (action === 'next-story' && ui.screen === 'result')) {
+      ui.storyId = S.choose(ui.storyId).id; navigate('stories', true);
+    } else if (action === 'shuffle-story' && ui.screen === 'stories') {
+      ui.storyId = S.choose(ui.storyId).id; render(); $('story-title').focus({ preventScroll: true });
+    } else if (action === 'start-story' && ui.screen === 'stories') startRun({ kind: 'story', storyId: ui.storyId });
     else if (action === 'start-focus') startRun({ kind: 'focus', focusKey: button.dataset.key || ($('focus-key') && $('focus-key').value) });
     else if (action === 'retry' && ui.runInfo) startRun(ui.runInfo);
+    else if (action === 'finish-early' && ui.screen === 'session' && ui.run && ui.run.started) {
+      confirmDialog('Finish this session?', 'A summary of your practice so far will be saved. Your place and text will not be saved.', 'Finish session', () => {
+        if (ui.run && ui.screen === 'session') finishRun(ui.run.finishEarly(performance.now()));
+      });
+    }
     else if (action === 'toggle-keyboard') {
       ui.profile.settings.keyboard = !ui.profile.settings.keyboard; persist();
       $('keyboard-card').hidden = !ui.profile.settings.keyboard;
@@ -542,7 +675,10 @@
     else updateLive(snapshot, true);
   });
   document.addEventListener('change', (event) => {
-    if (event.target.id === 'lesson-page-select' && ui.screen === 'lessons') {
+    if (event.target.id === 'file-picker' && ui.screen === 'import') {
+      const file = event.target.files && event.target.files[0];
+      if (file) void readPracticeFile(file);
+    } else if (event.target.id === 'lesson-page-select' && ui.screen === 'lessons') {
       const page = Number(event.target.value);
       if (Number.isInteger(page) && page > 0) { ui.lessonPage = page; updateLessonResults('page-select'); }
     } else if (event.target.id === 'lesson-group' && ui.screen === 'lessons') {

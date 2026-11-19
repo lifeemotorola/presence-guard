@@ -326,16 +326,17 @@ build. The plugin's model and UI are tested against fake OBS, not a real show.
 ## The Windows typing tutor: KeyBloom
 
 `keybloom/` is an original, offline typing tutor with 500 searchable practices,
-timed tests, a word game, focused-letter drills, your own practice text, milestones, an
-on-screen US QWERTY keyboard and locally saved progress. It is not Mavis Beacon
-and is not affiliated with it.
+80 randomly chosen historical stories of at least 700 words each, `.txt` file
+practice, timed tests, a word game, focused-letter drills, milestones, an on-screen
+US QWERTY keyboard and locally saved progress. It is not Mavis Beacon and is not
+affiliated with it.
 
 | | KeyBloom (`keybloom/`) |
 |---|---|
 | Computer | Windows 10/11, 64-bit |
 | Download | **Actions → KeyBloom** → `keybloom-windows-x64` |
 | Use it | Extract the ZIP and run `KeyBloom.exe` from the extracted folder; keep the other files beside it |
-| Privacy | No account or network needed after download; progress is saved locally |
+| Privacy | No account or network needed after download; summaries are saved locally, but imported text and filenames are not saved by KeyBloom |
 
 See [`keybloom/README.md`](keybloom/README.md) for instructions, scoring, data
 storage, and limitations. The executable is unsigned; a checksum identifies a

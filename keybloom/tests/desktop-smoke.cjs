@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { _electron: electron } = require('playwright');
-const { runScenarios, runAdvancedScenarios, runLayoutScenarios, runCourseScenarios, runNarrowPreviewScenarios } = require('./browser-scenarios.cjs');
+const { runScenarios, runAdvancedScenarios, runLayoutScenarios, runCourseScenarios, runNarrowPreviewScenarios, runStoryImportScenarios } = require('./browser-scenarios.cjs');
 
 (async () => {
   const exe = path.resolve(process.env.KEYBLOOM_EXE || path.join(__dirname, '..', 'out', 'KeyBloom-win32-x64', 'KeyBloom.exe'));
@@ -28,6 +28,7 @@ const { runScenarios, runAdvancedScenarios, runLayoutScenarios, runCourseScenari
     await runLayoutScenarios(page);
     await runCourseScenarios(page, { screenshot: process.env.KEYBLOOM_COURSE_SCREENSHOT });
     await runNarrowPreviewScenarios(page);
+    await runStoryImportScenarios(page, { storyScreenshot: process.env.KEYBLOOM_STORY_SCREENSHOT, fileScreenshot: process.env.KEYBLOOM_FILE_SCREENSHOT });
     // Preserve all course completion IDs across an actual quit and move.
     await page.evaluate(() => {
       const key = 'keybloom.progress.v1';
@@ -44,15 +45,19 @@ const { runScenarios, runAdvancedScenarios, runLayoutScenarios, runCourseScenari
     const reopened = await desktop.firstWindow({ timeout: 60000 });
     await reopened.getByRole('heading', { name: 'Good to see you.' }).waitFor();
     const data = await reopened.evaluate(() => JSON.parse(localStorage.getItem('keybloom.progress.v1')));
-    assert.equal(data.records.length, 7, 'saved progress must survive quitting and restarting the packaged app');
-    assert.deepEqual(data.records.map((row) => row.kind), ['test', 'sprint', 'lesson', 'focus', 'custom', 'test', 'test']);
+    assert.equal(data.records.length, 10, 'saved progress must survive quitting and restarting the packaged app');
+    assert.deepEqual(data.records.map((row) => row.kind), ['test', 'sprint', 'lesson', 'focus', 'custom', 'test', 'test', 'import', 'import', 'story']);
     assert.deepEqual(data.records[4].keyStats, {}, 'custom passage letter counts must not be saved');
+    assert.deepEqual(data.records[7].keyStats, {}, 'imported-file letter counts must not be saved');
+    assert.deepEqual(data.records[8].keyStats, {}, 'long imported-file letter counts must not be saved');
     assert.equal(data.settings.practiceSize, 'extra-large');
     assert.equal(data.completedLessons.length, 500, 'all course completions must survive a moved-folder restart');
     assert.match(await reopened.locator('.stat-card').filter({ hasText: 'Lessons practiced' }).textContent(), /500\s*\/ 500/);
     assert.equal(await reopened.getByRole('button', { name: /Review the course/ }).count(), 1);
     assert.ok(!JSON.stringify(data).includes('A <script> grows.'), 'custom passage must not persist across restarts');
-    console.log('Packaged Windows app: 500 practices, security, moved-folder restart, and progress passed.');
+    assert.ok(!JSON.stringify(data).includes('private-file-unique.TXT'), 'file name must not persist across restarts');
+    assert.ok(!JSON.stringify(data).includes('A confidential fragment: fresh snow.'), 'file contents must not persist across restarts');
+    console.log('Packaged Windows app: 500 practices, 80 stories, private file import, security, moved-folder restart, and progress passed.');
   } finally {
     if (desktop) await desktop.close().catch(() => {});
     fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
