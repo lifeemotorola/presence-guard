@@ -25,8 +25,7 @@ using SourceRef = std::unique_ptr<obs_source_t, SourceRelease>;
 
 bool isAudio(obs_source_t *source)
 {
-	return source && !obs_source_removed(source) &&
-	       (obs_source_get_output_flags(source) & OBS_SOURCE_AUDIO) != 0 &&
+	return source && !obs_source_removed(source) && (obs_source_get_output_flags(source) & OBS_SOURCE_AUDIO) != 0 &&
 	       (obs_source_get_output_flags(source) & OBS_SOURCE_SUBMIX) == 0;
 }
 

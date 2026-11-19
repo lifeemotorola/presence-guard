@@ -8,7 +8,10 @@ static int checks = 0, failures = 0;
 static void check(bool condition, const char *message)
 {
 	++checks;
-	if (!condition) { ++failures; std::printf("FAIL  %s\n", message); }
+	if (!condition) {
+		++failures;
+		std::printf("FAIL  %s\n", message);
+	}
 }
 
 int main()
@@ -27,16 +30,17 @@ int main()
 	check(std::isinf(gainToDb(0)) && gainToDb(0) < 0, "silence is minus infinity");
 	check(std::fabs(gainToDb(1)) < 0.001f, "unity is zero dB");
 	check(std::fabs(gainToDb(2) - 6.0206f) < 0.001f, "external boost dB is displayed");
-	check(peakToPercent(-60) == 0 && peakToPercent(-30) == 50 && peakToPercent(0) == 100,
-	      "peak scale");
+	check(peakToPercent(-60) == 0 && peakToPercent(-30) == 50 && peakToPercent(0) == 100, "peak scale");
 	check(peakToPercent(-999) == 0 && peakToPercent(6) == 100 &&
-	      peakToPercent(std::numeric_limits<float>::quiet_NaN()) == 0, "peak bounds and NaN");
+		      peakToPercent(std::numeric_limits<float>::quiet_NaN()) == 0,
+	      "peak bounds and NaN");
 	check(withTrack(0x80000001u, 6, true) == 0x80000021u, "track 6 preserves unrelated bits");
 	check(withTrack(0x80000021u, 1, false) == 0x80000020u, "removing track preserves unrelated bits");
-	check(withTrack(0x80000021u, 0, true) == 0x80000021u &&
-	      withTrack(0x80000021u, 7, false) == 0x80000021u, "invalid track has no effect");
-	check(trackEnabled(0x21, 1) && trackEnabled(0x21, 6) && !trackEnabled(0x21, 2) &&
-	      !trackEnabled(0x21, 0) && !trackEnabled(0x21, 32), "track lookup and bounds");
+	check(withTrack(0x80000021u, 0, true) == 0x80000021u && withTrack(0x80000021u, 7, false) == 0x80000021u,
+	      "invalid track has no effect");
+	check(trackEnabled(0x21, 1) && trackEnabled(0x21, 6) && !trackEnabled(0x21, 2) && !trackEnabled(0x21, 0) &&
+		      !trackEnabled(0x21, 32),
+	      "track lookup and bounds");
 	std::printf("%d model checks, %d failures\n", checks, failures);
 	return failures ? 1 : 0;
 }

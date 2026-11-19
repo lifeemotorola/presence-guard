@@ -14,8 +14,12 @@ Copyright (C) 2026 Emmanuel Suah. GPL-2.0-or-later; no warranty.
 #include <vector>
 
 struct obs_source : FakeSource {};
-struct obs_weak_source { obs_source_t *source = nullptr; };
-struct obs_data { bool locked = false; };
+struct obs_weak_source {
+	obs_source_t *source = nullptr;
+};
+struct obs_data {
+	bool locked = false;
+};
 struct obs_volmeter {
 	obs_source_t *source = nullptr;
 	obs_volmeter_updated_t callback = nullptr;
@@ -54,10 +58,23 @@ FakeSource *fakeFind(const std::string &uuid)
 			return source.get();
 	return nullptr;
 }
-int fakeWrites() { return writes; }
-int fakeAcquired() { return acquired; }
-int fakeReleased() { return released; }
-int fakeMeters() { std::lock_guard<std::mutex> lock(metersMutex); return static_cast<int>(meters.size()); }
+int fakeWrites()
+{
+	return writes;
+}
+int fakeAcquired()
+{
+	return acquired;
+}
+int fakeReleased()
+{
+	return released;
+}
+int fakeMeters()
+{
+	std::lock_guard<std::mutex> lock(metersMutex);
+	return static_cast<int>(meters.size());
+}
 
 void obs_enum_sources(bool (*callback)(void *, obs_source_t *), void *context)
 {
@@ -78,7 +95,10 @@ obs_source_t *obs_get_source_by_uuid(const char *id)
 }
 void obs_source_release(obs_source_t *source)
 {
-	if (source) { --source->refs; ++released; }
+	if (source) {
+		--source->refs;
+		++released;
+	}
 }
 obs_weak_source_t *obs_source_get_weak_source(obs_source_t *source)
 {
@@ -92,22 +112,74 @@ obs_source_t *obs_weak_source_get_source(obs_weak_source_t *weak)
 	++acquired;
 	return weak->source;
 }
-void obs_weak_source_release(obs_weak_source_t *weak) { delete weak; }
-bool obs_source_removed(const obs_source_t *s) { return s->removed; }
-uint32_t obs_source_get_output_flags(const obs_source_t *s) { return s->flags; }
-const char *obs_source_get_uuid(const obs_source_t *s) { return s->uuid.c_str(); }
-const char *obs_source_get_name(const obs_source_t *s) { return s->name.c_str(); }
-float obs_source_get_volume(const obs_source_t *s) { return s->gain; }
-void obs_source_set_volume(obs_source_t *s, float gain) { s->gain = gain; ++writes; }
-bool obs_source_muted(const obs_source_t *s) { return s->muted; }
-void obs_source_set_muted(obs_source_t *s, bool value) { s->muted = value; ++writes; }
-uint32_t obs_source_get_audio_mixers(const obs_source_t *s) { return s->tracks; }
-void obs_source_set_audio_mixers(obs_source_t *s, uint32_t value) { s->tracks = value; ++writes; }
-bool obs_source_get_monitoring_enabled(const obs_source_t *s) { return s->monitoring; }
-void obs_source_set_monitoring_enabled(obs_source_t *s, bool value) { s->monitoring = value; ++writes; }
-obs_data_t *obs_source_get_private_settings(obs_source_t *s) { return new obs_data_t{s->locked}; }
-bool obs_data_get_bool(const obs_data_t *data, const char *) { return data->locked; }
-void obs_data_release(obs_data_t *data) { delete data; }
+void obs_weak_source_release(obs_weak_source_t *weak)
+{
+	delete weak;
+}
+bool obs_source_removed(const obs_source_t *s)
+{
+	return s->removed;
+}
+uint32_t obs_source_get_output_flags(const obs_source_t *s)
+{
+	return s->flags;
+}
+const char *obs_source_get_uuid(const obs_source_t *s)
+{
+	return s->uuid.c_str();
+}
+const char *obs_source_get_name(const obs_source_t *s)
+{
+	return s->name.c_str();
+}
+float obs_source_get_volume(const obs_source_t *s)
+{
+	return s->gain;
+}
+void obs_source_set_volume(obs_source_t *s, float gain)
+{
+	s->gain = gain;
+	++writes;
+}
+bool obs_source_muted(const obs_source_t *s)
+{
+	return s->muted;
+}
+void obs_source_set_muted(obs_source_t *s, bool value)
+{
+	s->muted = value;
+	++writes;
+}
+uint32_t obs_source_get_audio_mixers(const obs_source_t *s)
+{
+	return s->tracks;
+}
+void obs_source_set_audio_mixers(obs_source_t *s, uint32_t value)
+{
+	s->tracks = value;
+	++writes;
+}
+bool obs_source_get_monitoring_enabled(const obs_source_t *s)
+{
+	return s->monitoring;
+}
+void obs_source_set_monitoring_enabled(obs_source_t *s, bool value)
+{
+	s->monitoring = value;
+	++writes;
+}
+obs_data_t *obs_source_get_private_settings(obs_source_t *s)
+{
+	return new obs_data_t{s->locked};
+}
+bool obs_data_get_bool(const obs_data_t *data, const char *)
+{
+	return data->locked;
+}
+void obs_data_release(obs_data_t *data)
+{
+	delete data;
+}
 
 obs_volmeter_t *obs_volmeter_create(enum obs_fader_type)
 {

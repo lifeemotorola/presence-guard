@@ -34,6 +34,7 @@ public:
 	SourceIdentity(const SourceIdentity &) = delete;
 	SourceIdentity &operator=(const SourceIdentity &) = delete;
 	bool stillCurrent() const;
+
 private:
 	struct Impl;
 	std::unique_ptr<Impl> impl_;

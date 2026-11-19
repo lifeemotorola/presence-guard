@@ -4,8 +4,8 @@
 enum obs_fader_type { OBS_FADER_CUBIC };
 struct obs_volmeter;
 typedef obs_volmeter obs_volmeter_t;
-typedef void (*obs_volmeter_updated_t)(void *, const float[MAX_AUDIO_CHANNELS],
-                                      const float[MAX_AUDIO_CHANNELS], const float[MAX_AUDIO_CHANNELS]);
+typedef void (*obs_volmeter_updated_t)(void *, const float[MAX_AUDIO_CHANNELS], const float[MAX_AUDIO_CHANNELS],
+				       const float[MAX_AUDIO_CHANNELS]);
 obs_volmeter_t *obs_volmeter_create(enum obs_fader_type);
 void obs_volmeter_destroy(obs_volmeter_t *);
 bool obs_volmeter_attach_source(obs_volmeter_t *, obs_source_t *);

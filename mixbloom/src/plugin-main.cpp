@@ -34,13 +34,13 @@ static void frontendEvent(enum obs_frontend_event event, void *)
 	case OBS_FRONTEND_EVENT_EXIT:
 		/* A receiver-bound queued call runs on the GUI thread and is dropped
 		 * by Qt if the dock has already been destroyed. */
-		QMetaObject::invokeMethod(dock, [target = dock] { target->suspendForCollectionChange(); },
-					  Qt::QueuedConnection);
+		QMetaObject::invokeMethod(
+			dock, [target = dock] { target->suspendForCollectionChange(); }, Qt::QueuedConnection);
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
 	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
-		QMetaObject::invokeMethod(dock, [target = dock] { target->resumeAfterCollectionChange(); },
-					  Qt::QueuedConnection);
+		QMetaObject::invokeMethod(
+			dock, [target = dock] { target->resumeAfterCollectionChange(); }, Qt::QueuedConnection);
 		break;
 	default:
 		break;

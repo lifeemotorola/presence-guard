@@ -49,6 +49,7 @@ QLabel *makeLabel(const QString &text, const char *name, QWidget *parent, bool w
 class BrandMark final : public QWidget {
 public:
 	explicit BrandMark(QWidget *parent = nullptr) : QWidget(parent) { setFixedSize(42, 42); }
+
 protected:
 	void paintEvent(QPaintEvent *) override
 	{
@@ -134,7 +135,8 @@ public:
 		meter_->setValue(0);
 		meter_->setTextVisible(false);
 		meter_->setFixedHeight(8);
-		meter_->setToolTip("Highest source channel after its fader; this does not verify stream or recording output.");
+		meter_->setToolTip(
+			"Highest source channel after its fader; this does not verify stream or recording output.");
 		layout->addWidget(meter_);
 		meterNotice_ = makeLabel("Meter unavailable; audio controls still work.", "meterNotice", this, true);
 		layout->addWidget(meterNotice_);
@@ -192,8 +194,7 @@ public:
 		mute_->setAccessibleName((source.muted ? "Unmute " : "Mute ") + name);
 		mute_->setToolTip("Mute or unmute this source on all OBS tracks.");
 		const float db = mixbloom::gainToDb(source.gain);
-		db_->setText(std::isinf(db) && db < 0 ? QStringLiteral("−∞ dB")
-							: QString::number(db, 'f', 1) + " dB");
+		db_->setText(std::isinf(db) && db < 0 ? QStringLiteral("−∞ dB") : QString::number(db, 'f', 1) + " dB");
 		fader_->setAccessibleName("Level for " + name);
 		fader_->setEnabled(!source.volumeLocked);
 		if (!fader_->isSliderDown()) {
@@ -221,11 +222,13 @@ public:
 		warning_->setText(warnings.join(" "));
 		warning_->setVisible(!warnings.isEmpty());
 		monitor_->setText(source.monitoring ? "Monitor: On" : "Monitor: Off");
-		monitor_->setAccessibleName(QString("Monitoring for %1, currently %2").arg(name, source.monitoring ? "on" : "off"));
+		monitor_->setAccessibleName(
+			QString("Monitoring for %1, currently %2").arg(name, source.monitoring ? "on" : "off"));
 		monitor_->setEnabled(source.canMonitor || source.monitoring);
-		monitor_->setToolTip(source.canMonitor
-			? "Send this source to the OBS monitoring device as well as its selected output tracks."
-			: "OBS marks this source as unsafe to monitor because it may cause feedback.");
+		monitor_->setToolTip(
+			source.canMonitor
+				? "Send this source to the OBS monitoring device as well as its selected output tracks."
+				: "OBS marks this source as unsafe to monitor because it may cause feedback.");
 		if (!tap_->attached()) {
 			tap_ = std::make_unique<mixbloom::MeterTap>(source.uuid);
 			lastSequence_ = 0;
@@ -367,8 +370,9 @@ void MixDock::buildUi()
 	noticeFrame->setObjectName("noticeCard");
 	auto *noticeLayout = new QVBoxLayout(noticeFrame);
 	noticeLayout->setContentsMargins(12, 10, 12, 10);
-	notice_ = makeLabel("Live controls: changes here immediately affect OBS audio, including streams and recordings.",
-			    "notice", noticeFrame, true);
+	notice_ =
+		makeLabel("Live controls: changes here immediately affect OBS audio, including streams and recordings.",
+			  "notice", noticeFrame, true);
 	notice_->setObjectName("notice");
 	noticeLayout->addWidget(notice_);
 	content->addWidget(noticeFrame);
@@ -397,13 +401,15 @@ void MixDock::buildUi()
 	auto *emptyLayout = new QVBoxLayout(emptyFrame);
 	emptyLayout->setContentsMargins(16, 16, 16, 16);
 	emptyLayout->addWidget(makeLabel("Start with a source", "sourceName", emptyFrame, true));
-	emptyLayout->addWidget(makeLabel("Add a microphone, desktop audio or another audio source in OBS. It will appear here automatically.",
-					 "sectionCaption", emptyFrame, true));
+	emptyLayout->addWidget(makeLabel(
+		"Add a microphone, desktop audio or another audio source in OBS. It will appear here automatically.",
+		"sectionCaption", emptyFrame, true));
 	empty_ = emptyFrame;
 	sourceLayout_->addWidget(empty_);
 	content->addWidget(sourceList_);
-	content->addWidget(makeLabel("Tracks must also be selected in OBS Settings → Output. A source can appear here even when it is not active in the current scene.",
-				     "footer", body, true));
+	content->addWidget(makeLabel(
+		"Tracks must also be selected in OBS Settings → Output. A source can appear here even when it is not active in the current scene.",
+		"footer", body, true));
 	content->addStretch();
 	scroll->setWidget(body);
 	outer->addWidget(scroll);
@@ -435,13 +441,15 @@ void MixDock::connectCard(SourceCard *card)
 			auto result = mixbloom::setTrack(utf8(id), i, checked);
 			if (result == mixbloom::Result::ConfirmClearTracks) {
 				QPointer<MixDock> guard(this);
-				const bool confirmed = confirmAction(this, "Remove the last track?",
+				const bool confirmed = confirmAction(
+					this, "Remove the last track?",
 					QString("Remove %1 from all six OBS audio tracks?").arg(name),
 					"This can remove the source from your stream or recording. You can cancel and keep the current routing.");
 				if (!guard)
 					return;
 				if (!confirmed || suspended_ || !identity.stillCurrent()) {
-					notice_->setText("Routing unchanged. The source may have changed while confirming.");
+					notice_->setText(
+						"Routing unchanged. The source may have changed while confirming.");
 					refreshNow();
 					return;
 				}
@@ -459,7 +467,8 @@ void MixDock::connectCard(SourceCard *card)
 		mixbloom::SourceIdentity identity(utf8(id));
 		if (enable) {
 			QPointer<MixDock> guard(this);
-			const bool confirmed = confirmAction(this, "Enable audio monitoring?",
+			const bool confirmed = confirmAction(
+				this, "Enable audio monitoring?",
 				QString("Send %1 to the OBS monitoring device?").arg(name),
 				"Use headphones and check your monitoring device. Speakers or desktop capture can cause feedback. The source also remains on its selected output tracks.");
 			if (!guard)
@@ -535,7 +544,8 @@ void MixDock::refreshNow()
 		order_ = newOrder;
 	}
 	empty_->setVisible(newOrder.isEmpty());
-	count_->setText(QString("%1 audio source%2  ·  auto-sync on").arg(newOrder.size()).arg(newOrder.size() == 1 ? "" : "s"));
+	count_->setText(
+		QString("%1 audio source%2  ·  auto-sync on").arg(newOrder.size()).arg(newOrder.size() == 1 ? "" : "s"));
 }
 
 void MixDock::updateMeters()

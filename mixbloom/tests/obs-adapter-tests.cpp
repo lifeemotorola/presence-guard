@@ -14,7 +14,10 @@ static int checks = 0, failures = 0;
 static void check(bool condition, const char *message)
 {
 	++checks;
-	if (!condition) { ++failures; std::printf("FAIL  %s\n", message); }
+	if (!condition) {
+		++failures;
+		std::printf("FAIL  %s\n", message);
+	}
 }
 
 int main()
@@ -28,7 +31,8 @@ int main()
 	auto &gone = fakeAdd("gone-id", "Removed", OBS_SOURCE_AUDIO);
 	auto &internal = fakeAdd("internal-id", "Internal submix", OBS_SOURCE_AUDIO | OBS_SOURCE_SUBMIX);
 	fakeAdd("", "Missing UUID", OBS_SOURCE_AUDIO);
-	(void)camera; (void)internal;
+	(void)camera;
+	(void)internal;
 	gone.removed = true;
 	second.locked = true;
 	mic.tracks = 0x80000001u;
@@ -51,7 +55,8 @@ int main()
 	check(setFader("mic-id", -1) == Result::Invalid && setFader("mic-id", 1001) == Result::Invalid,
 	      "reject out-of-range faders");
 	check(setFader("missing", 500) == Result::Missing && setFader("gone-id", 500) == Result::Missing &&
-	      setFader("camera-id", 500) == Result::Missing, "missing, removed and non-audio sources cannot be changed");
+		      setFader("camera-id", 500) == Result::Missing,
+	      "missing, removed and non-audio sources cannot be changed");
 	check(setMuted("mic-id", true) == Result::Applied && mic.muted && !second.muted,
 	      "mute changes only the targeted source");
 	check(setMuted("mic-id", false) == Result::Applied && !mic.muted, "unmute explicitly");
@@ -60,24 +65,26 @@ int main()
 	      "removing the last output track needs confirmation");
 	check(setTrack("mic-id", 1, false, true) == Result::Applied && mic.tracks == 0x80000000u,
 	      "confirmed clear preserves unrelated mask bits");
-	check(setTrack("mic-id", 6, true) == Result::Applied && mic.tracks == 0x80000020u,
-	      "track six can be enabled");
+	check(setTrack("mic-id", 6, true) == Result::Applied && mic.tracks == 0x80000020u, "track six can be enabled");
 	mic.tracks |= 2u; // simulate an external OBS change after the last UI refresh
 	check(setTrack("mic-id", 3, true) == Result::Applied && mic.tracks == 0x80000026u,
 	      "routing reads the current mask and preserves external changes");
 	const int beforeInvalid = fakeWrites();
 	check(setTrack("mic-id", 0, true) == Result::Invalid && setTrack("mic-id", 7, false) == Result::Invalid &&
-	      fakeWrites() == beforeInvalid, "invalid track numbers do not write");
+		      fakeWrites() == beforeInvalid,
+	      "invalid track numbers do not write");
 	check(setMonitoring("desktop-id", true) == Result::Unsupported && desktop.monitoring,
 	      "cannot enable risky desktop self-monitoring");
 	check(setMonitoring("desktop-id", false) == Result::Applied && !desktop.monitoring,
 	      "can disable existing risky monitoring");
 	check(setMonitoring("mic-id", true) == Result::Applied && mic.monitoring &&
-	      setMonitoring("mic-id", false) == Result::Applied && !mic.monitoring, "mic monitoring round trip");
+		      setMonitoring("mic-id", false) == Result::Applied && !mic.monitoring,
+	      "mic monitoring round trip");
 
 	{
 		MeterTap meter("mic-id"), missing("missing");
-		check(meter.attached() && !missing.attached() && fakeMeters() == 1, "meter attaches only to an existing source");
+		check(meter.attached() && !missing.attached() && fakeMeters() == 1,
+		      "meter attaches only to an existing source");
 		check(meter.sample().sequence == 0, "meter starts with no samples");
 		std::thread audio([] { fakeEmitPeak("mic-id", -20.0f, -7.5f); });
 		audio.join();

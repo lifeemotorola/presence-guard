@@ -35,8 +35,11 @@ static int checks = 0, failures = 0;
 static void check(bool value, const char *message)
 {
 	++checks;
-	if (!value) { ++failures; std::printf("FAIL  %s\n", message); }
-	else std::printf("PASS  %s\n", message);
+	if (!value) {
+		++failures;
+		std::printf("FAIL  %s\n", message);
+	} else
+		std::printf("PASS  %s\n", message);
 	std::fflush(stdout);
 }
 
@@ -84,13 +87,17 @@ int main(int argc, char **argv)
 #ifdef _WIN32
 	if (!GetConsoleWindow()) {
 		const HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE), err = GetStdHandle(STD_ERROR_HANDLE);
-		if (AllocConsole()) { SetStdHandle(STD_OUTPUT_HANDLE, out); SetStdHandle(STD_ERROR_HANDLE, err); }
+		if (AllocConsole()) {
+			SetStdHandle(STD_OUTPUT_HANDLE, out);
+			SetStdHandle(STD_ERROR_HANDLE, err);
+		}
 	}
 	const QByteArray platformDir = qgetenv("QT_QPA_PLATFORM_PLUGIN_PATH");
 	if (qgetenv("QT_QPA_PLATFORM") == "windows" && !platformDir.isEmpty()) {
 		QPluginLoader platform(QString::fromLocal8Bit(platformDir) + "/qwindows.dll");
 		if (!platform.load()) {
-			std::fprintf(stderr, "Could not load Qt platform plugin: %s\n", platform.errorString().toUtf8().constData());
+			std::fprintf(stderr, "Could not load Qt platform plugin: %s\n",
+				     platform.errorString().toUtf8().constData());
 			return 1;
 		}
 		platform.unload();
@@ -109,7 +116,8 @@ int main(int argc, char **argv)
 		app.processEvents();
 		auto *micCard = card(dock, "mic");
 		auto *desktopCard = card(dock, "desktop");
-		check(micCard && desktopCard && !card(dock, "video"), "audio sources appear; video-only source does not");
+		check(micCard && desktopCard && !card(dock, "video"),
+		      "audio sources appear; video-only source does not");
 		check(fakeWrites() == 0, "opening and refreshing the dock does not change OBS audio");
 		if (!micCard || !desktopCard)
 			return 1;
@@ -123,7 +131,8 @@ int main(int argc, char **argv)
 			return 1;
 		check(!desktopMonitor->isEnabled(), "feedback-prone desktop monitoring is disabled");
 		slider->setValue(500);
-		check(std::fabs(mic.gain - 0.125f) < 0.000001f && desktop.gain == 1.0f, "fader changes only its source");
+		check(std::fabs(mic.gain - 0.125f) < 0.000001f && desktop.gain == 1.0f,
+		      "fader changes only its source");
 		mute->click();
 		check(mic.muted && mute->text() == "Unmute", "mute is applied and reflected immediately");
 		mute->click();
@@ -161,7 +170,8 @@ int main(int argc, char **argv)
 		      "external OBS changes and fader lock synchronize into the UI");
 		check(micCard->findChild<QLabel *>("levelValue")->text().startsWith("6.0") && mic.gain == 2.0f,
 		      "external boost is displayed without silently clamping it");
-		check(micCard->findChild<QLabel *>("sourceWarning")->text().contains("locked"), "lock/boost warning is visible");
+		check(micCard->findChild<QLabel *>("sourceWarning")->text().contains("locked"),
+		      "lock/boost warning is visible");
 		fakeEmitPeak("mic", -28.0f, -12.0f);
 		waitMs(160);
 		check(micCard->findChild<QProgressBar *>("peakMeter")->value() == 80,
@@ -174,14 +184,18 @@ int main(int argc, char **argv)
 			app.processEvents();
 			bool fits = true;
 			for (QPushButton *button : dock.findChildren<QPushButton *>()) {
-				if (button->isHidden()) continue;
+				if (button->isHidden())
+					continue;
 				const int textWidth = QFontMetrics(button->font()).horizontalAdvance(button->text());
-				if (button->width() < textWidth + 10) fits = false;
+				if (button->width() < textWidth + 10)
+					fits = false;
 			}
-			check(fits, width == 260 ? "260px dock buttons do not clip" :
-				    (width == 340 ? "340px dock buttons do not clip" : "440px dock buttons do not clip"));
+			check(fits, width == 260 ? "260px dock buttons do not clip"
+						 : (width == 340 ? "340px dock buttons do not clip"
+								 : "440px dock buttons do not clip"));
 			QLabel *sourceName = micCard->findChild<QLabel *>("sourceName");
-			check(sourceName->wordWrap() && sourceName->height() >= sourceName->heightForWidth(sourceName->width()),
+			check(sourceName->wordWrap() &&
+				      sourceName->height() >= sourceName->heightForWidth(sourceName->width()),
 			      "long source name wraps without clipping");
 		}
 		auto *scroll = dock.findChild<QScrollArea *>("mixScroll");
@@ -196,7 +210,8 @@ int main(int argc, char **argv)
 		const int beforeSwitch = fakeWrites();
 		answerDialog(QMessageBox::Yes, [&dock] { dock.suspendForCollectionChange(); });
 		monitor->click();
-		check(fakeWrites() == beforeSwitch && !mic.monitoring, "scene switch cancels a pending monitoring action");
+		check(fakeWrites() == beforeSwitch && !mic.monitoring,
+		      "scene switch cancels a pending monitoring action");
 		dock.resumeAfterCollectionChange();
 		app.processEvents();
 		check(card(dock, "mic") != nullptr, "sources reappear after scene collection resumes");
@@ -213,7 +228,8 @@ int main(int argc, char **argv)
 		check(!card(dock, "desktop"), "removed OBS sources disappear from the dock");
 	}
 	QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-	check(fakeMeters() == 0 && fakeAcquired() == fakeReleased(), "closing the dock detaches meters and releases references");
+	check(fakeMeters() == 0 && fakeAcquired() == fakeReleased(),
+	      "closing the dock detaches meters and releases references");
 	fakeReset();
 
 	/* A clean representative fixture for the CI screenshot. */
@@ -228,7 +244,8 @@ int main(int argc, char **argv)
 		waitMs(140);
 		const QByteArray screenshot = qgetenv("MIXBLOOM_UI_SCREENSHOT");
 		if (!screenshot.isEmpty())
-			check(dock.grab().save(QString::fromUtf8(screenshot)), "representative dock screenshot captured");
+			check(dock.grab().save(QString::fromUtf8(screenshot)),
+			      "representative dock screenshot captured");
 	}
 	QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 	fakeReset();
