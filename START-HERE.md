@@ -1,5 +1,8 @@
 # Presence Guard — start here
 
+For the separate OBS audio mixer and routing dock, see **[MixBloom](mixbloom/README.md)**.
+Its prebuilt Windows plugin is under **Actions → MixBloom → a successful run → Artifacts**.
+
 This repository **is** a complete OBS Studio plugin (C++17, Qt6, libobs,
 official `obs-plugintemplate` layout) that does the three things I promised,
 natively. It sits at the repository root, next to the GitHub Actions pipeline

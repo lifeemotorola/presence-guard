@@ -13,6 +13,7 @@
 !/hype-clip
 !/auto-scene
 !/onair-twin
+!/mixbloom
 !/photoshop-export-kit
 !/photoshop-face-retouch
 !/screen-forge
@@ -49,6 +50,9 @@
 /onair-twin/build_tests
 /onair-twin/build_*
 /onair-twin/.deps
+/mixbloom/build_tests
+/mixbloom/build_*
+/mixbloom/.deps
 /release
 
 # ScreenForge build output (the artifact is built in CI)

@@ -1,5 +1,8 @@
 # Presence Guard
 
+Looking for the independent audio mixer? See **[MixBloom for OBS](mixbloom/README.md)**
+for its Windows download, live-audio precautions, and installation steps.
+
 An OBS Studio plugin that keeps the stream looking alive while you are not:
 it parks the output on a safe scene when you walk away or go quiet, and hands
 your real scene back the moment you return.
