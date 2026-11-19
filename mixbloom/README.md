@@ -108,8 +108,9 @@ OBS.
 
 `./tests/run-tests.sh` exercises the C++ mixer model and real adapter against a
 fake OBS implementation. The Windows workflow builds the actual Qt dock and
-exercises it against fake OBS, then starts the packaged DLL in a disposable
-real OBS 33.0.1 portable installation. The latter is **only a load smoke test**:
+exercises it against fake OBS, tests the portable install/uninstall and
+overwrite protection, then starts the packaged DLL in a disposable real OBS
+33.0.1 portable installation. The latter is **only a load smoke test**:
 it does not prove operation with a real microphone, monitoring device, stream,
 recording, listener or every OBS setup. Build instructions for developers use
 `cmake --preset windows-x64` and `cmake --build --preset windows-x64 --config

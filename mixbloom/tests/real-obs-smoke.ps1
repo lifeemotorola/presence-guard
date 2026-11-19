@@ -25,10 +25,36 @@ try {
     New-Item -ItemType Directory -Path $config -Force | Out-Null
     "[General]`nFirstRun=true`n" | Set-Content -Encoding UTF8 (Join-Path $config 'user.ini')
     $logDir = Join-Path $config 'logs'
-    $plugin = Join-Path $root 'plugins\obs-mixbloom'
-    New-Item -ItemType Directory -Path $plugin -Force | Out-Null
-    Copy-Item (Join-Path $PackagePath 'bin\64bit\obs-mixbloom.dll') $plugin
-    Copy-Item (Join-Path $PackagePath 'data') $plugin -Recurse
+    $pluginRoot = Join-Path $root 'plugins'
+    $plugin = Join-Path $pluginRoot 'obs-mixbloom'
+    $installScript = Join-Path $PackagePath 'Install.ps1'
+    $uninstallScript = Join-Path $PackagePath 'Uninstall.ps1'
+    $otherPlugin = Join-Path $pluginRoot 'unrelated-plugin'
+    New-Item -ItemType Directory -Path $otherPlugin -Force | Out-Null
+    Set-Content -Path (Join-Path $otherPlugin 'keep.txt') -Value 'unrelated plugin' -Encoding ascii
+    # Exercise the actual installer in a disposable portable plugin root.
+    & $installScript -PluginRoot $pluginRoot
+    if (!(Test-Path (Join-Path $plugin 'obs-mixbloom.dll')) -or
+        !(Test-Path (Join-Path $plugin 'data\locale\en-US.ini'))) {
+        throw 'The portable installer did not place the DLL and locale data correctly.'
+    }
+    Set-Content -Path (Join-Path $plugin 'keep.txt') -Value 'do not overwrite' -Encoding ascii
+    $refusedOverwrite = $false
+    try {
+        & $installScript -PluginRoot $pluginRoot
+    } catch {
+        if ($_.Exception.Message -notlike 'Destination already exists:*') { throw }
+        $refusedOverwrite = $true
+    }
+    if (!$refusedOverwrite -or !(Test-Path (Join-Path $plugin 'keep.txt'))) {
+        throw 'The installer did not protect an existing plugin folder.'
+    }
+    & $uninstallScript -PluginRoot $pluginRoot
+    if ((Test-Path $plugin) -or !(Test-Path (Join-Path $otherPlugin 'keep.txt'))) {
+        throw 'The uninstaller did not remove only its own plugin folder.'
+    }
+    & $installScript -PluginRoot $pluginRoot
+    Write-Host 'Portable install, overwrite protection, uninstall and reinstall checks passed.'
     # Use the native platform plugin bundled with this OBS distribution,
     # not a platform DLL from a separately compiled Qt build.
     $platform = Get-ChildItem $bin -Recurse -Filter qwindows.dll | Select-Object -First 1
