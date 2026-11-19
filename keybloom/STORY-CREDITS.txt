@@ -1,0 +1,152 @@
+KEYBLOOM — STORY CREDITS AND SOURCES
+
+Story Typing contains 80 distinct complete historical stories, each at least
+700 words. These are classic works, not stories newly written by KeyBloom or
+Emmanuel Suah. They include folk tales, city life, nature and science fiction.
+Some contain dated perspectives, hardship or violence; choose Another story if
+one is not for you. These texts are public domain in the United States. Copyright
+rules may differ elsewhere.
+
+To make them usable with KeyBloom's US keyboard, curly quotation marks, dashes,
+accents and other typography have been converted to printable characters;
+line breaks and extra whitespace are flattened; illustration markers, footnote
+markers and source notes are omitted. The story narratives are not shortened.
+Word counts are based on whitespace-separated words after these adjustments.
+The source copies below include the full original books and editorial notes.
+Links are for reference; the app and its stories work offline.
+
+West African Folk-Tales (1917)
+W. H. Barker and Cecilia Sinclair
+https://github.com/GITenberg/West-African-Folk-Tales_66923/blob/a49b1f087c3b47db9921733a951f66d4dcc86dd6/66923-0.txt
+Selected stories (9):
+  - Thunder And Anansi
+  - Why The Lizard Continually Moves His Head Up And Down
+  - Why We See Ants Carrying Bundles As Big As Themselves
+  - How Beasts And Serpents First Came Into The World
+  - Why The Moon And The Stars Receive Their Light From The Sun
+  - Ohia And The Thieving Deer
+  - The Tail Of The Princess Elephant
+  - Maku Mawu And Maku Fia
+  - The Omanhene Who Liked Riddles
+
+Stories to Tell to Children (1907)
+Sara Cone Bryant
+https://github.com/GITenberg/Stories-to-Tell-to-Children_473/blob/ed8132ab76df8b6123f982b471b068bb4e81aa56/473.txt
+Selected stories (14):
+  - The Gingerbread Man
+  - The Little Jackals And The Lion
+  - The Country Mouse And The City Mouse
+  - Little Jack Rollaround
+  - The Little Half-Chick
+  - The Blackberry-Bush
+  - The Adventures Of The Little Field Mouse
+  - The Little Jackal And The Alligator
+  - The Little Fir Tree
+  - The Ten Fairies
+  - The Brahmin, The Tiger, And The Jackal
+  - The Gulls Of Salt Lake
+  - The Nightingale
+  - Margaret Of New Orleans
+
+Bryant's source notes describe The Gingerbread Man as a traditional telling,
+with an ending suggested by Carolyn Bailey's For the Children's Hour; the little
+Jackal stories as adapted from Old Deccan Days; Little Jack Rollaround as freely
+adapted from Theodor Storm; The Blackberry-Bush as from Celia Thaxter's Stories
+and Poems for Children; The Ten Fairies as adapted from H. A. Guerber; and The
+Nightingale as adapted from Hans Christian Andersen. Bryant describes The Little
+Fir Tree as her own story inspired by her childhood memory of Andersen's tale,
+not as an adaptation of its text.
+
+The Four Million (1906)
+O. Henry
+https://github.com/GITenberg/The-Four-Million_2776/blob/dd88736e68c2a0a0afb7762eb67eff3c94deadfb/2776.txt
+Selected stories (12):
+  - The Gift Of The Magi
+  - The Skylight Room
+  - A Service Of Love
+  - The Cop And The Anthem
+  - Memoirs Of A Yellow Dog
+  - Mammon And The Archer
+  - Springtime A La Carte
+  - The Coming-Out Of Maggie
+  - From The Cabby's Seat
+  - The Romance Of A Busy Broker
+  - After Twenty Years
+  - By Courier
+
+Japanese Fairy Tales (1908)
+Yei Theodora Ozaki
+https://github.com/GITenberg/Japanese-Fairy-Tales_4018/blob/178ae21dc97530fda6e790d0651f8fc78f9b06ca/4018.txt
+Selected stories (12):
+  - My Lord Bag Of Rice
+  - The Story Of Urashima Taro, The Fisher Lad
+  - The Shinansha, Or The South Pointing Carriage
+  - The Adventures Of Kintaro, The Golden Boy
+  - The Story Of Princess Hase
+  - The Story Of The Man Who Did Not Wish To Die
+  - The Bamboo-Cutter And The Moon-Child
+  - The Mirror Of Matsuyama
+  - The Sagacious Monkey And The Boar
+  - The Story Of The Old Man Who Made Withered Trees To Flower
+  - The Jelly Fish And The Monkey
+  - Momotaro, Or The Story Of The Son Of A Peach
+
+Grimms' Fairy Tales
+The Brothers Grimm; translations by Edgar Taylor and Marian Edwardes
+https://github.com/GITenberg/Grimms-Fairy-Tales_2591/blob/9991a30953853be9b40751408c3ad0d3af314fb7/2591-0.txt
+Selected stories (13):
+  - The Golden Bird
+  - Hans In Luck
+  - Jorinda And Jorindel
+  - The Travelling Musicians
+  - Old Sultan
+  - The Twelve Dancing Princesses
+  - The Fisherman And His Wife
+  - Rapunzel
+  - Mother Holle
+  - The White Snake
+  - The Queen Bee
+  - The Three Languages
+  - The Four Clever Brothers
+
+The Blue Fairy Book (1889)
+Various authors; edited by Andrew Lang
+https://github.com/GITenberg/The-Blue-Fairy-Book_503/blob/4d594f378f0dcaa61acc1791fafc6e6b0053ea41/503-0.txt
+Selected stories (12):
+  - Prince Hyacinth And The Dear Little Princess
+  - East Of The Sun And West Of The Moon
+  - Cinderella, Or The Little Glass Slipper
+  - Rumpelstiltzkin
+  - Why The Sea Is Salt
+  - The Master Cat; Or, Puss In Boots
+  - Felicia And The Pot Of Pinks
+  - The Water-Lily. The Gold-Spinners
+  - The History Of Whittington
+  - Toads And Diamonds
+  - The Princess On The Glass Hill
+  - The Black Bull Of Norroway
+
+In the source edition's notes, Prince Hyacinth is attributed to Madame Leprince
+de Beaumont; East of the Sun and West of the Moon, Why the Sea Is Salt, and
+The Princess on the Glass Hill to Asbjornsen and Moe; Cinderella, Puss in Boots,
+and Toads and Diamonds to Charles Perrault; Rumpelstiltzkin to Grimm; Felicia
+to Madame d'Aulnoy; and The Black Bull of Norroway to Chambers' Popular
+Traditions of Scotland. The Water-Lily. The Gold-Spinners is one continuous
+story under that combined heading in the cited edition.
+
+The Country of the Blind and Other Stories (1911)
+H. G. Wells
+https://github.com/GITenberg/The-Country-of-the-Blind-and-Other-Stories_11870/blob/0fba6fe2df856ee8d81ff8825bc95622291d4de7/11870.txt
+Selected stories (8):
+  - The Stolen Bacillus
+  - The Remarkable Case Of Davidson's Eyes
+  - The Moth
+  - A Slip Under The Microscope
+  - The Purple Pileus
+  - The Flowering Of The Strange Orchid
+  - In The Avu Observatory
+  - The Magic Shop
+
+The KeyBloom application and original lessons are GPL-2.0-or-later; see
+KEYBLOOM-LICENSE.txt. Historical story texts have their own public-domain status
+as noted above. Electron and Chromium notices are included separately.

@@ -15,19 +15,20 @@ and is not affiliated with it.
    and folders beside it. This is a portable folder, **not a single-file EXE**;
    move the complete folder if you want to move the app.
 
-If you are updating from version **1.0 or 1.1**, close KeyBloom first, extract
-1.2 into a separate folder, and start its `KeyBloom.exe`. Your progress is in
-your Windows user profile; do not delete `%APPDATA%\KeyBloom` if you want to
-keep it. The original 21 lessons and their IDs are unchanged. Version 1.2
-imports lesson completions still present in your old recent-session history;
-completions already dropped from that history before upgrading cannot be
+If you are updating from version **1.0, 1.1 or 1.2**, close KeyBloom first,
+extract 1.3 into a separate folder, and start its `KeyBloom.exe`. Your progress
+is in your Windows user profile; do not delete `%APPDATA%\KeyBloom` if you want
+to keep it. The original 21 lessons and their IDs are unchanged. When upgrading
+from 1.0 or 1.1, lesson completions still present in your old recent-session
+history are imported; completions already dropped from that history cannot be
 recovered. Version 1.0 did not collect per-letter counts, so older sessions
 cannot contribute to letter insights.
 
-After upgrading, **continue using 1.2 or newer**. If you reopen an older version
-and it saves the shared profile, it can discard the new separate completion
-list (and 1.0 can also discard sessions from modes introduced in 1.1). There is
-no automatic update or cloud backup.
+After upgrading, **continue using 1.3 or newer**. If you reopen an older version
+and it saves the shared profile, it can discard story and file session summaries.
+Versions before 1.2 can also discard the separate completion list, and 1.0 can
+discard sessions from modes introduced in 1.1. There is no automatic update or
+cloud backup.
 
 Requires **64-bit Windows 10 or 11** and a physical keyboard. No Node.js,
 compiler, account or internet connection is required after downloading it. The
@@ -54,6 +55,20 @@ Windows security globally.
 - **Typing tests** with 30-second, one-, three- and five-minute choices and
   original passages.
 - **Word Sprint**, a 45-second word game scored by correctly completed words.
+- **Story typing** offers 80 different historical stories, each at least 700
+  words, from folk tales and adventures to city life and science fiction. In
+  Practice, choose **Explore a story**, then **Type this story** or **Another
+  story**. Each choice is random; the immediately previous story is excluded
+  when choosing another. Sources and credits are in `STORY-CREDITS.txt`. The
+  texts are public domain in the United States; laws may differ elsewhere. Some
+  contain dated views or violence.
+- **Import a text file** turns a local `.txt` file into untimed practice. In
+  Practice, choose **Choose a file**, review the preview, then **Start file
+  practice**. Use UTF-8 text up to 256 KiB (262,144 bytes) and 10–80,000
+  characters after formatting. Line breaks and extra spaces become spaces;
+  common smart quotes, dashes and accents are simplified for US QWERTY. Other
+  scripts, emoji, invalid UTF-8 and oversized files are rejected, not silently
+  truncated. KeyBloom never changes the original file.
 - **Focus on a key** lets you choose any letter for a short, untimed drill.
   Recent error counts can suggest letters to practice; select an insight in
   My progress to start a matching drill.
@@ -73,8 +88,11 @@ Windows security globally.
 - No account, ads or intentional network calls. The app blocks HTTP/WebSocket
   requests in its desktop session. It stores practiced lesson IDs, session
   summaries and settings locally, plus aggregate expected-letter attempt/error
-  counts from built-in exercises. It never stores what you typed or any letter
-  counts from custom passages.
+  counts from built-in exercises. KeyBloom does not save what you typed,
+  custom passages, imported filenames or text, or letter counts from your own
+  passages and files. Imported text stays in memory for **Try again**, and is
+  cleared when you leave that practice. Windows may keep its own file-dialog
+  history; KeyBloom does not control it.
 
 This is not feature parity with Mavis Beacon: there are no
 separate learner profiles, dictation, cloud sync, adaptive curriculum, 3-D
@@ -86,8 +104,10 @@ update service or cloud backup.
 
 - The timer starts on the first typed character. A completed lesson stops when
   the practice text has been entered, even if it contains uncorrected mistakes.
-  Focus drills and custom exercises also stop when their text has been entered.
-  A timed activity stops at its time limit; passages repeat if needed.
+  Focus drills, custom text, stories and file practice also stop when their text
+  has been entered. Story and file sessions can be paused or **finished early**
+  after typing begins; finishing early saves a summary, not your place. A timed
+  activity stops at its time limit; passages repeat if needed.
 - **WPM** is the number of correctly placed characters divided by five, then
   divided by active minutes. This is a simple net speed measure, not a certified
   typing-test score. Speed is shown after one active second.
@@ -96,12 +116,14 @@ update service or cloud backup.
   is corrected. Backspace itself is not a character attempt. Pasting is disabled
   in the practice box so results reflect typing.
 - A lesson counts as practiced after it is finished, without an accuracy
-  threshold. Daily goals count completed sessions, and the streak counts
-  consecutive local calendar days with at least one completed session.
+  threshold. Daily goals and streaks count finished sessions, including story or
+  file sessions finished early after typing begins. Streaks use consecutive local
+  calendar days.
 - **Letter insights** count each attempt at an expected A–Z letter in completed
   built-in exercises, including corrected errors. Letters are ranked by error
-  rate; small samples may not reflect your overall skill. Custom passages are
-  excluded, as are records created by version 1.0.
+  rate; small samples may not reflect your overall skill. Story sessions
+  contribute; custom passages and imported files are excluded, as are records
+  created by version 1.0.
 - Up to 500 recent session summaries are kept in local app storage under
   `%APPDATA%\KeyBloom`. The IDs of completed course lessons are stored
   separately, so all 500 can remain practiced even if old session details roll
@@ -118,20 +140,24 @@ npm ci
 npm test
 ```
 
-The Node tests cover all 500 distinct exercises, their stable IDs, scoring,
-corrections, insights, custom-text privacy, milestones, timed sessions, calendar
-streaks, and completion retention after more than 500 repeated sessions. The
-Windows Actions job builds the actual portable app and uses Playwright to
-exercise paging, search, filters, the final paragraph, old-profile migration,
-reset, Word Sprint, focused drills, custom text, test lengths, and text-size
-settings. It checks the sandbox, a 900 × 640 layout and all 500 completion IDs
-after restarting from a different folder. Screenshots are uploaded separately.
-Automated tests do not replace human usability testing. The prebuilt download
-is available in the Actions artifact; users do not need these developer steps.
+The Node tests cover all 500 exercises, all 80 story texts and selection,
+scoring, corrections, import validation and privacy, milestones, timed sessions,
+and completion retention after more than 500 repeated sessions. The Windows
+Actions job builds the portable app and uses Playwright to exercise the course,
+old-profile migration, reset, tests, drills, story selection, `.txt` validation,
+privacy, long-text editing and early finish. It checks the sandbox, responsive
+layouts and all 500 completion IDs after restarting from a different folder.
+Screenshots are uploaded separately. Automated browser and Windows tests do not
+replace real-user Windows, accessibility, or usability testing. The prebuilt
+download is available in the Actions artifact; users do not need these
+developer steps.
 
 ## Licence
 
 KeyBloom's source is GPL-2.0-or-later; see `KEYBLOOM-LICENSE.txt` in the
-artifact or the repository `LICENSE`. The artifact also contains Electron's
-`LICENSE` and Chromium's `LICENSES.chromium.html` notices. Copyright © 2026
-Emmanuel Suah. The executable's author metadata is not a code signature.
+artifact or the repository `LICENSE`. The historical story texts have their own
+public-domain status in the United States; see `STORY-CREDITS.txt` for authors,
+sources, adaptations and jurisdictional limits. The artifact also contains
+Electron's `LICENSE` and Chromium's `LICENSES.chromium.html` notices. Copyright
+© 2026 Emmanuel Suah for KeyBloom's original work. The executable's author
+metadata is not a code signature.

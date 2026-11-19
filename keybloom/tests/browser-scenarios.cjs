@@ -487,4 +487,245 @@ async function runNarrowPreviewScenarios(page) {
   await page.setViewportSize({ width: 1440, height: 900 });
   console.log('Narrow browser preview: navigation and long-lesson layout passed.');
 }
-module.exports = { runScenarios, runAdvancedScenarios, runLayoutScenarios, runCourseScenarios, runNarrowPreviewScenarios, noHorizontalOverflow };
+async function runStoryImportScenarios(page, options = {}) {
+  const baseline = await recordData(page);
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.stack || error.message));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.reload();
+  await nav(page, 'Practice').click();
+  assert.equal(await page.locator('.challenge-card').count(), 6);
+  await page.getByRole('button', { name: /Choose a file/ }).click();
+  await expectVisible(heading(page, 'Bring your own words.'));
+  const pick = async (name, buffer) => {
+    await page.locator('#file-picker').setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer) });
+  };
+  // Click the visible label, not just the hidden input, to exercise the actual
+  // browser/Electron file chooser interaction.
+  const chooserEvent = page.waitForEvent('filechooser');
+  await page.locator('.file-select-button').click();
+  const chooser = await chooserEvent;
+  await chooser.setFiles({ name: 'wrong.md', mimeType: 'text/plain', buffer: Buffer.from('A valid piece of text in the wrong kind of file.') });
+  await page.getByText('Please choose a .txt file.').waitFor();
+  assert.equal(await page.locator('#start-import').isDisabled(), true);
+  await pick('short.txt', 'short');
+  await page.getByText(/at least 10 characters/).waitFor();
+  await pick('large.txt', Buffer.alloc(256 * 1024 + 1, 65));
+  await page.getByText(/larger than 256 KB/).waitFor();
+  await pick('long.txt', 'a'.repeat(80001));
+  await page.getByText(/no more than 80,000 characters/).waitFor();
+  await pick('bad-encoding.txt', Buffer.from([255, 254, 65, 0, 66, 0, 67, 0, 68, 0, 69, 0]));
+  await page.getByText(/not valid UTF-8/).waitFor();
+  await pick('emoji.txt', 'Hello from a friendly sun ☀ today.');
+  await page.getByText(/unsupported characters/).waitFor();
+
+  const fileName = 'private-file-unique.TXT';
+  const source = 'A <script> stays private.\nA café — a happy day!';
+  const normalized = 'A <script> stays private. A cafe -- a happy day!';
+  await pick(fileName, source);
+  await page.getByText(/File is ready/).waitFor();
+  assert.match(await page.locator('.file-preview').textContent(), /private-file-unique\.TXT/);
+  assert.match(await page.locator('.file-format-note').textContent(), /simplified/);
+  assert.equal(await page.locator('.file-preview script').count(), 0, 'file content must be escaped');
+  assert.equal(await page.getByText('1 file ready').count(), 1);
+  assert.ok(!JSON.stringify(await recordData(page)).includes(fileName));
+  assert.ok(!JSON.stringify(await recordData(page)).includes('A <script> stays private.'));
+  await pick('bad-again.txt', 'Unsupported emoji ☀ in this file.');
+  await page.getByText(/unsupported characters/).waitFor();
+  assert.equal(await page.locator('.file-preview').count(), 0, 'invalid replacement must not leave a stale file ready');
+  await pick(fileName, source);
+  await page.getByText(/File is ready/).waitFor();
+  await nav(page, 'Overview').click();
+  await expectVisible(heading(page, 'Discard this file?'));
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  assert.equal(await page.locator('.file-name').textContent(), fileName, 'cancel retains the selected file in memory');
+  if (options.fileScreenshot) {
+    fs.mkdirSync(path.dirname(options.fileScreenshot), { recursive: true });
+    await page.screenshot({ path: options.fileScreenshot });
+  }
+  await page.getByRole('button', { name: /Start file practice/ }).click();
+  await expectVisible(heading(page, 'Your file practice'));
+  assert.equal(await page.locator('#target-text').textContent(), normalized);
+  assert.equal(await page.locator('#target-text script').count(), 0);
+  await page.locator('#typing-input').pressSequentially(normalized);
+  await expectVisible(heading(page, 'A little better, already.'));
+  let saved = await recordData(page);
+  assert.equal(saved.records.length, baseline.records.length + 1);
+  assert.equal(saved.records.at(-1).kind, 'import');
+  assert.deepEqual(saved.records.at(-1).keyStats, {});
+  assert.ok(!JSON.stringify(saved).includes(fileName));
+  assert.ok(!JSON.stringify(saved).includes(normalized));
+  await page.getByRole('button', { name: /Try again/ }).click();
+  assert.equal(await page.locator('#target-text').textContent(), normalized, 'retry uses the in-memory file only');
+  await nav(page, 'Practice').click();
+
+  // A delayed file read must not reappear after leaving the import screen.
+  await page.getByRole('button', { name: /Choose a file/ }).click();
+  await page.evaluate(() => {
+    window.testOriginalRead = File.prototype.arrayBuffer;
+    File.prototype.arrayBuffer = function () {
+      if (this.name !== 'delayed-private.txt') return window.testOriginalRead.call(this);
+      return new Promise((resolve, reject) => { window.testReleaseRead = () => window.testOriginalRead.call(this).then(resolve, reject); });
+    };
+  });
+  await pick('delayed-private.txt', 'This private file arrives after leaving.');
+  await page.getByText('Reading your file…').waitFor();
+  await nav(page, 'Practice').click();
+  await page.evaluate(() => { window.testReleaseRead(); File.prototype.arrayBuffer = window.testOriginalRead; });
+  await page.getByRole('button', { name: /Choose a file/ }).click();
+  assert.equal(await page.locator('.file-preview').count(), 0);
+  assert.equal(await page.locator('#start-import').isDisabled(), true);
+
+  // Long text uses a bounded window, even around a far-away insertion point.
+  const segment = 'A confidential fragment: fresh snow. ';
+  const longText = segment.repeat(Math.floor(80000 / segment.length)).trim();
+  await pick('long-private-file.txt', longText);
+  await page.getByText(/File is ready/).waitFor();
+  await page.getByRole('button', { name: /Start file practice/ }).click();
+  await expectVisible(heading(page, 'Your file practice'));
+  assert.equal((await page.locator('#full-passage-text').textContent()).length, longText.length);
+  assert.ok(await page.locator('#target-text .target-char').count() <= 600, 'long target rendering stays bounded');
+  assert.equal(await page.locator('#finish-early').isDisabled(), true);
+  const input = page.locator('#typing-input');
+  // fill() simulates a large typed prefix to reach the middle without spending
+  // a CI hour; ordinary keystrokes, corrections and paste blocking are tested too.
+  await input.fill(longText.slice(0, 25000));
+  assert.match(await page.locator('#typing-window-note').textContent(), /characters 24801–25400/);
+  assert.ok(await page.locator('#target-text .target-char').count() <= 600);
+  await input.evaluate((node) => { node.setSelectionRange(5, 8); node.dispatchEvent(new Event('select', { bubbles: true })); });
+  assert.match(await page.locator('#typing-window-note').textContent(), /characters 1–600/);
+  await input.pressSequentially('XYZ');
+  assert.equal(await page.locator('#target-text .wrong').count(), 3, 'selected replacement paints errors');
+  await input.evaluate((node) => { node.setSelectionRange(5, 8); });
+  await input.pressSequentially(longText.slice(5, 8));
+  assert.equal(await page.locator('#target-text .wrong').count(), 0, 'replacement corrections repaint properly');
+  await input.evaluate((node) => { node.setSelectionRange(node.value.length, node.value.length); node.dispatchEvent(new Event('select', { bubbles: true })); });
+  await input.pressSequentially(longText.slice(25000, 25030));
+  const visible = await page.evaluate(() => {
+    const box = document.querySelector('#target-text').getBoundingClientRect();
+    const current = document.querySelector('#target-text .current').getBoundingClientRect();
+    return { top: box.top, bottom: box.bottom, currentTop: current.top, currentBottom: current.bottom };
+  });
+  assert.ok(visible.currentTop >= visible.top - 1 && visible.currentBottom <= visible.bottom + 1, `active character follows long text: ${JSON.stringify(visible)}`);
+  await input.fill(longText.slice(0, -10));
+  const finalWindow = await page.locator('#typing-window-note').textContent();
+  assert.ok(finalWindow.includes(`${longText.length - 599}–${longText.length}`), `last window reaches the end: ${finalWindow}`);
+  await input.pressSequentially(longText.slice(-10, -1));
+  assert.equal((await input.inputValue()).length, longText.length - 1, 'near-maximum file is never truncated');
+  await page.getByText('Read the full passage').click();
+  assert.equal(await page.locator('#full-passage-text').textContent(), longText);
+  await page.getByRole('button', { name: 'Finish early' }).click();
+  await expectVisible(heading(page, 'Finish this session?'));
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  assert.equal(await input.getAttribute('readonly'), null, 'cancel resumes the session');
+  await page.getByRole('button', { name: 'Finish early' }).click();
+  await page.getByRole('button', { name: 'Finish session', exact: true }).click();
+  await expectVisible(heading(page, 'A little better, already.'));
+  assert.match(await page.locator('.result-card .eyebrow').textContent(), /FINISHED EARLY/);
+  saved = await recordData(page);
+  assert.equal(saved.records.length, baseline.records.length + 2);
+  assert.equal(saved.records.at(-1).kind, 'import');
+  assert.deepEqual(saved.records.at(-1).keyStats, {});
+  assert.ok(!JSON.stringify(saved).includes('long-private-file.txt'));
+  assert.ok(!JSON.stringify(saved).includes('A confidential fragment: fresh snow.'));
+
+  // Fixed randomness demonstrates that first and subsequent draws are wired to
+  // the library and that the immediate previous story cannot be repeated.
+  await nav(page, 'Practice').click();
+  await page.evaluate(() => { Math.random = () => 0; });
+  await page.getByRole('button', { name: /Explore a story/ }).click();
+  await expectVisible(heading(page, 'Let a story lead the way.'));
+  assert.equal(await page.locator('#story-title').textContent(), 'Thunder and Anansi');
+  assert.match(await page.locator('.story-meta').textContent(), /1,083 words/);
+  await page.getByRole('button', { name: 'Another story' }).click();
+  const title = await page.locator('#story-title').textContent();
+  assert.equal(title, 'Why the Lizard Continually Moves His Head Up and Down');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'story-title');
+  if (options.storyScreenshot) {
+    fs.mkdirSync(path.dirname(options.storyScreenshot), { recursive: true });
+    await page.screenshot({ path: options.storyScreenshot });
+  }
+  await page.setViewportSize({ width: 900, height: 640 });
+  await noHorizontalOverflow(page, 'minimum-size story preview');
+  await page.getByRole('button', { name: /Type this story/ }).click();
+  await expectVisible(heading(page, title));
+  await page.waitForTimeout(100);
+  await noHorizontalOverflow(page, 'minimum-size story session');
+  const minimum = await page.evaluate(() => {
+    const view = document.querySelector('#workspace').getBoundingClientRect();
+    const current = document.querySelector('#target-text .current').getBoundingClientRect();
+    const input = document.querySelector('#typing-input').getBoundingClientRect();
+    return { top: view.top, bottom: view.bottom, currentTop: current.top, currentBottom: current.bottom, inputTop: input.top, inputBottom: input.bottom };
+  });
+  assert.ok(minimum.currentTop >= minimum.top && minimum.currentBottom <= minimum.bottom &&
+    minimum.inputTop >= minimum.top && minimum.inputBottom <= minimum.bottom,
+    `long-story cursor and input fit together: ${JSON.stringify(minimum)}`);
+  const storyText = await page.evaluate((storyTitle) => window.KeyBloomStories.all.find((story) => story.title === storyTitle).text, title);
+  assert.equal(await page.locator('#full-passage-text').textContent(), storyText);
+  assert.ok(await page.locator('#target-text .target-char').count() <= 600);
+  await page.locator('#typing-input').pressSequentially(storyText.slice(0, 45));
+  await page.getByRole('button', { name: 'Finish early' }).click();
+  await page.getByRole('button', { name: 'Finish session', exact: true }).click();
+  await expectVisible(heading(page, 'A little better, already.'));
+  saved = await recordData(page);
+  assert.equal(saved.records.length, baseline.records.length + 3);
+  assert.equal(saved.records.at(-1).kind, 'story');
+  assert.ok(Object.keys(saved.records.at(-1).keyStats).length > 0, 'built-in story results contribute letter insights');
+  assert.ok(!JSON.stringify(saved).includes(storyText.slice(0, 80)));
+  await page.getByRole('button', { name: 'Another story' }).click();
+  assert.notEqual(await page.locator('#story-title').textContent(), title);
+
+  // Each title has a different length; check all 80, not just a convenient
+  // example, against both the supported minimum and the narrow preview.
+  for (const size of [{ width: 900, height: 640 }, { width: 375, height: 740 }]) {
+    await page.setViewportSize(size);
+    const problems = await page.evaluate(() => {
+      const stories = window.KeyBloomStories.all;
+      const oldRandom = Math.random;
+      const issues = [];
+      try {
+        for (let index = 0; index < stories.length; index += 1) {
+          const previous = stories.findIndex((item) => item.title === document.querySelector('#story-title').textContent);
+          if (index !== previous) {
+            const choice = index < previous ? index : index - 1;
+            Math.random = () => (choice + 0.5) / (stories.length - 1);
+            document.querySelector('[data-action="shuffle-story"]').click();
+          }
+          const cover = document.querySelector('.story-cover');
+          const bounds = cover.getBoundingClientRect();
+          const bad = [...cover.querySelectorAll('h2, p, button, .story-meta span, .story-topic')].some((node) => {
+            const rect = node.getBoundingClientRect();
+            return rect.left < bounds.left - 1 || rect.right > bounds.right + 1 ||
+              rect.top < bounds.top - 1 || rect.bottom > bounds.bottom + 1;
+          });
+          const workspace = document.querySelector('#workspace');
+          if (document.querySelector('#story-title').textContent !== stories[index].title || bad ||
+              workspace.scrollWidth > workspace.clientWidth + 2) issues.push(stories[index].title);
+        }
+      } finally { Math.random = oldRandom; }
+      return issues;
+    });
+    assert.deepEqual(problems, [], `${size.width}px story cards must not clip titles or controls`);
+  }
+
+  await page.setViewportSize({ width: 375, height: 740 });
+  await noHorizontalOverflow(page, 'narrow story preview');
+  await nav(page, 'Practice').click();
+  await page.getByRole('button', { name: /Choose a file/ }).click();
+  await noHorizontalOverflow(page, 'narrow file picker');
+  await pick('mobile.txt', 'A short and private practice on a small screen.');
+  await page.getByText(/File is ready/).waitFor();
+  await noHorizontalOverflow(page, 'narrow file preview');
+  const card = await page.locator('.file-card').boundingBox();
+  const button = await page.locator('#start-import').boundingBox();
+  assert.ok(button.x >= card.x && button.x + button.width <= card.x + card.width + 1, 'file button fits its card');
+  await nav(page, 'Practice').click();
+  await page.getByRole('button', { name: 'Discard file' }).click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await nav(page, 'My progress').click();
+  assert.match(await page.locator('.history-list').textContent(), /Story typing/);
+  assert.match(await page.locator('.history-list').textContent(), /File practice/);
+  assert.deepEqual(errors, [], 'no story or import renderer errors');
+  console.log('Story and import scenarios: passed (validation, race, privacy, long text, random selection, early finish, responsive layouts).');
+}
+module.exports = { runScenarios, runAdvancedScenarios, runLayoutScenarios, runCourseScenarios, runNarrowPreviewScenarios, runStoryImportScenarios, noHorizontalOverflow };

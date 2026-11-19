@@ -1,4 +1,4 @@
-KEYBLOOM 1.2 — WINDOWS QUICK START
+KEYBLOOM 1.3 — WINDOWS QUICK START
 By Emmanuel Suah
 
 REQUIREMENTS: 64-bit Windows 10 or Windows 11, a physical keyboard, and enough
@@ -16,22 +16,32 @@ needed. The app works offline after download.
    errors with Backspace; corrected errors still count in accuracy.
 5. Open Lessons for all 500 practices, including the original 21. Search by
    title, topic, key, or number; use the topic/progress filters and page controls
-   to browse. Each lesson may be repeated. In Practice, choose a timed test,
-   Word Sprint, a focused letter drill, or Practice your own text. Your passage
-   is 10–500 printable US keyboard characters and is never saved.
-6. Open My progress to see recent results, letters to practice and milestones.
+   to browse. Each lesson may be repeated.
+6. In Practice, choose Story typing for one of 80 randomly chosen stories. Each
+   has at least 700 words. Choose Another story for a different one, or Type
+   this story to begin. Stories are historical texts; see STORY-CREDITS.txt.
+7. In Practice, choose Import a text file to select a local .txt file. It must
+   be UTF-8, at most 256 KiB (262,144 bytes) and 10–80,000 characters after
+   formatting. Extra spaces and line breaks become spaces; common smart quotes,
+   dashes and accents are simplified. Other scripts and emoji are not supported.
+   The original file is not changed. Story and file practice are untimed: pause
+   as needed, or choose Finish early after typing to save a summary.
+8. Practice also includes timed tests, Word Sprint, a focused letter drill, and
+   Practice your own text (10–500 printable US keyboard characters).
+9. Open My progress to see recent results, letters to practice and milestones.
    In Settings you can choose a larger practice text size, change the daily goal,
    show or hide the keyboard, or reset your locally saved progress.
 
-UPDATING FROM KEYBLOOM 1.0 OR 1.1
+UPDATING FROM KEYBLOOM 1.0, 1.1 OR 1.2
 Close the old app, extract this version into a new folder, and open its
 KeyBloom.exe. Progress stays in your Windows profile; do not delete
-%APPDATA%\KeyBloom if you want to keep it. The original 21 lessons are
-unchanged. Lesson completions still in your recent session history are imported;
-completions already lost from the old 500-session history cannot be recovered.
-Sessions made in 1.0 did not record letter counts. After upgrading, use 1.2 or
-newer: an older version can erase the new completion list when it saves the
-shared profile. There is no automatic update or cloud backup.
+%APPDATA%\KeyBloom if you want to keep it. The original 21 lessons are unchanged.
+From 1.0 or 1.1, completions still in the old recent history are imported;
+completions already lost from that 500-session history cannot be recovered.
+Sessions made in 1.0 did not record letter counts. After upgrading, use 1.3 or
+newer: older versions can discard story and file summaries, and versions before
+1.2 can also erase the separate completion list. There is no automatic update
+or cloud backup.
 
 WINDOWS SECURITY
 This build is not digitally signed. Windows may show a publisher/reputation
@@ -46,8 +56,12 @@ PRIVACY AND LIMITS
   are kept separately, even when old session details roll off. Other statistics
   and most milestones reflect the retained 500 sessions. KeyBloom saves aggregate
   letter attempt and error counts for built-in exercises, not the words you type.
-  Your own passages and their letter counts are never saved. Resetting or deleting
-  the profile permanently removes progress and history. There is no cloud backup.
+  KeyBloom does not save your passages, imported filenames or text, or their
+  letter counts. Imported text stays in memory for retry and is cleared when you
+  leave that practice. Windows may keep its own file-dialog history. Resetting
+  or deleting the profile permanently removes progress. There is no cloud backup.
+- Story texts are public domain in the United States; rules may differ elsewhere.
+  Some contain dated perspectives or violence. See STORY-CREDITS.txt for sources.
 - The course and visual keyboard use an English (US) QWERTY layout. Other
   physical layouts may not match the on-screen key hints.
 - KeyBloom is an original, independent typing tutor; it is not Mavis Beacon
