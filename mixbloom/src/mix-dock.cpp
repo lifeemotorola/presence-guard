@@ -11,6 +11,7 @@ Licensed under GPL-2.0-or-later; see LICENSE. No warranty.
 #include <QLabel>
 #include <QMessageBox>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPointer>
 #include <QProgressBar>
 #include <QPushButton>
@@ -68,6 +69,46 @@ protected:
 	}
 };
 
+/* The gradient is drawn against the whole scale, then clipped to the current
+ * level. A gradient on the progress chunk itself would incorrectly show red
+ * even at very low levels. QProgressBar retains its accessibility interface. */
+class PeakBar final : public QProgressBar {
+public:
+	explicit PeakBar(QWidget *parent = nullptr) : QProgressBar(parent) {}
+
+protected:
+	void paintEvent(QPaintEvent *) override
+	{
+		QPainter p(this);
+		p.setRenderHint(QPainter::Antialiasing);
+		p.setPen(Qt::NoPen);
+		p.setBrush(QColor("#0c1722"));
+		p.drawRoundedRect(rect(), 4, 4);
+		const qreal fraction =
+			maximum() > minimum()
+				? qBound(0.0, static_cast<double>(value() - minimum()) / (maximum() - minimum()), 1.0)
+				: 0.0;
+		if (fraction <= 0.0)
+			return;
+		QPainterPath clip;
+		clip.addRoundedRect(QRectF(0, 0, width() * fraction, height()), 4, 4);
+		p.setClipPath(clip);
+		QLinearGradient gradient(0, 0, width(), 0);
+		gradient.setColorAt(0.0, QColor("#52caa9"));
+		gradient.setColorAt(0.72, QColor("#82e3bb"));
+		gradient.setColorAt(0.88, QColor("#e1c46e"));
+		gradient.setColorAt(1.0, QColor("#e98b77"));
+		p.setBrush(gradient);
+		p.drawRect(rect());
+	}
+};
+
+QString gainLabel(float gain)
+{
+	const float db = mixbloom::gainToDb(gain);
+	return std::isinf(db) && db < 0 ? QStringLiteral("−∞ dB") : QString::number(db, 'f', 1) + " dB";
+}
+
 bool confirmAction(QWidget *parent, const QString &title, const QString &text, const QString &detail)
 {
 	QMessageBox box(QMessageBox::Warning, title, text, QMessageBox::Yes | QMessageBox::No, parent);
@@ -100,7 +141,9 @@ public:
 		titleRow->setSpacing(8);
 		title_ = makeLabel("", "sourceName", this, true);
 		title_->setMinimumWidth(0);
-		title_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+		QSizePolicy titlePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+		titlePolicy.setHeightForWidth(true);
+		title_->setSizePolicy(titlePolicy);
 		titleRow->addWidget(title_, 1);
 		mute_ = new QPushButton(this);
 		mute_->setObjectName("muteButton");
@@ -129,7 +172,7 @@ public:
 		peakRow->addStretch();
 		peakRow->addWidget(makeLabel(QStringLiteral("−60   ·   −30   ·   0 dB"), "smallLabel", this));
 		layout->addLayout(peakRow);
-		meter_ = new QProgressBar(this);
+		meter_ = new PeakBar(this);
 		meter_->setObjectName("peakMeter");
 		meter_->setRange(0, 100);
 		meter_->setValue(0);
@@ -179,6 +222,8 @@ public:
 	QPushButton *monitorButton() const { return monitor_; }
 	QSlider *fader() const { return fader_; }
 	QPushButton *trackButton(unsigned index) const { return track_[index - 1]; }
+	void previewFader(int position) { db_->setText(gainLabel(mixbloom::faderToGain(position))); }
+	void detachMeter() { tap_.reset(); }
 
 	void apply(const mixbloom::Source &source)
 	{
@@ -193,8 +238,7 @@ public:
 		mute_->setText(source.muted ? "Unmute" : "Mute");
 		mute_->setAccessibleName((source.muted ? "Unmute " : "Mute ") + name);
 		mute_->setToolTip("Mute or unmute this source on all OBS tracks.");
-		const float db = mixbloom::gainToDb(source.gain);
-		db_->setText(std::isinf(db) && db < 0 ? QStringLiteral("−∞ dB") : QString::number(db, 'f', 1) + " dB");
+		db_->setText(gainLabel(source.gain));
 		fader_->setAccessibleName("Level for " + name);
 		fader_->setEnabled(!source.volumeLocked);
 		if (!fader_->isSliderDown()) {
@@ -324,8 +368,6 @@ void MixDock::buildUi()
 		QSlider::sub-page:horizontal { background: #87e4c8; border-radius: 2px; }
 		QSlider::handle:horizontal { width: 15px; margin: -6px 0; border-radius: 7px; background: #cbf8e9; border: 1px solid #6fd8bd; }
 		QSlider::handle:horizontal:disabled { background: #586d76; border-color: #586d76; }
-		QProgressBar#peakMeter { border: none; border-radius: 4px; background: #0c1722; }
-		QProgressBar#peakMeter::chunk { border-radius: 4px; background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #52caa9,stop:0.70 #82e3bb,stop:0.88 #e1c46e,stop:1 #e98b77); }
 		QScrollBar:vertical { background: #0b111c; width: 10px; }
 		QScrollBar::handle:vertical { background: #405b68; min-height: 24px; border-radius: 4px; }
 		QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
@@ -419,12 +461,16 @@ void MixDock::buildUi()
 void MixDock::connectCard(SourceCard *card)
 {
 	const QString id = qstr(card->source().uuid);
-	connect(card->fader(), &QSlider::valueChanged, this, [this, id](int value) {
+	connect(card->fader(), &QSlider::valueChanged, this, [this, id, card](int value) {
 		if (suspended_)
 			return;
-		reportResult(mixbloom::setFader(utf8(id), value));
+		const auto result = mixbloom::setFader(utf8(id), value);
+		if (result == mixbloom::Result::Applied)
+			card->previewFader(value);
+		reportResult(result);
 		/* Do not rebuild the card while the pointer is being dragged. */
 	});
+	connect(card->fader(), &QSlider::sliderReleased, this, [this] { refreshNow(); });
 	connect(card->muteButton(), &QPushButton::clicked, this, [this, id, card] {
 		if (suspended_)
 			return;
@@ -441,12 +487,15 @@ void MixDock::connectCard(SourceCard *card)
 			auto result = mixbloom::setTrack(utf8(id), i, checked);
 			if (result == mixbloom::Result::ConfirmClearTracks) {
 				QPointer<MixDock> guard(this);
+				++activeConfirmations_;
 				const bool confirmed = confirmAction(
 					this, "Remove the last track?",
 					QString("Remove %1 from all six OBS audio tracks?").arg(name),
 					"This can remove the source from your stream or recording. You can cancel and keep the current routing.");
 				if (!guard)
 					return;
+				--activeConfirmations_;
+				releaseRetiredCards();
 				if (!confirmed || suspended_ || !identity.stillCurrent()) {
 					notice_->setText(
 						"Routing unchanged. The source may have changed while confirming.");
@@ -467,12 +516,15 @@ void MixDock::connectCard(SourceCard *card)
 		mixbloom::SourceIdentity identity(utf8(id));
 		if (enable) {
 			QPointer<MixDock> guard(this);
+			++activeConfirmations_;
 			const bool confirmed = confirmAction(
 				this, "Enable audio monitoring?",
 				QString("Send %1 to the OBS monitoring device?").arg(name),
 				"Use headphones and check your monitoring device. Speakers or desktop capture can cause feedback. The source also remains on its selected output tracks.");
 			if (!guard)
 				return;
+			--activeConfirmations_;
+			releaseRetiredCards();
 			if (!confirmed || suspended_ || !identity.stillCurrent()) {
 				notice_->setText("Monitoring unchanged. Use headphones to avoid feedback.");
 				refreshNow();
@@ -529,10 +581,7 @@ void MixDock::refreshNow()
 	}
 	for (auto it = cards_.begin(); it != cards_.end();) {
 		if (!seen.contains(it.key())) {
-			SourceCard *card = it.value();
-			sourceLayout_->removeWidget(card);
-			card->hide();
-			card->deleteLater();
+			retireCard(it.value());
 			it = cards_.erase(it);
 		} else {
 			++it;
@@ -556,6 +605,28 @@ void MixDock::updateMeters()
 		card->updateMeter();
 }
 
+void MixDock::retireCard(SourceCard *card)
+{
+	sourceLayout_->removeWidget(card);
+	card->setEnabled(false);
+	card->hide();
+	card->detachMeter();
+	retiredCards_.append(card);
+	releaseRetiredCards();
+}
+
+void MixDock::releaseRetiredCards()
+{
+	/* OBS can explicitly flush DeferredDelete events while switching scene
+	 * collections. Keep a dialog's sender alive until its modal call returns,
+	 * but detach its meter immediately so OBS can destroy its old sources. */
+	if (activeConfirmations_ != 0)
+		return;
+	for (SourceCard *card : retiredCards_)
+		card->deleteLater();
+	retiredCards_.clear();
+}
+
 void MixDock::clearCards()
 {
 	for (SourceCard *card : cards_) {
@@ -563,20 +634,17 @@ void MixDock::clearCards()
 		delete card;
 	}
 	cards_.clear();
+	for (SourceCard *card : retiredCards_)
+		delete card;
+	retiredCards_.clear();
 	order_.clear();
 }
 
 void MixDock::suspendForCollectionChange()
 {
 	suspended_ = true;
-	/* Deleting a card can invalidate a sender during an active confirmation
-	 * dialog. Disable and defer deletion; its tap is detached on destruction. */
-	for (SourceCard *card : cards_) {
-		sourceLayout_->removeWidget(card);
-		card->setEnabled(false);
-		card->hide();
-		card->deleteLater();
-	}
+	for (SourceCard *card : cards_)
+		retireCard(card);
 	cards_.clear();
 	order_.clear();
 	empty_->setVisible(false);

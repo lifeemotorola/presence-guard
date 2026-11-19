@@ -7,6 +7,7 @@ Licensed under GPL-2.0-or-later; see LICENSE. No warranty.
 
 #include "obs-mixer.hpp"
 
+#include <QList>
 #include <QMap>
 #include <QStringList>
 #include <QWidget>
@@ -30,6 +31,8 @@ private:
 	void buildUi();
 	void connectCard(SourceCard *card);
 	void updateMeters();
+	void retireCard(SourceCard *card);
+	void releaseRetiredCards();
 	void clearCards();
 	void reportResult(mixbloom::Result result);
 
@@ -41,6 +44,8 @@ private:
 	QTimer *refreshTimer_ = nullptr;
 	QTimer *meterTimer_ = nullptr;
 	QMap<QString, SourceCard *> cards_;
+	QList<SourceCard *> retiredCards_;
 	QStringList order_;
+	int activeConfirmations_ = 0;
 	bool suspended_ = false;
 };

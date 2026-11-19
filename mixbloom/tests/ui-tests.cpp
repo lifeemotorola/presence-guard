@@ -14,6 +14,7 @@ Copyright (C) 2026 Emmanuel Suah. GPL-2.0-or-later; no warranty.
 #include <QLabel>
 #include <QMessageBox>
 #include <QPluginLoader>
+#include <QPointer>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
@@ -133,6 +134,8 @@ int main(int argc, char **argv)
 		slider->setValue(500);
 		check(std::fabs(mic.gain - 0.125f) < 0.000001f && desktop.gain == 1.0f,
 		      "fader changes only its source");
+		check(micCard->findChild<QLabel *>("levelValue")->text().startsWith("-18.1"),
+		      "fader's dB value updates immediately");
 		mute->click();
 		check(mic.muted && mute->text() == "Unmute", "mute is applied and reflected immediately");
 		mute->click();
@@ -208,8 +211,17 @@ int main(int argc, char **argv)
 		mic.monitoring = false;
 		dock.refreshNow();
 		const int beforeSwitch = fakeWrites();
-		answerDialog(QMessageBox::Yes, [&dock] { dock.suspendForCollectionChange(); });
+		QPointer<QPushButton> guardedMonitor(monitor);
+		bool senderRetained = false, metersDetached = false;
+		answerDialog(QMessageBox::Yes, [&] {
+			dock.suspendForCollectionChange();
+			QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+			senderRetained = !guardedMonitor.isNull();
+			metersDetached = fakeMeters() == 0;
+		});
 		monitor->click();
+		check(senderRetained && metersDetached,
+		      "collection cleanup keeps the modal sender alive but detaches meters");
 		check(fakeWrites() == beforeSwitch && !mic.monitoring,
 		      "scene switch cancels a pending monitoring action");
 		dock.resumeAfterCollectionChange();
@@ -226,6 +238,19 @@ int main(int argc, char **argv)
 		dock.refreshNow();
 		app.processEvents();
 		check(!card(dock, "desktop"), "removed OBS sources disappear from the dock");
+
+		micCard = card(dock, "mic");
+		monitor = micCard->findChild<QPushButton *>("monitorButton");
+		FakeSource *replacement = nullptr;
+		const int beforeReplacement = fakeWrites();
+		answerDialog(QMessageBox::Yes, [&] {
+			mic.removed = true;
+			replacement = &fakeAdd("mic", "New source with reused ID", OBS_SOURCE_AUDIO);
+			dock.refreshNow();
+		});
+		monitor->click();
+		check(replacement && !replacement->monitoring && fakeWrites() == beforeReplacement,
+		      "confirmation cannot modify a replacement source with the same UUID");
 	}
 	QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 	check(fakeMeters() == 0 && fakeAcquired() == fakeReleased(),
