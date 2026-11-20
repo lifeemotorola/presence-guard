@@ -435,12 +435,19 @@ bool Workspace::apply(const QString &mode, int page, const QString &focusedId, Q
 	main->removeDockWidget(anchor);
 	if (!guard || !main || !anchor)
 		return false;
-	anchor->setFloating(false);
-	if (!guard || !main || !anchor)
-		return false;
+	/* A floating dock cannot redock until it has a main-window layout entry.
+	 * Add it first: setFloating(false) immediately after removeDockWidget()
+	 * silently does nothing on Qt for floating docks. */
 	main->addDockWidget(area, anchor);
 	if (!guard || !main || !anchor)
 		return false;
+	anchor->setFloating(false);
+	if (!guard || !main || !anchor)
+		return false;
+	if (anchor->isFloating()) {
+		fail(error, "The workspace could not be docked. Restore the previous OBS layout if needed.");
+		return false;
+	}
 	anchor->show();
 	for (const QString &id : ids) {
 		QPointer<QDockWidget> dock = byId.value(id);
@@ -453,14 +460,17 @@ bool Workspace::apply(const QString &mode, int page, const QString &focusedId, Q
 			return false;
 		if (!dock)
 			continue;
+		main->addDockWidget(area, dock);
+		if (!guard || !main || !anchor || !dock)
+			return false;
 		dock->setFloating(false);
 		if (!guard || !main || !anchor || !dock)
 			return false;
-		main->addDockWidget(area, dock);
-		if (!guard || !main || !anchor)
+		if (dock->isFloating()) {
+			fail(error, "An included dock could not be docked. Restore the previous OBS layout if needed.");
 			return false;
-		if (dock)
-			dock->hide();
+		}
+		dock->hide();
 	}
 	if (!guard || !main || !anchor)
 		return false;

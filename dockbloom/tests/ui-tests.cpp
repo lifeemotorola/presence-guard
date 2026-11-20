@@ -150,6 +150,7 @@ int main(int argc, char **argv)
 
 	QMainWindow main;
 	main.setObjectName("fakeOBSMainWindow");
+	main.setDockOptions(QMainWindow::AllowNestedDocks | QMainWindow::AllowTabbedDocks);
 	main.resize(1300, 900);
 	main.setCentralWidget(new QLabel("OBS preview", &main));
 	FakeHost host(&main);
@@ -167,6 +168,8 @@ int main(int argc, char **argv)
 		native.append(dock);
 		contents.append(content);
 	}
+	/* OBS's essential built-in docks are movable but not closable. */
+	native[5]->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
 	auto *ui = new WorkspaceUi(&workspace);
 	check(host.addDock(kControlId, "DockBloom", ui) &&
 		      host.addDock(kWorkspaceId, "DockBloom Workspace", createWorkspaceAnchor()),
@@ -174,8 +177,9 @@ int main(int argc, char **argv)
 	main.show();
 	findDock(main, kControlId)->setFloating(false);
 	findDock(main, kControlId)->show();
-	findDock(main, kWorkspaceId)->setFloating(false);
-	findDock(main, kWorkspaceId)->show();
+	/* New OBS docks start hidden and floating, including the anchor. */
+	check(findDock(main, kWorkspaceId)->isFloating() && findDock(main, kWorkspaceId)->isHidden(),
+	      "the workspace anchor starts hidden and floating as in OBS");
 	workspace.frontendReady();
 	ui->refresh();
 	app.processEvents();
@@ -221,6 +225,14 @@ int main(int argc, char **argv)
 	      "focus view arranges 14 docks after saving the original layout");
 	app.processEvents();
 	QDockWidget *anchor = findDock(main, kWorkspaceId);
+	if (anchor && (!main.tabifiedDockWidgets(anchor).contains(native[5]) || native[5]->isHidden())) {
+		QStringList tabIds;
+		for (QDockWidget *tab : main.tabifiedDockWidgets(anchor))
+			tabIds.append(tab->objectName());
+		std::fprintf(stderr, "Focus diagnostic: anchor floating=%d area=%d scene hidden=%d area=%d tabs=%s\n",
+			     anchor->isFloating(), int(main.dockWidgetArea(anchor)), native[5]->isHidden(),
+			     int(main.dockWidgetArea(native[5])), tabIds.join(',').toUtf8().constData());
+	}
 	check(anchor && main.tabifiedDockWidgets(anchor).contains(native[5]) && !native[5]->isHidden(),
 	      "the chosen dock is shown in the focused workspace");
 	bool intact = true;
@@ -275,6 +287,15 @@ int main(int argc, char **argv)
 	check(workspace.addWebDock("Web chat", "https://example.com/chat", &webId, &error) &&
 		      workspace.config().members.contains(webId) && findDock(main, webId) && host.created == 1,
 	      "adding a web URL creates a registered browser dock and saves it in the workspace");
+	QPointer<QDockWidget> webDock = findDock(main, webId);
+	check(webDock && webDock->isFloating() && webDock->isHidden(), "a newly registered web dock starts floating");
+	check(workspace.apply("focus", 0, webId, &error), "a floating web dock can be moved into Focus view");
+	app.processEvents();
+	check(webDock && !webDock->isFloating() && !webDock->isHidden() &&
+		      main.tabifiedDockWidgets(findDock(main, kWorkspaceId)).contains(webDock),
+	      "a formerly floating web dock is actually docked in the workspace");
+	check(workspace.restore(&error) && webDock && webDock->isFloating() && webDock->isHidden(),
+	      "layout restore returns a formerly floating web dock to its previous state");
 	check(!workspace.addWebDock("Bad", "file:///private", nullptr, &error),
 	      "the add-web workflow refuses non-HTTP URLs");
 	for (int i = 0; i < 11; ++i) {
@@ -284,7 +305,20 @@ int main(int argc, char **argv)
 	}
 	check(workspace.config().webDocks.size() == 12 && workspace.config().members.size() == 26,
 	      "more than ten web docks coexist with existing OBS docks");
-	QPointer<QDockWidget> webDock = findDock(main, webId);
+	check(workspace.apply("grid", 4, QString(), &error), "a later grid page of web docks can be arranged");
+	app.processEvents();
+	bool fourWebCells = true;
+	for (int i = 2; i < 6; ++i) {
+		QDockWidget *dock = findDock(main, workspace.config().webDocks[i].id);
+		fourWebCells = fourWebCells && dock && !dock->isFloating() && dock->isVisible() && dock->widget() &&
+			       dock->widget()->isVisible();
+		for (int j = i + 1; j < 6; ++j) {
+			QDockWidget *other = findDock(main, workspace.config().webDocks[j].id);
+			fourWebCells = fourWebCells && dock && other && !dock->geometry().intersects(other->geometry());
+		}
+	}
+	check(fourWebCells, "four formerly floating web docks are simultaneously visible in distinct grid cells");
+	check(workspace.restore(&error), "the layout can be restored after arranging a page of web docks");
 	check(workspace.removeWebDock(webId, &error) && !webDock && host.closed == 1 && native[0],
 	      "removing a web dock closes only its browser and leaves native docks intact");
 
