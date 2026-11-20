@@ -1,5 +1,7 @@
 # Presence Guard
 
+Looking for all the plugins and apps in this repository? See **[The Creator Toolkit download website](website/README.md)** for the catalog, local preview, and publishing instructions.
+
 Looking for the independent audio mixer? See **[MixBloom for OBS](mixbloom/README.md)**.
 For a workspace that brings together many OBS and web docks, see **[DockBloom for OBS](dockbloom/README.md)**.
 Each guide covers its own Windows download, precautions, and installation steps.

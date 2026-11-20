@@ -1,0 +1,62 @@
+name: Publish Creator Toolkit downloads
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/catalog.js'
+      - 'website/scripts/publish-*.mjs'
+      - '.github/workflows/publish-creator-downloads.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '19 3 * * 1'
+  workflow_run:
+    workflows:
+      - Push
+      - Local AI Auto Frame
+      - Auto Director
+      - OBS Beautifier
+      - Hype Clip
+      - Auto Scene Adjust
+      - OnAirTwin
+      - MixBloom
+      - DockBloom
+      - KeyBloom
+      - ScreenForge
+      - Face Retouch
+      - Export Kit
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: creator-toolkit-download-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish verified main-branch artifacts
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      # A workflow_run job has write permission. Always use the trusted main
+      # branch, never code or artifacts from the triggering PR or a fork.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Copy verified artifacts into the public rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node --use-system-ca website/scripts/publish-downloads.mjs

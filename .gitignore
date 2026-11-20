@@ -19,6 +19,7 @@
 !/photoshop-face-retouch
 !/screen-forge
 !/keybloom
+!/website
 !/src
 !/tests
 !.clang-format
@@ -75,3 +76,7 @@
 /keybloom/out/
 /keybloom/artifacts/
 /keybloom/test-results/
+
+# Website development dependencies and test output
+/website/node_modules/
+/website/test-results/
