@@ -14,6 +14,7 @@
 !/auto-scene
 !/onair-twin
 !/mixbloom
+!/dockbloom
 !/photoshop-export-kit
 !/photoshop-face-retouch
 !/screen-forge
@@ -53,6 +54,9 @@
 /mixbloom/build_tests
 /mixbloom/build_*
 /mixbloom/.deps
+/dockbloom/build_tests
+/dockbloom/build_*
+/dockbloom/.deps
 /release
 
 # ScreenForge build output (the artifact is built in CI)

@@ -1,0 +1,4 @@
+The browser-panel.hpp interface is copied from OBS Project's obs-browser,
+commit d4db73e7e5d5b51d853177c8cddc796715a8ac84 (the OBS 33.0.1 submodule).
+It is distributed under the GNU GPL version 2; see the included COPYING.
+https://github.com/obsproject/obs-browser/tree/d4db73e7e5d5b51d853177c8cddc796715a8ac84

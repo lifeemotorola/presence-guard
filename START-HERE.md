@@ -2,6 +2,8 @@
 
 For the separate OBS audio mixer and routing dock, see **[MixBloom](mixbloom/README.md)**.
 Its prebuilt Windows plugin is under **Actions → MixBloom → a successful run → Artifacts**.
+For the separate dock workspace, see **[DockBloom](dockbloom/README.md)** and
+**Actions → DockBloom → a successful run → Artifacts**.
 
 This repository **is** a complete OBS Studio plugin (C++17, Qt6, libobs,
 official `obs-plugintemplate` layout) that does the three things I promised,
