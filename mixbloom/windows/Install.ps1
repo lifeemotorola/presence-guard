@@ -12,7 +12,7 @@ $dst = Join-Path $PluginRoot $name
 if (Get-Process -Name 'obs64', 'obs32' -ErrorAction SilentlyContinue) {
     throw 'Close OBS Studio before installing MixBloom.'
 }
-foreach ($f in @('bin\64bit\obs-mixbloom.dll', 'data\locale\en-US.ini')) {
+foreach ($f in @('bin\64bit\obs-mixbloom.dll', 'data\locale\en-US.ini', 'data\help\user-guide.html')) {
     if (-not (Test-Path (Join-Path $src $f))) {
         throw "Incomplete package: $f is missing. Download the Actions artifact, not the source ZIP."
     }

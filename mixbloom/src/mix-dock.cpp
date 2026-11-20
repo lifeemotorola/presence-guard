@@ -4,6 +4,7 @@ Copyright (C) 2026 Emmanuel Suah
 Licensed under GPL-2.0-or-later; see LICENSE. No warranty.
 */
 #include "mix-dock.hpp"
+#include "mix-help.hpp"
 
 #include <QAbstractButton>
 #include <QFrame>
@@ -333,6 +334,8 @@ void MixDock::buildUi()
 	setStyleSheet(R"(
 		QWidget#mixBloomRoot, QWidget#mixBody { background: #0b111c; }
 		QWidget { color: #e5edf5; font-family: 'Segoe UI'; font-size: 12px; }
+		QFrame#supportBar { background: #111e2a; border-bottom: 1px solid #2b4351; }
+		QLabel#supportLabel { color: #a9cbc5; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
 		QScrollArea { border: none; background: transparent; }
 		QFrame#hero { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #183b41,stop:1 #142336);
 		              border: 1px solid #32595b; border-radius: 14px; }
@@ -359,6 +362,10 @@ void MixDock::buildUi()
 		QPushButton:hover { background: #2b4356; border-color: #75bfb5; }
 		QPushButton:focus, QSlider:focus { outline: 1px solid #a0f4d5; }
 		QPushButton:disabled { color: #6f8190; background: #192532; border-color: #2c3b48; }
+		QPushButton#helpButton { background: #a0ecd4; color: #102d2b; border: 1px solid #a0ecd4;
+		                         padding: 6px 13px; font-weight: 700; }
+		QPushButton#helpButton:hover { background: #c0f7e5; }
+		QPushButton#helpButton:focus { border: 2px solid #ffffff; }
 		QPushButton#muteButton { background: #233544; }
 		QPushButton#trackButton { padding: 3px; color: #a3b7c6; background: #101925; border: 1px solid #354858; }
 		QPushButton#trackButton:checked { color: #092921; background: #8be2c7; border-color: #8be2c7; font-weight: 700; }
@@ -378,6 +385,29 @@ void MixDock::buildUi()
 
 	auto *outer = new QVBoxLayout(this);
 	outer->setContentsMargins(0, 0, 0, 0);
+	outer->setSpacing(0);
+
+	/* Keep Help in view even when the source list is long or empty. */
+	auto *supportBar = new QFrame(this);
+	supportBar->setObjectName("supportBar");
+	auto *supportLayout = new QHBoxLayout(supportBar);
+	supportLayout->setContentsMargins(12, 8, 12, 8);
+	supportLayout->setSpacing(8);
+	auto *supportLabel = makeLabel("YOUR MIX, YOUR WAY", "supportLabel", supportBar, true);
+	supportLabel->setMinimumWidth(0);
+	QSizePolicy supportPolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+	supportPolicy.setHeightForWidth(true);
+	supportLabel->setSizePolicy(supportPolicy);
+	supportLayout->addWidget(supportLabel, 1);
+	auto *help = new QPushButton("?  Help", supportBar);
+	help->setObjectName("helpButton");
+	help->setAccessibleName("Open the MixBloom user guide");
+	help->setToolTip("Open the offline MixBloom user guide. No audio settings will be changed.");
+	help->setMinimumHeight(34);
+	supportLayout->addWidget(help);
+	connect(help, &QPushButton::clicked, this, [this] { showHelp(); });
+	outer->addWidget(supportBar);
+
 	auto *scroll = new QScrollArea(this);
 	scroll->setObjectName("mixScroll");
 	scroll->setWidgetResizable(true);
@@ -456,6 +486,15 @@ void MixDock::buildUi()
 	scroll->setWidget(body);
 	outer->addWidget(scroll);
 	connect(refresh, &QPushButton::clicked, this, [this] { refreshNow(); });
+}
+
+void MixDock::showHelp()
+{
+	if (!helpDialog_)
+		helpDialog_ = new MixHelpDialog(this);
+	helpDialog_->show();
+	helpDialog_->raise();
+	helpDialog_->activateWindow();
 }
 
 void MixDock::connectCard(SourceCard *card)

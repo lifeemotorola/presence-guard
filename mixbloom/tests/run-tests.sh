@@ -10,3 +10,4 @@ flags=(-std=c++17 -Wall -Wextra -Werror -pedantic -pthread -Isrc -Itests -Itests
 "$CXX" "${flags[@]}" src/mix-core.cpp src/obs-mixer.cpp tests/fake-obs.cpp tests/obs-adapter-tests.cpp -o build_tests/adapter-tests
 ./build_tests/model-tests
 ./build_tests/adapter-tests
+python3 tests/guide-tests.py

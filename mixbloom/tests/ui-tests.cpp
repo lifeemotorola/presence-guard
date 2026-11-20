@@ -7,12 +7,16 @@ Copyright (C) 2026 Emmanuel Suah. GPL-2.0-or-later; no warranty.
 #include <obs-module.h>
 
 #include <QApplication>
+#include <QDialog>
 #include <QEvent>
 #include <QEventLoop>
+#include <QFile>
 #include <QFontMetrics>
 #include <QFrame>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPluginLoader>
 #include <QPointer>
 #include <QProgressBar>
@@ -20,7 +24,11 @@ Copyright (C) 2026 Emmanuel Suah. GPL-2.0-or-later; no warranty.
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSlider>
+#include <QTextBrowser>
+#include <QTextCursor>
+#include <QTextDocument>
 #include <QTimer>
+#include <QUrl>
 #include <cmath>
 #include <cstdio>
 #include <functional>
@@ -83,6 +91,52 @@ static void waitMs(int duration)
 	loop.exec();
 }
 
+/* Click an actual section link in the rendered guide, not just its handler. */
+static bool clickGuideLink(QTextBrowser *browser, const QString &text, const QString &expectedLink,
+			   const QString &heading)
+{
+	browser->verticalScrollBar()->setValue(0);
+	QApplication::processEvents();
+	/* Find the capitalized table-of-contents link, not an earlier ordinary
+	 * mention of the same word in the safety notice. */
+	QTextCursor cursor = browser->document()->find(text, 0, QTextDocument::FindCaseSensitively);
+	if (cursor.isNull()) {
+		std::fprintf(stderr, "Guide link text not found: %s\n", text.toUtf8().constData());
+		return false;
+	}
+	cursor.setPosition(cursor.selectionStart() + 2);
+	browser->setTextCursor(cursor);
+	browser->ensureCursorVisible();
+	QApplication::processEvents();
+	const int before = browser->verticalScrollBar()->value();
+	const QPoint point = browser->cursorRect(cursor).center();
+	const QString actualLink = browser->anchorAt(point);
+	if (!browser->viewport()->rect().contains(point) || actualLink != expectedLink) {
+		std::fprintf(stderr, "Guide link %s at %d,%d (viewport %dx%d) resolved to %s\n",
+			     text.toUtf8().constData(), point.x(), point.y(), browser->viewport()->width(),
+			     browser->viewport()->height(), actualLink.toUtf8().constData());
+		return false;
+	}
+	const QPoint global = browser->viewport()->mapToGlobal(point);
+	QMouseEvent press(QEvent::MouseButtonPress, QPointF(point), QPointF(global), Qt::LeftButton, Qt::LeftButton,
+			  Qt::NoModifier);
+	QMouseEvent release(QEvent::MouseButtonRelease, QPointF(point), QPointF(global), Qt::LeftButton, Qt::NoButton,
+			    Qt::NoModifier);
+	QApplication::sendEvent(browser->viewport(), &press);
+	QApplication::sendEvent(browser->viewport(), &release);
+	QApplication::processEvents();
+	QTextCursor target = browser->document()->find(heading, 0, QTextDocument::FindCaseSensitively);
+	if (target.isNull())
+		return false;
+	target.setPosition(target.selectionStart());
+	const int after = browser->verticalScrollBar()->value();
+	const bool visible = browser->viewport()->rect().intersects(browser->cursorRect(target));
+	if (after <= before || !visible)
+		std::fprintf(stderr, "Guide link %s did not reach its heading (scroll %d -> %d, visible %d)\n",
+			     expectedLink.toUtf8().constData(), before, after, visible);
+	return after > before && visible;
+}
+
 int main(int argc, char **argv)
 {
 #ifdef _WIN32
@@ -122,6 +176,107 @@ int main(int argc, char **argv)
 		check(fakeWrites() == 0, "opening and refreshing the dock does not change OBS audio");
 		if (!micCard || !desktopCard)
 			return 1;
+
+		auto *help = dock.findChild<QPushButton *>("helpButton");
+		check(help && help->isVisible() && help->isEnabled() && help->text().contains("Help") &&
+			      help->accessibleName().contains("guide"),
+		      "a visible, named Help button is available above the source list");
+		check(QFile::exists(":/mixbloom/help/user-guide.html"), "the offline guide is embedded in the binary");
+		if (!help)
+			return 1;
+		help->setFocus();
+		QKeyEvent helpPress(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier);
+		QKeyEvent helpRelease(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier);
+		QApplication::sendEvent(help, &helpPress);
+		QApplication::sendEvent(help, &helpRelease);
+		app.processEvents();
+		auto *guide = dock.findChild<QDialog *>("mixBloomGuide");
+		auto *browser = guide ? guide->findChild<QTextBrowser *>("guideContent") : nullptr;
+		auto *guideClose = guide ? guide->findChild<QPushButton *>("guideClose") : nullptr;
+		check(guide && guide->isVisible() && !guide->isModal() && browser && guideClose,
+		      "keyboard activation opens a modeless user guide inside OBS");
+		if (!guide || !browser || !guideClose)
+			return 1;
+		const QString manual = browser->toPlainText().toLower();
+		check(manual.contains("quick start") && manual.contains("output tracks") &&
+			      manual.contains("monitoring") && manual.contains("feedback") &&
+			      manual.contains("troubleshooting") && manual.contains("install") &&
+			      manual.contains("privacy"),
+		      "the guide covers setup, controls, safety, troubleshooting, installation and limits");
+		check(browser->verticalScrollBar()->maximum() > 0 && browser->isReadOnly(),
+		      "the full user guide is scrollable and read-only");
+		struct GuideLink {
+			const char *text;
+			const char *href;
+			const char *heading;
+		};
+		const GuideLink links[] = {{"Quick start", "#quick-start", "01 / Quick start"},
+					   {"Audio sources", "#sources", "02 / Find or add audio sources"},
+					   {"Level & mute", "#level-mute", "03 / Level and mute"},
+					   {"Output tracks", "#routing", "04 / Route to output tracks"},
+					   {"Monitoring", "#monitoring", "05 / Listen with monitoring"},
+					   {"Source meter", "#meter", "06 / Read the source meter"},
+					   {"Troubleshooting", "#troubleshooting", "07 / Troubleshooting"},
+					   {"Install & update", "#installation", "08 / Install, update or remove"},
+					   {"Privacy & limits", "#privacy", "09 / Privacy and limits"}};
+		for (const auto &link : links) {
+			const QByteArray message = QByteArray("guide section link reaches its heading: ") + link.text;
+			check(clickGuideLink(browser, link.text, link.href, link.heading), message.constData());
+		}
+		const int position = browser->verticalScrollBar()->value();
+		const bool signalled = QMetaObject::invokeMethod(browser, "anchorClicked", Qt::DirectConnection,
+								 Q_ARG(QUrl, QUrl("https://example.invalid/#privacy")));
+		check(signalled && !browser->openLinks() && !browser->openExternalLinks() &&
+			      browser->verticalScrollBar()->value() == position,
+		      "external links are not followed by the offline guide");
+		browser->moveCursor(QTextCursor::Start);
+		browser->verticalScrollBar()->setValue(0);
+		browser->setFocus(Qt::TabFocusReason);
+		QKeyEvent tab(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
+		QApplication::sendEvent(browser, &tab);
+		app.processEvents();
+		check(browser->textInteractionFlags().testFlag(Qt::LinksAccessibleByKeyboard) &&
+			      browser->textCursor().selectedText() == "Quick start",
+		      "Tab focuses the first guide section link");
+		const int beforeEnter = browser->verticalScrollBar()->value();
+		QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+		QApplication::sendEvent(browser, &enter);
+		app.processEvents();
+		check(browser->verticalScrollBar()->value() > beforeEnter,
+		      "Enter opens a focused guide section using the keyboard");
+
+		for (const QSize size : {QSize(300, 260), QSize(360, 320), QSize(650, 600)}) {
+			guide->resize(size);
+			app.processEvents();
+			bool labelsFit = true;
+			for (QLabel *label : guide->findChildren<QLabel *>()) {
+				if (label->isVisible() && label->wordWrap() &&
+				    label->height() < label->heightForWidth(label->width()))
+					labelsFit = false;
+			}
+			const int closeTextWidth =
+				QFontMetrics(guideClose->font()).horizontalAdvance(guideClose->text());
+			check(guide->size() == size && labelsFit && guideClose->isVisible() &&
+				      guideClose->width() >= closeTextWidth + 10 && browser->height() >= 75 &&
+				      browser->horizontalScrollBar()->maximum() == 0 &&
+				      browser->verticalScrollBar()->maximum() > 0,
+			      size.width() == 300
+				      ? "guide is usable without clipping at 300 × 260"
+				      : (size.width() == 360 ? "guide is usable without clipping at 360 × 320"
+							     : "guide is usable without clipping at 650 × 600"));
+		}
+		guideClose->click();
+		check(!guide->isVisible(), "Close hides the user guide");
+		help->click();
+		app.processEvents();
+		check(guide->isVisible() && dock.findChildren<QDialog *>("mixBloomGuide").size() == 1,
+		      "Help reopens the same guide without creating duplicate windows");
+		QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+		QApplication::sendEvent(browser, &escape);
+		app.processEvents();
+		check(!guide->isVisible(), "Escape closes the guide from its contents");
+		check(fakeWrites() == 0, "opening, navigating and closing Help never writes OBS audio settings");
+
 		auto *slider = micCard->findChild<QSlider *>("fader");
 		auto *mute = micCard->findChild<QPushButton *>("muteButton");
 		auto *monitor = micCard->findChild<QPushButton *>("monitorButton");
@@ -204,6 +359,12 @@ int main(int argc, char **argv)
 		auto *scroll = dock.findChild<QScrollArea *>("mixScroll");
 		check(scroll && scroll->widgetResizable() && scroll->verticalScrollBar()->maximum() > 0,
 		      "short dock has a reachable, resizable vertical scroll area");
+		if (scroll) {
+			scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum());
+			app.processEvents();
+			check(help->isVisible() && help->mapTo(&dock, QPoint(0, 0)).y() < scroll->y(),
+			      "Help stays visible when the source list is scrolled to the bottom");
+		}
 
 		/* A collection switch during a modal warning must not perform the
 		 * pending write against a newly loaded source. */
@@ -256,6 +417,7 @@ int main(int argc, char **argv)
 	check(fakeMeters() == 0 && fakeAcquired() == fakeReleased(),
 	      "closing the dock detaches meters and releases references");
 	fakeReset();
+	QPointer<QDialog> emptyGuide;
 	{
 		MixDock emptyDock;
 		emptyDock.resize(320, 600);
@@ -263,6 +425,19 @@ int main(int argc, char **argv)
 		app.processEvents();
 		auto *empty = emptyDock.findChild<QFrame *>("emptyCard");
 		check(empty && empty->isVisible() && fakeWrites() == 0, "empty setup explains how to add a source");
+		auto *emptyHelp = emptyDock.findChild<QPushButton *>("helpButton");
+		if (emptyHelp)
+			emptyHelp->click();
+		app.processEvents();
+		emptyGuide = emptyDock.findChild<QDialog *>("mixBloomGuide");
+		auto *emptyContent = emptyGuide ? emptyGuide->findChild<QTextBrowser *>("guideContent") : nullptr;
+		check(emptyHelp && emptyHelp->isEnabled() && emptyGuide && emptyGuide->isVisible() && emptyContent &&
+			      emptyContent->toPlainText().contains("Quick start") && fakeWrites() == 0,
+		      "the offline guide opens with no audio sources and makes no writes");
+		emptyDock.suspendForCollectionChange();
+		check(emptyHelp && emptyHelp->isEnabled() && emptyGuide && emptyGuide->isVisible() && fakeWrites() == 0,
+		      "Help remains available while an OBS scene collection is changing");
+		emptyDock.resumeAfterCollectionChange();
 		auto &newSource = fakeAdd("new", "New microphone", OBS_SOURCE_AUDIO);
 		waitMs(1200);
 		check(card(emptyDock, "new") && !empty->isVisible(), "new OBS audio sources appear automatically");
@@ -272,6 +447,7 @@ int main(int argc, char **argv)
 		      "empty state returns when the last source disappears");
 	}
 	QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+	check(!emptyGuide && fakeWrites() == 0, "destroying the dock also destroys its guide without audio writes");
 	fakeReset();
 
 	/* A clean representative fixture for the CI screenshot. */
@@ -288,6 +464,16 @@ int main(int argc, char **argv)
 		if (!screenshot.isEmpty())
 			check(dock.grab().save(QString::fromUtf8(screenshot)),
 			      "representative dock screenshot captured");
+		const QByteArray helpScreenshot = qgetenv("MIXBLOOM_HELP_SCREENSHOT");
+		if (!helpScreenshot.isEmpty()) {
+			auto *help = dock.findChild<QPushButton *>("helpButton");
+			if (help)
+				help->click();
+			app.processEvents();
+			auto *guide = dock.findChild<QDialog *>("mixBloomGuide");
+			check(guide && guide->isVisible() && guide->grab().save(QString::fromUtf8(helpScreenshot)),
+			      "representative offline guide screenshot captured");
+		}
 	}
 	QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 	fakeReset();
