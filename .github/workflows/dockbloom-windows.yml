@@ -178,8 +178,18 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          cmake --build --preset windows-x64 --config RelWithDebInfo
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $log = Join-Path $env:RUNNER_TEMP 'dockbloom-build.log'
+          cmake --build --preset windows-x64 --config RelWithDebInfo 2>&1 | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $errors = Get-Content $log | Select-String -Pattern '(?i)error|fatal|LNK[0-9]+|MSB[0-9]+'
+            $detail = if ($errors) { ($errors | Select-Object -Last 40) -join "`n" } else { (Get-Content $log -Tail 60) -join "`n" }
+            $escaped = $detail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Windows build failed::$escaped"
+            exit $code
+          }
       - name: Test the workspace against fake OBS
         shell: pwsh
         run: |
@@ -238,7 +248,7 @@ jobs:
           New-Item -ItemType Directory -Path "$package\third_party\obs-browser" -Force | Out-Null
           Copy-Item third_party\obs-browser\COPYING, third_party\obs-browser\NOTICE.txt "$package\third_party\obs-browser"
           $sha = '${{ github.event.pull_request.head.sha || github.sha }}'
-          "Source corresponding to this build: https://github.com/${{ github.repository }}/tree/$sha/dockbloom`nGPL-2.0-or-later; see LICENSE." |
+          "Source corresponding to this build: https://github.com/${{ github.repository }}/tree/$sha/dockbloom`nDockBloom code: GPL-2.0-or-later; obs-browser interface: GPL-2.0. See LICENSE and third_party/obs-browser/COPYING." |
             Set-Content -Encoding UTF8 "$package\SOURCE-CODE.txt"
           $hash = (Get-FileHash "$package\bin\64bit\obs-dockbloom.dll" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  obs-dockbloom.dll" | Set-Content -Encoding ASCII "$package\SHA256SUMS.txt"

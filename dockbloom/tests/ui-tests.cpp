@@ -411,6 +411,41 @@ int main(int argc, char **argv)
 	check(workspace.apply("focus", 0, "native-00", &error),
 	      "an unavailable member does not crash layout arrangement");
 	check(workspace.restore(&error), "layout can be restored after a selected dock disappears");
+	{
+		QPointer<WorkspaceUi> disposable = new WorkspaceUi(&workspace);
+		disposable->show();
+		auto *button = disposable->findChild<QPushButton *>("focusButton");
+		QTimer::singleShot(0, [disposable] { delete disposable.data(); });
+		if (button)
+			button->click();
+		app.processEvents();
+		check(!disposable && !workspace.hasBackup() && native[0],
+		      "closing the control dock during confirmation is safe and changes no layout");
+	}
+
+	{
+		QMainWindow reentrantMain;
+		reentrantMain.setCentralWidget(new QLabel("Preview"));
+		FakeHost reentrantHost(&reentrantMain);
+		QPointer<Workspace> reentrant =
+			new Workspace(&reentrantMain, &reentrantHost, temp.filePath("reentrant/workspace.json"));
+		reentrant->load(&error);
+		auto *dock = new QDockWidget("A plugin dock", &reentrantMain);
+		dock->setObjectName("reentrant-dock");
+		dock->setWidget(new QLabel("Content", dock));
+		reentrantMain.addDockWidget(Qt::LeftDockWidgetArea, dock);
+		reentrantHost.addDock(kWorkspaceId, "Workspace", createWorkspaceAnchor());
+		reentrantMain.show();
+		app.processEvents();
+		reentrant->setMember("reentrant-dock", true, &error);
+		QObject::connect(dock, &QDockWidget::visibilityChanged, &reentrantMain, [reentrant](bool visible) {
+			if (!visible && reentrant)
+				delete reentrant.data();
+		});
+		const bool applied = reentrant->apply("focus", 0, "reentrant-dock", &error);
+		check(!reentrant && !applied && reentrantMain.updatesEnabled(),
+		      "reentrant workspace destruction stops arrangement and restores window updates");
+	}
 
 	{
 		QMainWindow collisionMain;
@@ -429,7 +464,25 @@ int main(int argc, char **argv)
 		collisionWorkspace.registerSavedWebDocks();
 		check(collisionWorkspace.availableDocks().isEmpty(),
 		      "a failed web registration does not expose a foreign dock as ours");
-		check(collisionWorkspace.removeWebDock(id, &error) && foreign,
+		WorkspaceUi collisionUi(&collisionWorkspace);
+		collisionUi.show();
+		auto *collisionList = collisionUi.findChild<QListWidget *>("dockList");
+		check(collisionList && collisionList->count() == 1 &&
+			      collisionList->item(0)->text().contains("Saved web"),
+		      "an unavailable saved web dock remains visible in the control list");
+		if (collisionList && collisionList->count())
+			collisionList->item(0)->setCheckState(Qt::Unchecked);
+		app.processEvents();
+		check(collisionList && collisionList->count() == 1 &&
+			      collisionList->item(0)->checkState() == Qt::Unchecked,
+		      "an unchecked unavailable web dock can still be selected for removal");
+		if (collisionList && collisionList->count())
+			collisionList->setCurrentRow(0);
+		auto *collisionRemove = collisionUi.findChild<QPushButton *>("removeWebButton");
+		answer(QMessageBox::Yes);
+		if (collisionRemove)
+			collisionRemove->click();
+		check(collisionWorkspace.config().webDocks.isEmpty() && foreign,
 		      "removing an unavailable saved web dock never deletes a foreign plugin's dock");
 		collisionWorkspace.shutdown();
 		check(foreign, "workspace shutdown leaves the foreign colliding dock intact");

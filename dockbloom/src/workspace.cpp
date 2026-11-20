@@ -427,47 +427,56 @@ bool Workspace::apply(const QString &mode, int page, const QString &focusedId, Q
 	if (!save(next, error))
 		return false;
 
+	QPointer<Workspace> guard(this);
 	QPointer<QMainWindow> main = main_;
 	UpdatesGuard updates(main.data());
 	/* Only native QDockWidgets are moved. Their content stays owned by OBS
 	 * or the originating plugin; no live widget is taken or reparented. */
 	main->removeDockWidget(anchor);
-	if (!main || !anchor)
+	if (!guard || !main || !anchor)
 		return false;
 	anchor->setFloating(false);
-	if (!main || !anchor)
+	if (!guard || !main || !anchor)
 		return false;
 	main->addDockWidget(area, anchor);
-	if (!main || !anchor)
+	if (!guard || !main || !anchor)
 		return false;
 	anchor->show();
 	for (const QString &id : ids) {
 		QPointer<QDockWidget> dock = byId.value(id);
-		if (!main || !anchor)
+		if (!guard || !main || !anchor)
 			return false;
 		if (!dock)
 			continue;
 		main->removeDockWidget(dock);
+		if (!guard || !main || !anchor)
+			return false;
 		if (!dock)
 			continue;
 		dock->setFloating(false);
-		if (!main || !anchor || !dock)
+		if (!guard || !main || !anchor || !dock)
 			return false;
 		main->addDockWidget(area, dock);
+		if (!guard || !main || !anchor)
+			return false;
 		if (dock)
 			dock->hide();
 	}
-	if (!main || !anchor)
+	if (!guard || !main || !anchor)
 		return false;
 	if (mode == "focus") {
 		for (const QString &id : ids) {
-			if (!main || !anchor)
+			if (!guard || !main || !anchor)
 				return false;
 			if (auto dock = byId.value(id))
 				main->tabifyDockWidget(anchor, dock);
 		}
+		if (!guard || !main || !anchor)
+			return false;
 		if (auto dock = byId.value(focus)) {
 			dock->show();
+			if (!guard || !main || !anchor)
+				return false;
 			if (dock)
 				dock->raise();
 		}
@@ -479,33 +488,38 @@ bool Workspace::apply(const QString &mode, int page, const QString &focusedId, Q
 				visible.append(dock);
 		if (visible.size() >= 3 && visible[2])
 			main->splitDockWidget(anchor, visible[2], Qt::Vertical);
-		if (!main || !anchor)
+		if (!guard || !main || !anchor)
 			return false;
 		if (visible.size() >= 2 && visible[1])
 			main->splitDockWidget(anchor, visible[1], Qt::Horizontal);
-		if (!main || !anchor)
+		if (!guard || !main || !anchor)
 			return false;
 		if (visible.size() >= 4 && visible[2] && visible[3])
 			main->splitDockWidget(visible[2], visible[3], Qt::Horizontal);
-		if (!main || !anchor)
+		if (!guard || !main || !anchor)
 			return false;
 		if (!visible.isEmpty() && visible[0])
 			main->tabifyDockWidget(anchor, visible[0]);
-		for (const auto &dock : visible)
+		for (const auto &dock : visible) {
+			if (!guard || !main || !anchor)
+				return false;
 			if (dock)
 				dock->show();
+		}
+		if (!guard || !main || !anchor)
+			return false;
 		if (!visible.isEmpty() && visible[0])
 			visible[0]->raise();
 		/* Splitters can otherwise give a new row only a few pixels. Equalize
 		 * the two rows/columns when possible; users can still drag them. */
-		if (main && visible.size() >= 3 && visible[0] && visible[2])
+		if (guard && main && visible.size() >= 3 && visible[0] && visible[2])
 			main->resizeDocks({visible[0].data(), visible[2].data()}, {100, 100}, Qt::Vertical);
-		if (main && visible.size() >= 2 && visible[0] && visible[1])
+		if (guard && main && visible.size() >= 2 && visible[0] && visible[1])
 			main->resizeDocks({visible[0].data(), visible[1].data()}, {100, 100}, Qt::Horizontal);
-		if (main && visible.size() >= 4 && visible[2] && visible[3])
+		if (guard && main && visible.size() >= 4 && visible[2] && visible[3])
 			main->resizeDocks({visible[2].data(), visible[3].data()}, {100, 100}, Qt::Horizontal);
 	}
-	return true;
+	return guard && main;
 }
 
 bool Workspace::restore(QString *error)
@@ -521,7 +535,11 @@ bool Workspace::restore(QString *error)
 	}
 	const QByteArray state = file.readAll();
 	file.close();
-	if (!main_->restoreState(state)) {
+	QPointer<Workspace> guard(this);
+	const bool restored = main_->restoreState(state);
+	if (!guard)
+		return false;
+	if (!restored) {
 		fail(error, "OBS could not restore the saved layout. The backup has been kept.");
 		return false;
 	}

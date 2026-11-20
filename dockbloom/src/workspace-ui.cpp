@@ -83,10 +83,16 @@ QPushButton *button(const QString &text, const char *name, QWidget *parent)
 
 bool ask(QWidget *parent, const QString &title, const QString &text)
 {
-	QMessageBox box(QMessageBox::Warning, title, text, QMessageBox::Yes | QMessageBox::No, parent);
-	box.setTextFormat(Qt::PlainText);
-	box.setDefaultButton(QMessageBox::No);
-	return box.exec() == QMessageBox::Yes;
+	/* OBS may destroy a dock while the modal event loop is running. A heap
+	 * dialog with a guard avoids a parent deleting a stack-allocated widget. */
+	QPointer<QMessageBox> box =
+		new QMessageBox(QMessageBox::Warning, title, text, QMessageBox::Yes | QMessageBox::No, parent);
+	box->setTextFormat(Qt::PlainText);
+	box->setDefaultButton(QMessageBox::No);
+	const int result = box->exec();
+	if (box)
+		delete box.data();
+	return result == QMessageBox::Yes;
 }
 } // namespace
 
@@ -261,13 +267,20 @@ void WorkspaceUi::buildUi()
 	connect(removeWeb_, &QPushButton::clicked, this, [this] { removeSelectedWeb(); });
 	connect(focus, &QPushButton::clicked, this, [this] { applyView("focus", 0, selectedId(), true); });
 	connect(grid, &QPushButton::clicked, this, [this] { applyView("grid", 0, selectedId(), true); });
-	connect(previous_, &QPushButton::clicked, this, [this] {
+	const auto currentPage = [this] {
+		if (!workspace_)
+			return 0;
+		const int count = static_cast<int>(workspace_->availableMembers().size());
+		const int last = qMax(0, (count - 1) / kGridPageSize);
+		return qBound(0, workspace_->config().page, last);
+	};
+	connect(previous_, &QPushButton::clicked, this, [this, currentPage] {
 		if (workspace_)
-			applyView("grid", workspace_->config().page - 1, selectedId(), false);
+			applyView("grid", currentPage() - 1, selectedId(), false);
 	});
-	connect(next_, &QPushButton::clicked, this, [this] {
+	connect(next_, &QPushButton::clicked, this, [this, currentPage] {
 		if (workspace_)
-			applyView("grid", workspace_->config().page + 1, selectedId(), false);
+			applyView("grid", currentPage() + 1, selectedId(), false);
 	});
 	connect(show, &QPushButton::clicked, this, [this] { showSelected(); });
 	connect(restore_, &QPushButton::clicked, this, [this] { restoreLayout(); });
@@ -312,19 +325,30 @@ void WorkspaceUi::refresh()
 		if (info.id == selected)
 			list_->setCurrentItem(item);
 	}
-	for (const QString &id : config.members) {
+	QStringList unavailable = config.members;
+	for (const WebDock &web : config.webDocks)
+		if (!unavailable.contains(web.id))
+			unavailable.append(web.id);
+	for (const QString &id : unavailable) {
 		if (present.contains(id))
 			continue;
 		bool web = false;
-		for (const WebDock &entry : config.webDocks)
-			web = web || entry.id == id;
-		auto *item = new QListWidgetItem("Unavailable: " + id, list_);
+		QString name = id;
+		for (const WebDock &entry : config.webDocks) {
+			if (entry.id == id) {
+				web = true;
+				name = entry.title;
+				break;
+			}
+		}
+		auto *item = new QListWidgetItem("Unavailable: " + name + (web ? "  ·  Web" : ""), list_);
 		item->setData(Qt::UserRole, id);
 		item->setData(Qt::UserRole + 1, web);
 		item->setToolTip(
-			"This dock is not currently available in OBS. Uncheck it to remove it from the workspace.");
+			web ? "This saved web dock could not be registered. Select it and choose Remove web if needed."
+			    : "This dock is not currently available in OBS. Uncheck it to remove it from the workspace.");
 		item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-		item->setCheckState(Qt::Checked);
+		item->setCheckState(config.members.contains(id) ? Qt::Checked : Qt::Unchecked);
 		item->setHidden(!item->text().contains(search_->text(), Qt::CaseInsensitive));
 		if (id == selected)
 			list_->setCurrentItem(item);
@@ -373,7 +397,11 @@ void WorkspaceUi::applyView(const QString &mode, int page, const QString &focuse
 			return;
 	}
 	QString error;
-	if (!workspace_->apply(mode, page, focusedId, &error)) {
+	QPointer<WorkspaceUi> guard(this);
+	const bool applied = workspace_->apply(mode, page, focusedId, &error);
+	if (!guard)
+		return;
+	if (!applied) {
 		showError(error.isEmpty() ? "The layout could not be applied." : error);
 		return;
 	}
@@ -409,7 +437,10 @@ void WorkspaceUi::restoreLayout()
 	if (!guard || !yes || !workspace_)
 		return;
 	QString error;
-	if (!workspace_->restore(&error)) {
+	const bool restored = workspace_->restore(&error);
+	if (!guard)
+		return;
+	if (!restored) {
 		showError(error);
 		return;
 	}
@@ -505,7 +536,10 @@ void WorkspaceUi::removeSelectedWeb()
 	if (!guard || !yes || !workspace_)
 		return;
 	QString error;
-	if (!workspace_->removeWebDock(id, &error)) {
+	const bool removed = workspace_->removeWebDock(id, &error);
+	if (!guard)
+		return;
+	if (!removed) {
 		showError(error);
 		return;
 	}
