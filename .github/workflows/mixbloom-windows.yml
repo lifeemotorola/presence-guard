@@ -47,12 +47,16 @@ jobs:
         with:
           path: mixbloom/.deps/windows-deps-qt6-*-x64.zip
           key: mixbloom-qt6-windows-${{ hashFiles('mixbloom/buildspec.json') }}-v1
+          # Dependency archives are always hash-verified after restore, so a
+          # previous-version cache can safely speed up plugin-only changes.
+          restore-keys: mixbloom-qt6-windows-
       - name: Restore verified OBS dependencies archive
         id: deps-cache
         uses: actions/cache/restore@v4
         with:
           path: mixbloom/.deps/windows-deps-20*-x64.zip
           key: mixbloom-deps-windows-${{ hashFiles('mixbloom/buildspec.json') }}-v1
+          restore-keys: mixbloom-deps-windows-
       - name: Fetch OBS build dependencies via GitHub API
         shell: pwsh
         env:
@@ -191,6 +195,7 @@ jobs:
           $env:QT_FORCE_STDERR_LOGGING = '1'
           $env:QT_QPA_PLATFORM_PLUGIN_PATH = Split-Path $windowsPlatform.FullName
           $env:MIXBLOOM_UI_SCREENSHOT = Join-Path $env:RUNNER_TEMP 'mixbloom-dock.png'
+          $env:MIXBLOOM_HELP_SCREENSHOT = Join-Path $env:RUNNER_TEMP 'mixbloom-guide.png'
           function Invoke-Test([string] $exe) {
             $tag = [IO.Path]::GetFileNameWithoutExtension($exe)
             $outFile = Join-Path $env:RUNNER_TEMP "$tag.out.txt"
@@ -221,6 +226,9 @@ jobs:
           $package = "$install\obs-mixbloom"
           if (!(Test-Path "$package\bin\64bit\obs-mixbloom.dll")) { throw 'Plugin DLL missing.' }
           if (!(Test-Path "$package\data\locale\en-US.ini")) { throw 'Locale data missing.' }
+          if (!(Test-Path "$package\data\help\user-guide.html")) { throw 'Offline guide missing.' }
+          if ((Get-FileHash data\help\user-guide.html -Algorithm SHA256).Hash -ne `
+              (Get-FileHash "$package\data\help\user-guide.html" -Algorithm SHA256).Hash) { throw 'Packaged guide mismatch.' }
           Copy-Item windows\Install.ps1, windows\Install.bat, windows\Uninstall.ps1, windows\Uninstall.bat, README.md, LICENSE $package
           $sha = '${{ github.event.pull_request.head.sha || github.sha }}'
           "Source corresponding to this build: https://github.com/${{ github.repository }}/tree/$sha/mixbloom`nGPL-2.0-or-later; see LICENSE." |
@@ -267,9 +275,11 @@ jobs:
           name: obs-mixbloom-windows-x64
           path: ${{ runner.temp }}/install/obs-mixbloom/
           if-no-files-found: error
-      - name: Upload UI test screenshot
+      - name: Upload UI test screenshots
         uses: actions/upload-artifact@v4
         with:
           name: mixbloom-ui-test
-          path: ${{ runner.temp }}/mixbloom-dock.png
+          path: |
+            ${{ runner.temp }}/mixbloom-dock.png
+            ${{ runner.temp }}/mixbloom-guide.png
           if-no-files-found: error

@@ -9,9 +9,11 @@ Licensed under GPL-2.0-or-later; see LICENSE. No warranty.
 
 #include <QList>
 #include <QMap>
+#include <QPointer>
 #include <QStringList>
 #include <QWidget>
 
+class QDialog;
 class QLabel;
 class QTimer;
 class QVBoxLayout;
@@ -29,6 +31,7 @@ public:
 
 private:
 	void buildUi();
+	void showHelp();
 	void connectCard(SourceCard *card);
 	void updateMeters();
 	void retireCard(SourceCard *card);
@@ -41,6 +44,7 @@ private:
 	QWidget *empty_ = nullptr;
 	QLabel *count_ = nullptr;
 	QLabel *notice_ = nullptr;
+	QPointer<QDialog> helpDialog_;
 	QTimer *refreshTimer_ = nullptr;
 	QTimer *meterTimer_ = nullptr;
 	QMap<QString, SourceCard *> cards_;

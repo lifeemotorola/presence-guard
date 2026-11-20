@@ -32,12 +32,31 @@ try {
     $otherPlugin = Join-Path $pluginRoot 'unrelated-plugin'
     New-Item -ItemType Directory -Path $otherPlugin -Force | Out-Null
     Set-Content -Path (Join-Path $otherPlugin 'keep.txt') -Value 'unrelated plugin' -Encoding ascii
+    # A partial package must not install without its standalone guide.
+    $incomplete = Join-Path $work 'incomplete-package'
+    New-Item -ItemType Directory -Path $incomplete -Force | Out-Null
+    Copy-Item (Join-Path $PackagePath '*') $incomplete -Recurse
+    Remove-Item (Join-Path $incomplete 'data\help\user-guide.html')
+    $refusedIncomplete = $false
+    try {
+        & (Join-Path $incomplete 'Install.ps1') -PluginRoot $pluginRoot
+    } catch {
+        if ($_.Exception.Message -notlike 'Incomplete package:*user-guide.html*') { throw }
+        $refusedIncomplete = $true
+    }
+    if (!$refusedIncomplete -or (Test-Path $plugin)) {
+        throw 'The installer did not reject the package without its offline guide.'
+    }
     # Exercise the actual installer in a disposable portable plugin root.
     & $installScript -PluginRoot $pluginRoot
     if (!(Test-Path (Join-Path $plugin 'obs-mixbloom.dll')) -or
-        !(Test-Path (Join-Path $plugin 'data\locale\en-US.ini'))) {
-        throw 'The portable installer did not place the DLL and locale data correctly.'
+        !(Test-Path (Join-Path $plugin 'data\locale\en-US.ini')) -or
+        !(Test-Path (Join-Path $plugin 'data\help\user-guide.html'))) {
+        throw 'The portable installer did not place the DLL, locale and offline guide correctly.'
     }
+    $guideHash = (Get-FileHash (Join-Path $PackagePath 'data\help\user-guide.html') -Algorithm SHA256).Hash
+    $installedGuideHash = (Get-FileHash (Join-Path $plugin 'data\help\user-guide.html') -Algorithm SHA256).Hash
+    if ($guideHash -ne $installedGuideHash) { throw 'Installed guide differs from the package.' }
     Set-Content -Path (Join-Path $plugin 'keep.txt') -Value 'do not overwrite' -Encoding ascii
     $refusedOverwrite = $false
     try {
@@ -54,7 +73,7 @@ try {
         throw 'The uninstaller did not remove only its own plugin folder.'
     }
     & $installScript -PluginRoot $pluginRoot
-    Write-Host 'Portable install, overwrite protection, uninstall and reinstall checks passed.'
+    Write-Host 'Incomplete-package refusal, portable install, guide copy, overwrite protection, uninstall and reinstall checks passed.'
     # Use the native platform plugin bundled with this OBS distribution,
     # not a platform DLL from a separately compiled Qt build.
     $platform = Get-ChildItem $bin -Recurse -Filter qwindows.dll | Select-Object -First 1

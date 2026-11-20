@@ -1,0 +1,97 @@
+<!doctype html>
+<!-- MixBloom for OBS Studio. Copyright (C) 2026 Emmanuel Suah.
+     GPL-2.0-or-later; see LICENSE. No warranty. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MixBloom User Guide</title>
+  <style>
+    body { margin: 0; background: #0b111c; color: #dce9f2; font-family: 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; }
+    .page { max-width: 800px; margin: auto; padding: 24px; }
+    h1 { color: #f4fffb; font-size: 25px; }
+    h2 { color: #98e8cf; font-size: 19px; margin-top: 26px; }
+    h3 { color: #f2f7fb; font-size: 15px; }
+    a { color: #a9ecd8; }
+    .intro { color: #b6cbd8; }
+    .warning { color: #ffe0a9; background: #302c20; padding: 12px; }
+    code { color: #c7f8e7; }
+    li { margin-bottom: 6px; }
+    @media print { body { background: white; color: black; } h1, h2, h3, a, code, .intro, .warning { color: black; background: white; } }
+  </style>
+</head>
+<body>
+<div class="page">
+  <h1>MixBloom user guide</h1>
+  <p class="intro">A practical guide to your OBS audio mixer. Created by Emmanuel Suah. Available offline. Select a section below or scroll to read. In OBS, press Esc or select Close when you are finished.</p>
+  <p class="warning"><b>Live audio:</b> Level, mute, track and monitoring changes take effect in OBS immediately, even during a stream or recording. Opening the guide does not change your audio. Test your setup with a private recording first.</p>
+  <p><b>In this guide:</b>
+    <a href="#quick-start">Quick start</a> ·
+    <a href="#sources">Audio sources</a> ·
+    <a href="#level-mute">Level &amp; mute</a> ·
+    <a href="#routing">Output tracks</a> ·
+    <a href="#monitoring">Monitoring</a> ·
+    <a href="#meter">Source meter</a> ·
+    <a href="#troubleshooting">Troubleshooting</a> ·
+    <a href="#installation">Install &amp; update</a> ·
+    <a href="#privacy">Privacy &amp; limits</a>
+  </p>
+
+  <h2><a name="quick-start">01 / Quick start</a></h2>
+  <ol>
+    <li>In OBS, set up a microphone, desktop audio or another audio source. Open <b>Docks → MixBloom</b>.</li>
+    <li>Find the source in the dock. Use <b>Level</b> and <b>Mute</b> to adjust the actual OBS source. Changes also appear in OBS's mixer.</li>
+    <li>Select the source's output track buttons. In <b>OBS Settings → Output</b>, choose the matching streaming or recording track where available.</li>
+    <li>Make a private test recording and listen back. Adjust before going live.</li>
+  </ol>
+  <p>MixBloom uses existing OBS sources. It does not require iRig hardware or a special driver, but a physical microphone or instrument still needs a working input or interface recognized by OBS.</p>
+
+  <h2><a name="sources">02 / Find or add audio sources</a></h2>
+  <p>Set up a global microphone or desktop device under <b>OBS Settings → Audio</b>, or add an audio source to a scene from the OBS <b>Sources</b> list. Follow OBS's device-selection steps and make sure the device works in Windows.</p>
+  <p>MixBloom lists public audio-capable sources in the current scene collection. A listed source may not be active in the current scene. The list updates automatically; <b>Refresh</b> checks immediately. Sources with similar names remain separate.</p>
+  <p>If the list is empty, add or enable an OBS audio source and check that the intended scene collection is open. MixBloom cannot create or select a physical input for you.</p>
+
+  <h2><a name="level-mute">03 / Level and mute</a></h2>
+  <ul>
+    <li><b>Level</b> changes the source's OBS volume. The slider runs from silence to 0 dB; it cannot boost above 0 dB.</li>
+    <li><b>Mute / Unmute</b> affects that source on all of its OBS tracks. The source's settings apply across scenes that use it.</li>
+    <li>If a source is already boosted above 0 dB in OBS, the actual value is displayed and remains unchanged until you move the MixBloom slider; moving it caps the level at 0 dB.</li>
+    <li>If the level is locked in the OBS mixer, unlock it there before changing it here. Mute and routing are separate controls.</li>
+  </ul>
+  <p>There is no undo or solo. Uninstalling MixBloom does not restore earlier OBS audio settings.</p>
+
+  <h2><a name="routing">04 / Route to output tracks</a></h2>
+  <p>The numbered buttons <b>1–6</b> are the OBS audio tracks for that source. Highlighted buttons are selected. Click a number to add or remove that source from a track. Removing the final selected track requires confirmation; no tracks selected can leave the source out of the output.</p>
+  <p>Track selection applies to the source across scenes, not only to the currently visible scene. In <b>OBS Settings → Output</b>, check that the stream or recording uses a track containing the sources you want. Options vary with OBS's output mode and recording format.</p>
+  <p><b>Example:</b> for a simple test, put your microphone and desktop audio on track 1, select the corresponding output track in OBS, then record and listen back. A selected track button or moving meter alone does not prove that your audience can hear it.</p>
+
+  <h2><a name="monitoring">05 / Listen with monitoring</a></h2>
+  <p><b>Monitor: Off / On</b> controls whether OBS also sends the source to its configured monitoring device. MixBloom asks before turning monitoring on. Check the monitoring device in <b>OBS Settings → Audio</b>.</p>
+  <p class="warning"><b>Avoid feedback:</b> use headphones and make sure desktop capture does not recapture your monitoring device. Speakers, microphones and desktop capture can form a feedback loop. Turn monitoring off immediately if you hear feedback.</p>
+  <p>OBS marks some sources, commonly desktop output capture, as unsafe to monitor. MixBloom will not enable monitoring for those sources, but can turn existing monitoring off. Monitoring here is in addition to selected output tracks; this dock does not offer monitoring-only routing.</p>
+
+  <h2><a name="meter">06 / Read the source meter</a></h2>
+  <p>The <b>Source peak</b> bar shows the highest channel reported by the OBS source meter after the fader. The scale runs from −60 to 0 dB. It can move even when the source is muted.</p>
+  <p>The source meter does not measure the final stream or recording, loudness, or true peak. A still meter can mean the source is inactive or not sending audio; it is not a diagnosis. Listen to the final recording or stream separately.</p>
+
+  <h2><a name="troubleshooting">07 / Troubleshooting</a></h2>
+  <h3>No sources appear</h3>
+  <p>Add an audio source in OBS, choose the correct scene collection and use <b>Refresh</b>. Some listed sources may be inactive in the current scene.</p>
+  <h3>No sound in a recording or stream</h3>
+  <p>Check the device in Windows and OBS, make sure the source is active and unmuted, check its level and filters, and select a matching source and output track. Record a short private test and listen back.</p>
+  <h3>Feedback or echo</h3>
+  <p>Turn monitoring off, use headphones, and check that your speakers or desktop capture are not feeding monitored sound back into OBS.</p>
+  <h3>The dock is missing</h3>
+  <p>Restart OBS and open <b>Docks → MixBloom</b>. Check <b>Help → Log Files → View Current Log</b> for <code>[obs-mixbloom] loaded</code>. Confirm that the DLL and data were installed together. This build targets OBS 33.0.1 on Windows x64.</p>
+
+  <h2><a name="installation">08 / Install, update or remove</a></h2>
+  <p>Download <b>obs-mixbloom-windows-x64</b> from a successful <b>Actions → MixBloom</b> run for <b>main</b> on the project's GitHub page. Extract the ZIP and close OBS. Right-click <b>Install.bat</b> and choose <b>Run as administrator</b>, then reopen OBS and select <b>Docks → MixBloom</b>.</p>
+  <p>To update a standard installation, close OBS and back up any files you want to keep from the old <code>obs-mixbloom</code> plugin folder. Run the new package's <b>Uninstall.bat</b> as administrator, then run <b>Install.bat</b> as administrator. The installer will not overwrite an existing folder. Removing the plugin does not undo audio changes already made in OBS.</p>
+  <p>For portable OBS, use the package's PowerShell install and uninstall scripts with <code>-PluginRoot</code> pointing to that portable copy's <code>plugins</code> folder. See the included README for an example. The DLL and installer are unsigned. A separate copy of this guide is included at <code>data/help/user-guide.html</code>.</p>
+
+  <h2><a name="privacy">09 / Privacy and limits</a></h2>
+  <p>MixBloom has no account and does not intentionally send audio, source names or analytics over the network. Its source meter uses values supplied by OBS; the plugin does not save or record audio. OBS manages the source settings you change.</p>
+  <p>This dock is not an official iRig product. It does not provide effects, a virtual cable, a separate mix bus, presets, automatic mixing or a new physical input. It cannot guarantee what listeners hear; always verify the final output.</p>
+</div>
+</body>
+</html>

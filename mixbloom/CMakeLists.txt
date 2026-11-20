@@ -29,6 +29,9 @@ target_sources(
     src/obs-mixer.hpp
     src/mix-dock.cpp
     src/mix-dock.hpp
+    src/mix-help.cpp
+    src/mix-help.hpp
+    src/mix-help.qrc
 )
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
 
@@ -41,7 +44,10 @@ if(BUILD_MIXBLOOM_TESTS)
     src/mix-core.cpp
     src/obs-mixer.cpp
     src/mix-dock.cpp
+    src/mix-help.cpp
+    src/mix-help.qrc
   )
+  set_target_properties(mixbloom-ui-tests PROPERTIES AUTORCC ON)
   target_include_directories(mixbloom-ui-tests PRIVATE tests/fake-obs src tests)
   target_compile_features(mixbloom-ui-tests PRIVATE cxx_std_17)
   target_link_libraries(mixbloom-ui-tests PRIVATE Qt6::Core Qt6::Widgets)

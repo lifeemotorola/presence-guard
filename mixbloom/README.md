@@ -1,4 +1,4 @@
-# MixBloom for OBS Studio
+# MixBloom 0.2.0 for OBS Studio
 
 A calm, compact **audio mixer and track-routing dock** for the audio sources
 already in OBS. Created by **Emmanuel Suah**. This is an independent project;
@@ -17,9 +17,9 @@ that is not connected or otherwise available to OBS.
 ## Download and install — no compiler needed
 
 1. In this repository on GitHub, open **Actions → MixBloom**.
-2. Open a **successful** run. Scroll to the bottom, under **Artifacts**, and
-   download **`obs-mixbloom-windows-x64`**. Extract the downloaded ZIP; the
-   extracted files include `Install.bat`, `bin`, and `data`.
+2. Open a **successful** run for **main**. Scroll to the bottom, under
+   **Artifacts**, and download **`obs-mixbloom-windows-x64`**. Extract the
+   downloaded ZIP; the extracted files include `Install.bat`, `bin`, and `data`.
 3. **Close OBS.** Right-click `Install.bat` and choose **Run as administrator**.
    If an older `obs-mixbloom` folder is already installed, back it up and remove
    it first; the installer deliberately refuses to overwrite it.
@@ -31,6 +31,7 @@ The default OBS 33 installation is:
 ```text
 C:\ProgramData\obs-studio\plugins\obs-mixbloom\obs-mixbloom.dll
 C:\ProgramData\obs-studio\plugins\obs-mixbloom\data\locale\en-US.ini
+C:\ProgramData\obs-studio\plugins\obs-mixbloom\data\help\user-guide.html
 ```
 
 For a **portable OBS 33** copy, close OBS and run the extracted PowerShell
@@ -48,6 +49,14 @@ close OBS and run `Uninstall.bat` as administrator (or use `Uninstall.ps1
 -PluginRoot ...` for portable OBS). Existing OBS audio changes remain in OBS.
 
 ## Use the dock
+
+Select **?  Help** at the top of the MixBloom dock for the complete offline
+user guide, with links to each section. It remains available even when there
+are no sources. The guide opens in a separate, non-modal window, so you can
+refer to it while using OBS; opening it never changes audio settings. Use the
+section links or scroll, and select **Close** or press **Esc** to return. A
+standalone copy is also included in the artifact at `data/help/user-guide.html`
+and can be opened in a browser without an internet connection.
 
 1. Configure a **Mic/Aux**, **Desktop Audio**, or another audio-producing source
    in OBS. MixBloom lists public audio-capable inputs in the current scene
@@ -107,12 +116,13 @@ OBS.
 ## Tests and source
 
 `./tests/run-tests.sh` exercises the C++ mixer model and real adapter against a
-fake OBS implementation. The Windows workflow builds the actual Qt dock and
-exercises it against fake OBS, tests the portable install/uninstall and
-overwrite protection, then starts the packaged DLL in a disposable real OBS
-33.0.1 portable installation. The latter is **only a load smoke test**:
-it does not prove operation with a real microphone, monitoring device, stream,
-recording, listener or every OBS setup. Build instructions for developers use
+fake OBS implementation and validates the offline guide's section links. It
+requires a C++17 compiler and Python 3. The Windows workflow builds the actual
+Qt dock and exercises it and the guide against fake OBS, tests the portable
+install/uninstall and overwrite protection, then starts the packaged DLL in a
+disposable real OBS 33.0.1 portable installation. The latter is **only a load
+smoke test**: it does not prove operation with a real microphone, monitoring
+device, stream, recording, listener or every OBS setup. Build instructions for developers use
 `cmake --preset windows-x64` and `cmake --build --preset windows-x64 --config
 RelWithDebInfo`, with Visual Studio 2022 and CMake 3.28+.
 

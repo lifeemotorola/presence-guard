@@ -1,0 +1,7 @@
+<!-- MixBloom for OBS Studio. Copyright (C) 2026 Emmanuel Suah.
+     GPL-2.0-or-later; see LICENSE. No warranty. -->
+<RCC>
+  <qresource prefix="/mixbloom/help">
+    <file alias="user-guide.html">../data/help/user-guide.html</file>
+  </qresource>
+</RCC>
