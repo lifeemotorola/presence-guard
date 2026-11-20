@@ -1,0 +1,5 @@
+Website typefaces
+
+Plus Jakarta Sans and DM Sans are distributed under the SIL Open Font License 1.1. The corresponding license texts are in the fonts directory. The fonts were obtained from the Fontsource variable-font packages.
+
+The hero artwork was generated for this website.
