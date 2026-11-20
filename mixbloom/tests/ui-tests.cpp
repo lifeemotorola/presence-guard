@@ -92,17 +92,31 @@ static void waitMs(int duration)
 }
 
 /* Click an actual section link in the rendered guide, not just its handler. */
-static bool clickGuideLink(QTextBrowser *browser, const QString &text, const QString &expectedLink)
+static bool clickGuideLink(QTextBrowser *browser, const QString &text, const QString &expectedLink,
+			   const QString &heading)
 {
 	browser->verticalScrollBar()->setValue(0);
 	QApplication::processEvents();
-	QTextCursor cursor = browser->document()->find(text);
-	if (cursor.isNull())
+	/* Find the capitalized table-of-contents link, not an earlier ordinary
+	 * mention of the same word in the safety notice. */
+	QTextCursor cursor = browser->document()->find(text, 0, QTextDocument::FindCaseSensitively);
+	if (cursor.isNull()) {
+		std::fprintf(stderr, "Guide link text not found: %s\n", text.toUtf8().constData());
 		return false;
+	}
 	cursor.setPosition(cursor.selectionStart() + 2);
+	browser->setTextCursor(cursor);
+	browser->ensureCursorVisible();
+	QApplication::processEvents();
+	const int before = browser->verticalScrollBar()->value();
 	const QPoint point = browser->cursorRect(cursor).center();
-	if (!browser->viewport()->rect().contains(point) || browser->anchorAt(point) != expectedLink)
+	const QString actualLink = browser->anchorAt(point);
+	if (!browser->viewport()->rect().contains(point) || actualLink != expectedLink) {
+		std::fprintf(stderr, "Guide link %s at %d,%d (viewport %dx%d) resolved to %s\n",
+			     text.toUtf8().constData(), point.x(), point.y(), browser->viewport()->width(),
+			     browser->viewport()->height(), actualLink.toUtf8().constData());
 		return false;
+	}
 	const QPoint global = browser->viewport()->mapToGlobal(point);
 	QMouseEvent press(QEvent::MouseButtonPress, QPointF(point), QPointF(global), Qt::LeftButton, Qt::LeftButton,
 			  Qt::NoModifier);
@@ -111,7 +125,16 @@ static bool clickGuideLink(QTextBrowser *browser, const QString &text, const QSt
 	QApplication::sendEvent(browser->viewport(), &press);
 	QApplication::sendEvent(browser->viewport(), &release);
 	QApplication::processEvents();
-	return browser->verticalScrollBar()->value() > 0;
+	QTextCursor target = browser->document()->find(heading, 0, QTextDocument::FindCaseSensitively);
+	if (target.isNull())
+		return false;
+	target.setPosition(target.selectionStart());
+	const int after = browser->verticalScrollBar()->value();
+	const bool visible = browser->viewport()->rect().intersects(browser->cursorRect(target));
+	if (after <= before || !visible)
+		std::fprintf(stderr, "Guide link %s did not reach its heading (scroll %d -> %d, visible %d)\n",
+			     expectedLink.toUtf8().constData(), before, after, visible);
+	return after > before && visible;
 }
 
 int main(int argc, char **argv)
@@ -182,14 +205,45 @@ int main(int argc, char **argv)
 		      "the guide covers setup, controls, safety, troubleshooting, installation and limits");
 		check(browser->verticalScrollBar()->maximum() > 0 && browser->isReadOnly(),
 		      "the full user guide is scrollable and read-only");
-		check(clickGuideLink(browser, "Monitoring", "#monitoring"),
-		      "a section link navigates to its heading in the embedded guide");
+		struct GuideLink {
+			const char *text;
+			const char *href;
+			const char *heading;
+		};
+		const GuideLink links[] = {{"Quick start", "#quick-start", "01 / Quick start"},
+					   {"Audio sources", "#sources", "02 / Find or add audio sources"},
+					   {"Level & mute", "#level-mute", "03 / Level and mute"},
+					   {"Output tracks", "#routing", "04 / Route to output tracks"},
+					   {"Monitoring", "#monitoring", "05 / Listen with monitoring"},
+					   {"Source meter", "#meter", "06 / Read the source meter"},
+					   {"Troubleshooting", "#troubleshooting", "07 / Troubleshooting"},
+					   {"Install & update", "#installation", "08 / Install, update or remove"},
+					   {"Privacy & limits", "#privacy", "09 / Privacy and limits"}};
+		for (const auto &link : links) {
+			const QByteArray message = QByteArray("guide section link reaches its heading: ") + link.text;
+			check(clickGuideLink(browser, link.text, link.href, link.heading), message.constData());
+		}
 		const int position = browser->verticalScrollBar()->value();
 		const bool signalled = QMetaObject::invokeMethod(browser, "anchorClicked", Qt::DirectConnection,
 								 Q_ARG(QUrl, QUrl("https://example.invalid/#privacy")));
 		check(signalled && !browser->openLinks() && !browser->openExternalLinks() &&
 			      browser->verticalScrollBar()->value() == position,
 		      "external links are not followed by the offline guide");
+		browser->moveCursor(QTextCursor::Start);
+		browser->verticalScrollBar()->setValue(0);
+		browser->setFocus(Qt::TabFocusReason);
+		QKeyEvent tab(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
+		QApplication::sendEvent(browser, &tab);
+		app.processEvents();
+		check(browser->textInteractionFlags().testFlag(Qt::LinksAccessibleByKeyboard) &&
+			      browser->textCursor().selectedText() == "Quick start",
+		      "Tab focuses the first guide section link");
+		const int beforeEnter = browser->verticalScrollBar()->value();
+		QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+		QApplication::sendEvent(browser, &enter);
+		app.processEvents();
+		check(browser->verticalScrollBar()->value() > beforeEnter,
+		      "Enter opens a focused guide section using the keyboard");
 
 		for (const QSize size : {QSize(300, 260), QSize(360, 320), QSize(650, 600)}) {
 			guide->resize(size);

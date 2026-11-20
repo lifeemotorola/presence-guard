@@ -54,7 +54,8 @@ Select **?  Help** at the top of the MixBloom dock for the complete offline
 user guide, with links to each section. It remains available even when there
 are no sources. The guide opens in a separate, non-modal window, so you can
 refer to it while using OBS; opening it never changes audio settings. Use the
-section links or scroll, and select **Close** or press **Esc** to return. A
+section links or scroll; you can also use **Tab** and **Enter** to follow a
+link. Select **Close** or press **Esc** to return. A
 standalone copy is also included in the artifact at `data/help/user-guide.html`
 and can be opened in a browser without an internet connection.
 
