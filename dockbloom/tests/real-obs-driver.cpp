@@ -229,8 +229,22 @@ void runTests()
 		answerYes();
 		focus->click();
 		QApplication::processEvents();
-		record(mainWindow->tabifiedDockWidgets(anchor).contains(scenes) && !scenes->isHidden(),
-		       "focus view moves the real Scenes dock into the workspace");
+		QStringList tabIds;
+		for (QDockWidget *tab : mainWindow->tabifiedDockWidgets(anchor))
+			tabIds.append(tab->objectName());
+		auto *notice = ui->findChild<QLabel *>("notice");
+		const QString currentId = list->currentItem() ? list->currentItem()->data(Qt::UserRole).toString()
+							      : "<none>";
+		const QString details =
+			QString("selected=%1, scenesHidden=%2, scenesVisible=%3, anchorFloating=%4, tabs=%5, notice=%6")
+				.arg(currentId)
+				.arg(scenes->isHidden())
+				.arg(scenes->isVisible())
+				.arg(anchor->isFloating())
+				.arg(tabIds.join(','))
+				.arg(notice ? notice->text() : "<none>");
+		record(tabIds.contains("scenesDock") && !scenes->isHidden(),
+		       "focus view moves the real Scenes dock into the workspace (" + details + ")");
 		grid->click();
 		QApplication::processEvents();
 		int shown = 0, hidden = 0;
@@ -242,6 +256,18 @@ void runTests()
 				++hidden;
 		}
 		record(shown == 4 && hidden == 11, "grid displays four of the 15 docks and pages the rest");
+		bool visibleCells = true;
+		for (int i = 0; i < 4; ++i) {
+			QDockWidget *dock = findDock(ids[i]);
+			visibleCells = visibleCells && dock && dock->isVisible() && dock->widget() &&
+				       dock->widget()->isVisible() && dock->width() > 5 && dock->height() > 5;
+			for (int j = i + 1; j < 4; ++j) {
+				QDockWidget *other = findDock(ids[j]);
+				visibleCells = visibleCells && dock && other &&
+					       !dock->geometry().intersects(other->geometry());
+			}
+		}
+		record(visibleCells, "all four grid dock contents are simultaneously visible in distinct cells");
 		record(scenes && scenes->widget() == originalSceneContent && existing &&
 			       existing->widget() == originalBrowserContent && customDock,
 		       "moving native and browser docks preserves their original owned widgets");
