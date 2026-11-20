@@ -353,7 +353,7 @@ void WorkspaceUi::refresh()
 		if (id == selected)
 			list_->setCurrentItem(item);
 	}
-	const int availableCount = workspace_->availableMembers().size();
+	const int availableCount = static_cast<int>(workspace_->availableMembers().size());
 	count_->setText(QString("%1 included  ·  %2 available").arg(config.members.size()).arg(availableCount));
 	const int pages = qMax(1, (availableCount + kGridPageSize - 1) / kGridPageSize);
 	const int current = qBound(0, config.page, pages - 1);
@@ -416,7 +416,7 @@ void WorkspaceUi::showSelected()
 		return;
 	const QString id = selectedId();
 	const QStringList members = workspace_->availableMembers();
-	const int index = members.indexOf(id);
+	const int index = static_cast<int>(members.indexOf(id));
 	if (index < 0) {
 		showError("Select an included, available dock in the list first.");
 		return;

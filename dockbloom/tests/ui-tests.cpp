@@ -131,18 +131,18 @@ int main(int argc, char **argv)
 		      loaded.webDocks.size() == 1 && loaded.mode == "grid" && loaded.page == 3,
 	      "more than ten members, web docks and view survive a reload");
 	QFile original(configPath);
-	original.open(QIODevice::ReadOnly);
+	check(original.open(QIODevice::ReadOnly), "saved settings file is readable");
 	const QByteArray beforeInvalid = original.readAll();
 	original.close();
 	Config invalid = saved;
 	invalid.members.append(invalid.members.first());
 	check(!saveConfig(configPath, invalid, &error), "duplicate dock IDs are rejected");
-	original.open(QIODevice::ReadOnly);
+	check(original.open(QIODevice::ReadOnly), "saved settings file can be reopened");
 	check(original.readAll() == beforeInvalid, "invalid settings do not overwrite the previous file");
 	original.close();
 	QFile corrupt(temp.filePath("corrupt.json"));
-	corrupt.open(QIODevice::WriteOnly);
-	corrupt.write("{not valid json");
+	check(corrupt.open(QIODevice::WriteOnly), "corrupt settings fixture can be created");
+	check(corrupt.write("{not valid json") > 0, "corrupt settings fixture can be written");
 	corrupt.close();
 	Config untouched = saved;
 	check(!loadConfig(corrupt.fileName(), &untouched, &error) && untouched.members == saved.members,
@@ -264,7 +264,7 @@ int main(int argc, char **argv)
 
 	/* A malformed existing backup is never silently overwritten. */
 	QFile badBackup(workspace.backupPath());
-	badBackup.open(QIODevice::WriteOnly);
+	check(badBackup.open(QIODevice::WriteOnly), "invalid backup fixture can be created");
 	badBackup.close();
 	const QByteArray beforeBadBackup = main.saveState();
 	check(!workspace.apply("focus", 0, "native-00", &error) && main.saveState() == beforeBadBackup,
