@@ -37,6 +37,7 @@ public static class Native {
   [DllImport("user32.dll")] public static extern int GetWindowLongW(IntPtr window, int index);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
@@ -191,6 +192,9 @@ try {
     $name = [Native]::AccessibleName((Control $widget ([int]$entry[0])))
     Assert ($name -eq $entry[1]) "Accessible name mismatch for $($entry[0]): $name"
   }
+  Assert ([Native]::AccessibleName((Control $widget 1101)) -match '^Ready') 'The status must have an accessible name.'
+  Assert ([Native]::AccessibleName((Control $widget 1102)) -match 'WPM$') 'The speed must have an accessible name.'
+  Assert ([Native]::AccessibleName((Control $widget 1103)) -match '^0 keys') 'The count must have an accessible name.'
   Write-Host 'Ready, floating, and named accessible controls: OK'
   Save-WidgetScreenshot $widget $Screenshot
 
@@ -205,11 +209,13 @@ try {
   Click-Control $widget 1004
   Wait-For { [Native]::FindWindow('#32770', 'TypeBloom Privacy') -ne [IntPtr]::Zero } 'privacy dialog'
   $dialog = [Native]::FindWindow('#32770', 'TypeBloom Privacy')
+  Assert ([Native]::DescribeChildren($dialog) -match 'Password fields are not detected') 'Privacy dialog must disclose the password-field limitation.'
   Close-Dialog $dialog 'OK'
   Wait-For { [Native]::FindWindow('#32770', 'TypeBloom Privacy') -eq [IntPtr]::Zero } 'privacy dialog close'
   Click-Control $widget 1001
   Wait-For { [Native]::FindWindow('#32770', 'Start tracking?') -ne [IntPtr]::Zero } 'consent prompt'
   $dialog = [Native]::FindWindow('#32770', 'Start tracking?')
+  Assert ([Native]::DescribeChildren($dialog) -match 'Password fields are not detected') 'Consent must disclose the password-field limitation.'
   Close-Dialog $dialog 'Cancel'
   Wait-For { [Native]::FindWindow('#32770', 'Start tracking?') -eq [IntPtr]::Zero } 'consent cancellation'
   Assert ((Text $widget 1001) -eq 'Start tracking') 'Cancel must leave tracking off.'
@@ -237,6 +243,8 @@ try {
   Write-Host 'Cross-app counts, shortcut filtering, password-field limitation, and WPM: OK'
 
   Save-WidgetScreenshot $widget $Screenshot
+  Wait-For { (Text $widget 1103) -eq '0 keys in the last 15 seconds' } 'idle decay' 20000
+  Assert ((Text $widget 1102) -eq '0 WPM') 'The live reading must return to zero after idle.'
 
   Click-Control $widget 1001
   Wait-For { (Text $widget 1001) -eq 'Resume tracking' } 'pause'
@@ -258,7 +266,16 @@ try {
   [void][Native]::PostMessage($widget, 0x02B1, [IntPtr]7, [IntPtr]::Zero) # WM_WTSSESSION_CHANGE / LOCK
   Wait-For { (Text $widget 1001) -eq 'Resume tracking' } 'automatic pause on lock notification'
   Assert ((Text $widget 1103) -eq '0 keys in the last 15 seconds') 'Lock must clear the reading.'
-  Write-Host 'Pause, resume, reset, and lock notification: OK'
+  Click-Control $widget 1001
+  Wait-For { (Text $widget 1001) -eq 'Pause tracking' } 'resume before minimize'
+  Activate-Target $targetWindow
+  Tap-Many 0x41 3
+  Wait-For { (Text $widget 1103) -eq '3 keys in the last 15 seconds' } 'count before minimize'
+  [void][Native]::ShowWindow($widget, 6) # SW_MINIMIZE
+  Wait-For { (Text $widget 1001) -eq 'Resume tracking' } 'automatic pause on minimize'
+  Assert ((Text $widget 1103) -eq '0 keys in the last 15 seconds') 'Minimize must clear the reading.'
+  [void][Native]::ShowWindow($widget, 9) # SW_RESTORE
+  Write-Host 'Pause, resume, reset, idle decay, lock, and minimize: OK'
 
   Click-Control $widget 1003
   Wait-For { (Text $widget 1003) -eq 'Always on top: off' } 'unpin'

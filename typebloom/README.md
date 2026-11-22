@@ -19,8 +19,9 @@ test. TypeBloom is an ordinary desktop window—not a Windows Widgets panel item
 4. It **starts paused every time**. Click **Start tracking**, read the privacy
    prompt, and confirm. Then focus another app and type. You can **Pause**,
    **Resume**, **Reset** or close it at any time. Pause and Reset clear the
-   current reading. The X exits completely; there is no tray process or automatic
-   startup. A second launch brings the existing widget forward.
+   current reading. Minimizing also pauses tracking. The X exits completely;
+   there is no tray process or automatic startup. A second launch brings the
+   existing widget forward.
 5. Use the **Privacy** button for the same data and limitations disclosure.
 
 The executable is **unsigned**. Windows SmartScreen can show an unknown

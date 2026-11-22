@@ -361,7 +361,7 @@ void show_privacy()
 	MessageBoxW(
 		app.window,
 		L"TypeBloom starts paused. When you choose to start, it observes typing-like key presses "
-		L"across ordinary desktop apps. The hook is removed when paused or closed.\n\n"
+		L"across ordinary desktop apps. The hook is removed when paused, minimized or closed.\n\n"
 		L"No typed characters, key codes, window titles, or history are stored or sent. "
 		L"Only recent timing/counts are held in memory; they are cleared on pause, reset, and exit. "
 		L"Window position and pin preference are saved in your Windows user profile.\n\n"
@@ -486,7 +486,11 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
 		WTSRegisterSessionNotification(window, NOTIFY_FOR_THIS_SESSION);
 		return 0;
 	case WM_SIZE:
-		if (wparam != SIZE_MINIMIZED) {
+		if (wparam == SIZE_MINIMIZED) {
+			// Do not continue observing keys when the widget is minimized.
+			if (app.tracking)
+				pause_tracking();
+		} else {
 			set_region(LOWORD(lparam), HIWORD(lparam));
 			layout();
 		}
