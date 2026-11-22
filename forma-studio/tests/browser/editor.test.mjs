@@ -43,12 +43,13 @@ async function downloadFrom(page, action) {
 async function nextRender(page) {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
-async function colorRegions(page) {
+async function colorRegions(page, png = null) {
   await nextRender(page);
-  return page.evaluate(() => {
-    const canvas = document.querySelector('#viewport-canvas canvas');
-    const copy = document.createElement('canvas'); copy.width = canvas.width; copy.height = canvas.height;
-    const ctx = copy.getContext('2d'); ctx.drawImage(canvas, 0, 0);
+  return page.evaluate(async (encoded) => {
+    let image = document.querySelector('#viewport-canvas canvas');
+    if (encoded) { image = new Image(); image.src = `data:image/png;base64,${encoded}`; await image.decode(); }
+    const copy = document.createElement('canvas'); copy.width = image.width; copy.height = image.height;
+    const ctx = copy.getContext('2d'); ctx.drawImage(image, 0, 0);
     const { data, width, height } = ctx.getImageData(0, 0, copy.width, copy.height);
     const regions = { red: null, green: null };
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
@@ -60,7 +61,7 @@ async function colorRegions(page) {
       region.minY = Math.min(region.minY, y); region.maxY = Math.max(region.maxY, y);
     }
     return { width, height, ...regions };
-  });
+  }, png ? png.toString('base64') : null);
 }
 
 test('scene editing, procedural array, materials, undo/redo and visibility', async () => {
@@ -605,6 +606,47 @@ test('proportional gizmo drag uses a fixed baseline and undoes as one edit', asy
   assert.equal(await page.getByRole('spinbutton', { name: 'Vertex Y' }).inputValue(), '0');
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
   assert.ok(Math.abs(Number(await page.getByRole('spinbutton', { name: 'Vertex Y' }).inputValue()) - delta) < 1e-6);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('undo and redo preserve an orthographic zoom outside perspective camera limits', async () => {
+  const { page, context, errors } = await openPage();
+  const project = createStarterProject();
+  const red = createObject('cube', 'red', 'Red marker'); red.transform.position = [-0.14, 0.4, 0]; red.transform.scale = [0.03, 0.03, 0.03]; red.material.color = '#ff0000';
+  const green = createObject('cube', 'green', 'Green marker'); green.transform.position = [0.14, 0.4, 0]; green.transform.scale = [0.03, 0.03, 0.03]; green.material.color = '#00ff00';
+  const plane = createObject('plane', 'base', 'Base plane'); project.objects = [red, green, plane];
+  const choose = page.waitForEvent('filechooser');
+  await page.locator('#file-menu summary').click(); await page.locator('#open-project').click();
+  await (await choose).setFiles({ name: 'zoom.forma', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(project)) });
+  await page.waitForFunction(() => document.querySelector('#status-text').textContent.includes('Project opened'));
+  await page.getByRole('button', { name: 'Select Base plane' }).click();
+  await page.getByRole('button', { name: 'Frame selected object' }).click();
+  await page.locator('#view-select').selectOption('top');
+  await page.getByRole('tab', { name: 'Model', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+  await page.getByRole('button', { name: 'Subdivide mesh' }).click();
+  await page.getByRole('button', { name: 'Vertex', exact: true }).click();
+  await commitInput(page.getByRole('spinbutton', { name: 'Vertex number' }), 5);
+  const canvas = await page.locator('#viewport-canvas canvas').boundingBox();
+  await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+  await page.mouse.wheel(0, -5000);
+  const capture = () => downloadFrom(page, async () => { await page.locator('.export-menu summary').click(); await page.locator('.export-menu [data-export=png]').click(); });
+  const before = await colorRegions(page, (await capture()).bytes);
+  assert.ok(before.red && before.green, 'both scale markers remain visible');
+  assert.ok(before.red.maxX - before.red.minX > 40, 'orthographic zoom exceeds the minimum perspective distance');
+  await commitInput(page.getByRole('spinbutton', { name: 'Vertex Y' }), 0.2);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  assert.equal(await page.getByRole('spinbutton', { name: 'Vertex Y' }).inputValue(), '0');
+  const undone = await colorRegions(page, (await capture()).bytes);
+  for (const color of ['red', 'green']) for (const edge of ['minX', 'maxX', 'minY', 'maxY']) {
+    assert.ok(Math.abs(before[color][edge] - undone[color][edge]) <= 1, `undo preserves ${color} ${edge}`);
+  }
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  const redone = await colorRegions(page, (await capture()).bytes);
+  for (const color of ['red', 'green']) for (const edge of ['minX', 'maxX', 'minY', 'maxY']) {
+    assert.ok(Math.abs(before[color][edge] - redone[color][edge]) <= 1, `redo preserves ${color} ${edge}`);
+  }
   assert.deepEqual(errors, []);
   await context.close();
 });

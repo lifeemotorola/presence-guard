@@ -45,11 +45,14 @@ function stopPlayback() {
   $('#play').title = 'Play animation';
 }
 function restore(value) {
+  // Navigation is not an undoable scene edit. Keep the live camera and its
+  // session-only orthographic zoom when restoring geometry or properties.
+  const camera = state.viewport?.getCamera();
   state.project = validateProject(value.project);
+  if (camera) state.project.camera = camera;
   state.selectedId = state.project.objects.some((object) => object.id === value.selectedId) ? value.selectedId : null;
   state.frame = clamp(value.frame, 0, state.project.timeline.end);
   stopPlayback();
-  state.viewport?.setCamera(state.project.camera);
   redraw();
 }
 function change(action) {
