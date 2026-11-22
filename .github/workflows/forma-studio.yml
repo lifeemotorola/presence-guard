@@ -71,7 +71,7 @@ jobs:
         shell: pwsh
         run: |
           $folder = 'out/FormaStudio-win32-x64'
-          foreach ($item in @('FormaStudio.exe', 'resources/app.asar', 'LICENSE', 'LICENSES.chromium.html', 'INSTALL.txt', 'README.md', 'THREE-LICENSE.txt', 'SOURCE/app/editor.js', 'SOURCE/app/viewport.js', 'SOURCE/desktop/main.cjs', 'SOURCE/package-lock.json', 'SOURCE/app/assets/fonts/DM-SANS-LICENSE.txt', 'SOURCE/app/assets/fonts/PLUS-JAKARTA-SANS-LICENSE.txt')) {
+          foreach ($item in @('FormaStudio.exe', 'resources/app.asar', 'LICENSE', 'LICENSES.chromium.html', 'FORMA-LICENSE.txt', 'INSTALL.txt', 'README.md', 'THREE-LICENSE.txt', 'SOURCE/INSTALL.txt', 'SOURCE/app/editor.js', 'SOURCE/app/viewport.js', 'SOURCE/desktop/main.cjs', 'SOURCE/package-lock.json', 'SOURCE/app/assets/fonts/DM-SANS-LICENSE.txt', 'SOURCE/app/assets/fonts/PLUS-JAKARTA-SANS-LICENSE.txt')) {
             if (-not (Test-Path (Join-Path $folder $item))) { throw "Missing package file: $item" }
           }
           $info = (Get-Item "$folder/FormaStudio.exe").VersionInfo

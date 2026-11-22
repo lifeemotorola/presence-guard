@@ -21,9 +21,11 @@ const { version } = require('../package.json');
   for (const folder of output) {
     // The portable download contains readable instructions, third-party
     // notices, and the app's preferred source form alongside the executable.
-    for (const file of ['INSTALL.txt', 'README.md', 'LICENSE', 'THREE-LICENSE.txt']) {
+    for (const file of ['INSTALL.txt', 'README.md', 'THREE-LICENSE.txt']) {
       await fs.copyFile(path.join(root, file), path.join(folder, file));
     }
+    // Keep Electron's own LICENSE intact; give the app license a distinct name.
+    await fs.copyFile(path.join(root, 'LICENSE'), path.join(folder, 'FORMA-LICENSE.txt'));
     const source = path.join(folder, 'SOURCE');
     await fs.mkdir(source, { recursive: true });
     for (const directory of ['app', 'desktop', 'scripts', 'tests']) {
@@ -31,7 +33,7 @@ const { version } = require('../package.json');
         recursive: true, filter: (src) => !src.endsWith(`${path.sep}bundle.js`),
       });
     }
-    for (const file of ['package.json', 'package-lock.json', 'README.md', 'LICENSE', 'THREE-LICENSE.txt']) {
+    for (const file of ['package.json', 'package-lock.json', 'INSTALL.txt', 'README.md', 'LICENSE', 'THREE-LICENSE.txt']) {
       await fs.copyFile(path.join(root, file), path.join(source, file));
     }
   }
