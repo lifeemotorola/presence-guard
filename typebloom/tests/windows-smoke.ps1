@@ -108,7 +108,10 @@ function Activate-Target([IntPtr]$targetWindow, [int]$id = 201) {
   Wait-For { [Native]::GetForegroundWindow() -eq $targetWindow } 'test input window did not become active'
 }
 function Tap-Many([byte]$key, [int]$count) { for ($i = 0; $i -lt $count; $i++) { [Native]::Tap($key) } }
-function Close-Dialog([IntPtr]$dialog, [int]$id) { [void][Native]::PostMessage($dialog, 0x0111, [IntPtr]$id, [IntPtr]::Zero) }
+function Close-Dialog([IntPtr]$dialog, [int]$id) {
+  Wait-For { [Native]::GetDlgItem($dialog, $id) -ne [IntPtr]::Zero } "dialog button $id"
+  [Native]::Click((Control $dialog $id))
+}
 
 # Preserve the caller's three preferences if these tests are run outside CI.
 if ([Native]::FindClass('TypeBloomWidgetWindow') -ne [IntPtr]::Zero) {
