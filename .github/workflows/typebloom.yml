@@ -73,7 +73,13 @@ jobs:
         env:
           TYPEBLOOM_SCREENSHOT: ${{ runner.temp }}\typebloom-widget.png
         run: |
-          ./tests/windows-smoke.ps1 -App out/TypeBloom-windows-x64/TypeBloom.exe -Target out/build/Release/typebloom_test_target.exe -Screenshot $env:TYPEBLOOM_SCREENSHOT
+          try {
+            ./tests/windows-smoke.ps1 -App out/TypeBloom-windows-x64/TypeBloom.exe -Target out/build/Release/typebloom_test_target.exe -Screenshot $env:TYPEBLOOM_SCREENSHOT
+          } catch {
+            $details = ("$($_.Exception.Message) $($_.ScriptStackTrace)" -replace '%', '%25' -replace "`r", '%0D' -replace "`n", '%0A')
+            Write-Output "::error title=Windows smoke test::$details"
+            throw
+          }
       - name: Calculate executable checksum
         id: hashes
         shell: pwsh

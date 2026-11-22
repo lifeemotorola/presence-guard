@@ -25,8 +25,14 @@ if(WIN32)
     # The checked-in resource contains our per-monitor-DPI/asInvoker manifest.
     target_link_options(TypeBloom PRIVATE /MANIFEST:NO)
   endif()
-  target_compile_definitions(TypeBloom PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0A00 WINVER=0x0A00)
-  target_link_libraries(TypeBloom PRIVATE gdiplus user32 gdi32 advapi32 wtsapi32)
+  target_compile_definitions(
+    TypeBloom
+    PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0A00 WINVER=0x0A00
+  )
+  target_link_libraries(
+    TypeBloom
+    PRIVATE gdiplus user32 gdi32 advapi32 wtsapi32
+  )
   if(MINGW)
     target_link_options(TypeBloom PRIVATE -municode -static)
   endif()
