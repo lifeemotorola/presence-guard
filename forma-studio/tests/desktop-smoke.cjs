@@ -122,7 +122,16 @@ async function launch(exe, env) {
     await page.getByRole('button', { name: 'Vertex', exact: true }).click();
     await commit(page.getByRole('spinbutton', { name: 'Vertex number' }), 7);
     await commit(page.getByRole('spinbutton', { name: 'Vertex X' }), 1);
+    await page.getByRole('checkbox', { name: 'Proportional vertex editing' }).check();
+    await commit(page.getByRole('spinbutton', { name: /Influence radius/ }), 2);
+    await page.getByLabel('Falloff').selectOption('linear');
+    await commit(page.getByRole('spinbutton', { name: 'Vertex Y' }), 0.8);
+    assert.equal(await page.getByRole('spinbutton', { name: 'Vertex Y' }).inputValue(), '0.8');
     await page.getByRole('checkbox', { name: 'Smooth mesh shading' }).check();
+    await page.locator('#view-select').selectOption('bottom');
+    assert.equal(await page.locator('#projection-toggle').getAttribute('aria-pressed'), 'true');
+    await page.locator('#view-select').selectOption('front');
+    assert.equal(await page.locator('#projection-toggle').textContent(), 'ORTHO');
     if (process.env.FORMA_MESH_SCREENSHOT) await page.screenshot({ path: process.env.FORMA_MESH_SCREENSHOT });
     await page.getByRole('tab', { name: 'Object', exact: true }).click();
 
@@ -136,6 +145,9 @@ async function launch(exe, env) {
     assert.equal(cube.type, 'mesh'); assert.equal(cube.shading, 'smooth');
     assert.equal(cube.mesh.vertices.length, 16); assert.equal(cube.mesh.faces.length, 14);
     assert.equal(cube.mesh.vertices[6][0], 1);
+    assert.equal(cube.mesh.vertices[6][1], 0.8);
+    assert.ok(cube.mesh.vertices[5][1] > -0.7, 'proportional editing moves a neighboring vertex');
+    assert.deepEqual(Object.keys(project.camera).sort(), ['position', 'target']);
     assert.deepEqual(cube.keyframes.map((key) => key.frame), [0, 24]);
     assert.deepEqual({ mode: cube.array.mode, count: cube.array.count }, { mode: 'radial', count: 4 });
     await commit(page.locator('#object-name'), 'Saved cube A');
@@ -181,6 +193,8 @@ async function launch(exe, env) {
     await page.getByRole('button', { name: 'Vertex', exact: true }).click();
     await commit(page.getByRole('spinbutton', { name: 'Vertex number' }), 7);
     assert.equal(await page.getByRole('spinbutton', { name: 'Vertex X' }).inputValue(), '1');
+    assert.equal(await page.getByRole('spinbutton', { name: 'Vertex Y' }).inputValue(), '0.8');
+    assert.equal(await page.locator('#projection-toggle').textContent(), 'PERSP', 'projection is session-only on reopen');
 
     await choose(desktop, 'savePath', glb);
     await exportAction(page, '[data-export=glb]');
@@ -256,7 +270,7 @@ async function launch(exe, env) {
     assert.deepEqual(errors, []);
     await desktop.close().catch(() => {});
     desktop = null;
-    console.log('Packaged Windows app: sandbox, offline renderer, mesh editing, arrays, animation, project migration and save/open, size limits, GLB/PNG, restart and unsaved-close protection passed.');
+    console.log('Packaged Windows app: sandbox, offline renderer, proportional mesh editing, orthographic views, arrays, animation, project migration and save/open, size limits, GLB/PNG, restart and unsaved-close protection passed.');
   } finally {
     if (desktop) {
       await choose(desktop, 'confirm', 1).catch(() => {});

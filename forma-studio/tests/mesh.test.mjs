@@ -1,7 +1,7 @@
 /* Forma Studio mesh tests. Copyright (C) 2026 Emmanuel Suah. GPL-2.0-or-later. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createCubeMesh, createPlaneMesh, validateMesh, faceNormal, triangulateFace, extrudeFace, insetFace, subdivideMesh, moveVertex, meshFromTriangles, MAX_MESH_VERTICES } from '../app/mesh.js';
+import { createCubeMesh, createPlaneMesh, validateMesh, faceNormal, triangulateFace, extrudeFace, insetFace, subdivideMesh, moveVertex, proportionalWeights, moveVertexProportionally, meshFromTriangles, MAX_MESH_VERTICES } from '../app/mesh.js';
 import { createStarterProject, createObject, validateProject, VERSION, PRIMITIVE_TYPES } from '../app/model.js';
 import { primitiveToMesh } from '../app/viewport.js';
 
@@ -80,6 +80,60 @@ test('linear subdivision shares edge midpoints and vertex edits are validated', 
   assert.throws(() => moveVertex(cube, 0, 1, Infinity), /coordinates/);
   assert.throws(() => moveVertex(cube, 0, 1, 1001), /coordinates/);
   assert.throws(() => moveVertex(cube, 500, 1, 0), /Select a vertex/);
+});
+
+test('proportional movement uses local distance, selectable falloff and the original mesh', () => {
+  const mesh = subdivideMesh(createPlaneMesh());
+  const center = 4, edge = 5, corner = 0;
+  const original = JSON.parse(JSON.stringify(mesh));
+  assert.deepEqual(mesh.vertices[center], [0, 0, 0]);
+  const linear = proportionalWeights(mesh, center, 2, 'linear');
+  const smooth = proportionalWeights(mesh, center, 2, 'smooth');
+  const sharp = proportionalWeights(mesh, center, 2, 'sharp');
+  assert.equal(linear[center], 1);
+  assert.equal(linear[edge], 0.5);
+  assert.equal(smooth[edge], 0.5);
+  assert.equal(sharp[edge], 0.25);
+  assert.ok(smooth[corner] < linear[corner] && sharp[corner] < smooth[corner]);
+  assert.equal(proportionalWeights(mesh, center, 1, 'linear')[edge], 0, 'vertices on the radius boundary do not move');
+  const moved = moveVertexProportionally(mesh, center, [0, 2, 0], 2, 'linear');
+  assert.equal(moved.vertices[center][1], 2);
+  assert.equal(moved.vertices[edge][1], 1);
+  assert.ok(Math.abs(moved.vertices[corner][1] - 2 * (1 - Math.SQRT2 / 2)) < 1e-12);
+  assert.deepEqual(mesh, original, 'the original mesh is not mutated');
+  assert.deepEqual(moved.faces, mesh.faces, 'topology is unchanged');
+  const finalDirect = moveVertexProportionally(mesh, center, [0, 0.8, 0], 2, 'smooth');
+  const preview = moveVertexProportionally(mesh, center, [0, 0.4, 0], 2, 'smooth');
+  assert.notDeepEqual(preview.vertices, finalDirect.vertices);
+  assert.deepEqual(moveVertexProportionally(mesh, center, [0, 0.8, 0], 2, 'smooth'), finalDirect, 'repeated drag updates can use the unmodified baseline');
+});
+
+test('proportional influence includes nearby disconnected vertices in local space', () => {
+  const mesh = createPlaneMesh();
+  mesh.vertices.push([-0.9, 0.1, -1], [-0.8, 0.1, -1], [-0.9, 0.1, -0.9]);
+  mesh.faces.push([4, 5, 6]);
+  const weights = proportionalWeights(mesh, 0, 0.5, 'linear');
+  assert.ok(weights[4] > 0 && weights[4] < 1);
+  const result = moveVertexProportionally(mesh, 0, [-1, 0.2, -1], 0.5, 'linear');
+  assert.ok(result.vertices[4][1] > 0.1, 'a nearby but disconnected surface also moves');
+  assert.deepEqual(result.vertices[2], mesh.vertices[2], 'points outside the radius remain unchanged');
+});
+
+test('proportional edits reject invalid input and invalid resulting geometry atomically', () => {
+  const mesh = subdivideMesh(createPlaneMesh());
+  const before = JSON.stringify(mesh);
+  for (const radius of [0, 0.009, 1001, Infinity, NaN]) assert.throws(() => proportionalWeights(mesh, 4, radius), /radius/);
+  assert.throws(() => proportionalWeights(mesh, 99, 2), /Select a vertex/);
+  assert.throws(() => proportionalWeights(mesh, 4, 2, 'random'), /falloff/);
+  assert.throws(() => moveVertexProportionally(mesh, 4, [0, Infinity, 0], 2), /coordinates/);
+  assert.throws(() => moveVertexProportionally(mesh, 4, [1001, 0, 0], 2), /coordinates/);
+  assert.throws(() => moveVertexProportionally(mesh, 4, mesh.vertices[5], 0.5), /degenerate|self-intersecting/);
+  assert.equal(JSON.stringify(mesh), before);
+  // A neighboring vertex can exceed the coordinate limit even if the active
+  // vertex's destination is itself in range.
+  const far = { vertices: [[999, 0, 0], [1000, 0, 0], [999, 1, 0]], faces: [[0, 1, 2]] };
+  assert.throws(() => moveVertexProportionally(far, 0, [1000, 0, 0], 2), /outside/);
+  assert.deepEqual(far.vertices[1], [1000, 0, 0]);
 });
 
 test('every built-in primitive converts to bounded editable geometry', () => {

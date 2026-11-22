@@ -1,6 +1,6 @@
 /* Forma Studio editor. Copyright (C) 2026 Emmanuel Suah. GPL-2.0-or-later. */
 import { createStarterProject, createObject, validateProject, evaluatedTransform, putKeyframe, clone, History, TYPE_LABELS, MAX_OBJECTS } from './model.js';
-import { extrudeFace, insetFace, subdivideMesh, moveVertex, moveVertexTo } from './mesh.js';
+import { extrudeFace, insetFace, subdivideMesh, moveVertex, moveVertexTo, moveVertexProportionally, MIN_PROPORTIONAL_RADIUS, MAX_PROPORTIONAL_RADIUS } from './mesh.js';
 import { Viewport, primitiveToMesh } from './viewport.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -13,7 +13,8 @@ const state = {
   project: createStarterProject(), selectedId: 'starter-form', frame: 0,
   tab: 'object', tool: 'translate', playing: false, playStart: 0, playFrame: 0,
   meshEdit: null, legacySource: false, documentId: 0,
-  history: new History(), saved: '', nextId: 0, dragBefore: null, viewport: null,
+  proportional: { enabled: false, radius: 1.5, falloff: 'smooth' },
+  history: new History(), saved: '', nextId: 0, dragBefore: null, vertexDrag: null, viewport: null,
 };
 state.saved = JSON.stringify(state.project);
 let statusTimer;
@@ -44,11 +45,14 @@ function stopPlayback() {
   $('#play').title = 'Play animation';
 }
 function restore(value) {
+  // Navigation is not an undoable scene edit. Keep the live camera and its
+  // session-only orthographic zoom when restoring geometry or properties.
+  const camera = state.viewport?.getCamera();
   state.project = validateProject(value.project);
+  if (camera) state.project.camera = camera;
   state.selectedId = state.project.objects.some((object) => object.id === value.selectedId) ? value.selectedId : null;
   state.frame = clamp(value.frame, 0, state.project.timeline.end);
   stopPlayback();
-  state.viewport?.setCamera(state.project.camera);
   redraw();
 }
 function change(action) {
@@ -264,6 +268,10 @@ function renderMeshInspector(object) {
     input.disabled = !vertex;
     input.value = vertex ? String(Number(vertex[Number(input.dataset.vertexAxis)].toFixed(6))) : '';
   }
+  $('#proportional-enabled').checked = state.proportional.enabled;
+  $('#proportional-controls').hidden = !state.proportional.enabled;
+  $('#proportional-radius').value = String(state.proportional.radius);
+  $('#proportional-falloff').value = state.proportional.falloff;
 }
 function renderTimeline() {
   const object = selected();
@@ -389,6 +397,11 @@ function applySubdivision() {
     say('Mesh subdivided linearly. Use Undo to go back.');
   }
 }
+function setProportional(settings) {
+  state.proportional = { ...state.proportional, ...settings };
+  state.viewport?.setProportional(state.proportional);
+  renderInspector();
+}
 function safeName() {
   return state.project.name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').trim().replace(/[. ]+$/g, '').slice(0, 70) || 'Untitled scene';
 }
@@ -448,7 +461,7 @@ async function newProject() {
   if (window.forma) await window.forma.forgetProject();
   const project = createStarterProject(); project.objects = [];
   state.project = project; state.selectedId = null; state.frame = 0; state.meshEdit = null; state.legacySource = false; state.documentId++; state.history.clear();
-  state.saved = JSON.stringify(project); state.viewport?.setCamera(project.camera); redraw(); say('New scene ready. Add a shape to begin.');
+  state.saved = JSON.stringify(project); state.viewport?.setProjection('perspective', false); state.viewport?.setCamera(project.camera); redraw(); say('New scene ready. Add a shape to begin.');
 }
 function parseProject(text) {
   if (typeof text !== 'string' || text.length > 10 * 1024 * 1024) throw new Error('Project file is too large.');
@@ -461,8 +474,8 @@ async function loadText(text, acceptNative = false) {
     if (acceptNative) await window.forma.acceptOpenedProject();
     state.project = project; state.selectedId = project.objects[0]?.id || null; state.frame = 0; state.meshEdit = null; state.legacySource = legacy; state.documentId++;
     state.history.clear(); state.saved = JSON.stringify(project);
-    state.viewport?.setCamera(project.camera); redraw();
-    say(legacy ? 'Project opened from 0.1. The first save will ask for a new v0.2 file.' : 'Project opened.');
+    state.viewport?.setProjection('perspective', false); state.viewport?.setCamera(project.camera); redraw();
+    say(legacy ? 'Project opened from 0.1. The first save will ask for a new version-2 file.' : 'Project opened.');
   } catch (error) { say(`Could not open project: ${error.message}`); }
 }
 async function openProject() {
@@ -495,12 +508,30 @@ try {
     onMeshSelect: setMeshSelection,
     onTick,
     onCamera: (camera) => { state.project.camera = camera; refreshDirty(); },
-    onDragStart: () => { stopPlayback(); state.dragBefore = snapshot(); },
+    onView: (view) => { $('#view-select').value = view; },
+    onProjection: (projection) => {
+      const button = $('#projection-toggle'), orthographic = projection === 'orthographic';
+      button.textContent = orthographic ? 'ORTHO' : 'PERSP';
+      button.setAttribute('aria-pressed', String(orthographic));
+      button.classList.toggle('active', orthographic);
+      button.title = orthographic ? 'Orthographic projection — switch to perspective' : 'Perspective projection — switch to orthographic';
+    },
+    onDragStart: () => {
+      stopPlayback();
+      state.dragBefore = snapshot();
+      const edit = state.meshEdit;
+      const object = state.dragBefore.project.objects.find((item) => item.id === edit?.id);
+      state.vertexDrag = edit?.component === 'vertex' && state.proportional.enabled && object?.type === 'mesh'
+        ? { id: edit.id, index: edit.index, mesh: object.mesh, settings: { ...state.proportional } } : null;
+    },
     onVertexDrag: (position) => {
       const object = selected(), edit = state.meshEdit;
       if (!object || !edit || edit.component !== 'vertex' || !Number.isInteger(edit.index)) return null;
       try {
-        object.mesh = moveVertexTo(object.mesh, edit.index, position);
+        const drag = state.vertexDrag;
+        object.mesh = drag && drag.id === edit.id && drag.index === edit.index
+          ? moveVertexProportionally(drag.mesh, edit.index, position, drag.settings.radius, drag.settings.falloff)
+          : moveVertexTo(object.mesh, edit.index, position);
         renderMeshInspector(object); refreshDirty();
         return object.mesh;
       } catch (error) { say(error.message); return null; }
@@ -512,7 +543,7 @@ try {
     },
     onDragEnd: () => {
       if (state.dragBefore && JSON.stringify(state.dragBefore.project) !== JSON.stringify(state.project)) state.history.push(state.dragBefore);
-      state.dragBefore = null; refreshDirty();
+      state.dragBefore = null; state.vertexDrag = null; refreshDirty();
       // Reconcile the gizmo with the model after mouseUp; an edit may have
       // been refused (for example, at the keyframe limit).
       requestAnimationFrame(() => { if (!state.dragBefore) redraw(); });
@@ -553,12 +584,34 @@ $('#extrude-face').addEventListener('click', () => applyFaceOperation('extrude')
 $('#inset-face').addEventListener('click', () => applyFaceOperation('inset'));
 $('#subdivide-mesh').addEventListener('click', applySubdivision);
 $('#mesh-smooth').addEventListener('change', (event) => change(() => { selected().shading = event.target.checked ? 'smooth' : 'flat'; }));
+$('#proportional-enabled').addEventListener('change', (event) => {
+  setProportional({ enabled: event.target.checked });
+  say(state.proportional.enabled ? 'Proportional vertex editing on.' : 'Proportional vertex editing off.');
+});
+$('#proportional-radius').addEventListener('change', (event) => {
+  const radius = event.target.valueAsNumber;
+  if (!Number.isFinite(radius) || radius < MIN_PROPORTIONAL_RADIUS || radius > MAX_PROPORTIONAL_RADIUS) {
+    renderInspector(); say(`Influence radius must be between ${MIN_PROPORTIONAL_RADIUS} and ${MAX_PROPORTIONAL_RADIUS} local units.`); return;
+  }
+  setProportional({ radius });
+});
+$('#proportional-falloff').addEventListener('change', (event) => {
+  if (['smooth', 'linear', 'sharp'].includes(event.target.value)) setProportional({ falloff: event.target.value });
+});
 $('#vertex-fields').addEventListener('change', (event) => {
   const input = event.target.closest('input[data-vertex-axis]'), object = selected(), edit = state.meshEdit;
   if (!input || !object || !edit || edit.component !== 'vertex' || !Number.isInteger(edit.index)) return;
   const value = input.valueAsNumber;
   if (!Number.isFinite(value)) { renderInspector(); return; }
-  if (change(() => { object.mesh = moveVertex(object.mesh, edit.index, Number(input.dataset.vertexAxis), value); })) say('Vertex moved in local space.');
+  if (change(() => {
+    const axis = Number(input.dataset.vertexAxis);
+    if (!state.proportional.enabled) object.mesh = moveVertex(object.mesh, edit.index, axis, value);
+    else {
+      const position = [...object.mesh.vertices[edit.index]];
+      position[axis] = value;
+      object.mesh = moveVertexProportionally(object.mesh, edit.index, position, state.proportional.radius, state.proportional.falloff);
+    }
+  })) say(state.proportional.enabled ? 'Vertex and nearby points moved in local space.' : 'Vertex moved in local space.');
 });
 $('#object-name').addEventListener('change', (event) => { const value = event.target.value.trim().slice(0, 80); if (!value) { renderInspector(); say('An object needs a name.'); return; } change(() => { selected().name = value; }); });
 $('#transform-fields').addEventListener('change', (event) => {
@@ -587,6 +640,11 @@ for (const [id, key, min, max] of [['ambient', 'ambient', 0, 3], ['key-light', '
 }
 $('#focus-object').addEventListener('click', () => { if (!state.viewport?.frameSelected()) say('Select a visible object to frame it.'); });
 $('#view-select').addEventListener('change', (event) => state.viewport?.setView(event.target.value));
+function toggleProjection() {
+  const orthographic = $('#projection-toggle').getAttribute('aria-pressed') === 'true';
+  state.viewport?.setProjection(orthographic ? 'perspective' : 'orthographic');
+}
+$('#projection-toggle').addEventListener('click', toggleProjection);
 $('#toggle-grid').addEventListener('click', (event) => { const button = event.currentTarget; const value = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', String(value)); button.classList.toggle('active', value); state.viewport?.setGrid(value); });
 $('#toggle-snap').addEventListener('click', (event) => { const button = event.currentTarget; const value = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', String(value)); button.classList.toggle('active', value); state.viewport?.setSnap(value); say(value ? 'Transform snapping on: 0.5 units, 15 degrees, 0.1 scale.' : 'Transform snapping off.'); });
 $('#wireframe').addEventListener('click', (event) => { const button = event.currentTarget; const value = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', String(value)); button.classList.toggle('active', value); state.viewport?.setWireframe(value); });
@@ -625,9 +683,18 @@ document.addEventListener('keydown', (event) => {
   // Keep ordinary text-editing shortcuts and native button activation.
   if (editing) return;
   if (!mod && key === ' ' && event.target.closest('button, summary, a, [role="button"]')) return;
+  if (!event.altKey && !event.metaKey && !event.shiftKey) {
+    const views = { Numpad1: ['front', 'back'], Numpad3: ['right', 'left'], Numpad7: ['top', 'bottom'] };
+    if (views[event.code]) { event.preventDefault(); state.viewport?.setView(views[event.code][event.ctrlKey ? 1 : 0]); return; }
+    if (event.code === 'Numpad5' && !event.ctrlKey) { event.preventDefault(); toggleProjection(); return; }
+  }
   if (state.meshEdit && !mod) {
     if (key === 'escape') { event.preventDefault(); exitMeshMode(); return; }
     if (key === '1' || key === '3') { event.preventDefault(); setMeshComponent(key === '1' ? 'vertex' : 'face'); return; }
+    if (key === 'o' && state.meshEdit.component === 'vertex') {
+      event.preventDefault(); setProportional({ enabled: !state.proportional.enabled });
+      say(state.proportional.enabled ? 'Proportional vertex editing on.' : 'Proportional vertex editing off.'); return;
+    }
     if (key === 'e' || key === 'i') { event.preventDefault(); applyFaceOperation(key === 'e' ? 'extrude' : 'inset'); return; }
     if (key === 'delete' || ['q', 'g', 'r', 's'].includes(key)) { event.preventDefault(); say('Exit mesh edit mode to use object tools.'); return; }
   }

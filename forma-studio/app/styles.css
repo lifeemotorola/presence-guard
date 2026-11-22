@@ -12,7 +12,14 @@ dialog{width:min(450px,calc(100% - 32px));padding:0;border:1px solid #514a60;bor
 @media(max-width:1200px){.workspace{grid-template-columns:200px minmax(300px,1fr) 270px}.left-panel{padding-inline:13px}.topbar{gap:12px}.workspace-tabs{gap:14px}.project-kind{display:none}.viewport-subtitle{display:none}.inspector-scroll{padding-inline:15px}.inspector-top{padding-inline:15px}}
 @media(max-width:980px){body{overflow:auto;min-height:100%}.topbar{flex-wrap:wrap;height:auto;min-height:64px;padding-block:10px}.workspace-tabs{order:3;height:35px;margin-inline:0}.workspace-tab{padding:0 9px}.workspace{grid-template-columns:190px minmax(0,1fr);min-height:760px;flex:none}.right-panel{grid-column:1/-1;border-left:0;border-top:1px solid var(--line)}.inspector-scroll{max-height:none}.center-panel{min-height:650px}.statusbar{min-height:28px}.object-actions{max-width:400px}.axis-fields{max-width:500px}.inline-fields{max-width:400px}}
 @media(max-width:620px){.brand-name span,.project-name,.top-separator,.workspace-tabs{display:none}.topbar{gap:9px}.top-actions{gap:3px}.button-ghost#save-project span{display:none}.button-ghost#save-project{padding-inline:9px}.workspace{display:flex;flex-direction:column}.left-panel{order:2;border-right:0;border-top:1px solid var(--line);overflow:visible}.center-panel{order:1;height:620px;min-height:620px}.right-panel{order:3}.shape-grid{grid-template-columns:repeat(4,1fr)}.aside-tip{margin-top:18px}.viewport-hint{font-size:9px;gap:5px}.viewport-brand{display:none}.track-label{width:90px}.timeline-name>span:last-child{display:none}.statusbar>div:last-child{display:none}.inspector-scroll{overflow:visible}.statusbar{height:auto;padding-block:8px}}
-/* Mesh tools */
+/* Projection and mesh tools */
+.projection-toggle{min-width:48px;height:30px;padding:0 6px;border:1px solid #494653;border-radius:6px;background:#2b2b36;color:#d2ccd9;font-size:9px;font-weight:800;letter-spacing:.04em}
+.projection-toggle.active{border-color:#806ca9;background:#493e61;color:#f3eaff}
+.projection-toggle:hover{background:#51455f}
+.proportional-panel{margin-top:17px;padding:12px;border:1px solid #494252;border-radius:8px;background:#2c2936}
+.proportional-panel .block-heading h3{font-size:11px}
+.proportional-panel .block-heading .mesh-note{margin-top:5px}
+.help-content{max-height:calc(100vh - 40px);overflow-y:auto}
 .inspector-tabs{gap:18px}
 .mesh-primary{width:100%;margin-top:15px;min-height:38px}
 .mesh-note{margin:10px 0 0;color:#aaa4b5;font-size:10px;line-height:1.65}

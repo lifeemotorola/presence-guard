@@ -109,7 +109,8 @@ test('important compatibility and installation limits remain visible', () => {
   assert.match(get('keybloom').note, /portable folder/i);
   assert.match(get('forma-studio').detail, /basic face and vertex editing/i);
   assert.match(get('forma-studio').note, /no AI, sculpting or rigging/i);
-  assert.match(get('forma-studio').steps.join(' '), /0\.2 projects cannot be opened in 0\.1/i);
+  assert.match(get('forma-studio').detail, /proportional movement, orthographic views/i);
+  assert.match(get('forma-studio').steps.join(' '), /0\.2 and 0\.3 projects cannot be opened in 0\.1/i);
   assert.match(get('forma-studio').note, /current-frame/i);
   assert.match(get('forma-studio').note, /unsigned/i);
   assert.match(get('onair-twin').note, /does not perform failover/i);

@@ -7,7 +7,7 @@ import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import AxeBuilder from '@axe-core/playwright';
-import { createStarterProject } from '../../app/model.js';
+import { createStarterProject, createObject } from '../../app/model.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../app');
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2' };
@@ -39,6 +39,29 @@ async function commitInput(locator, value) { await locator.fill(String(value)); 
 async function downloadFrom(page, action) {
   const promise = page.waitForEvent('download'); await action(); const download = await promise;
   return { download, bytes: await readFile(await download.path()) };
+}
+async function nextRender(page) {
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+async function colorRegions(page, png = null) {
+  await nextRender(page);
+  return page.evaluate(async (encoded) => {
+    let image = document.querySelector('#viewport-canvas canvas');
+    if (encoded) { image = new Image(); image.src = `data:image/png;base64,${encoded}`; await image.decode(); }
+    const copy = document.createElement('canvas'); copy.width = image.width; copy.height = image.height;
+    const ctx = copy.getContext('2d'); ctx.drawImage(image, 0, 0);
+    const { data, width, height } = ctx.getImageData(0, 0, copy.width, copy.height);
+    const regions = { red: null, green: null };
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 4, r = data[offset], g = data[offset + 1], b = data[offset + 2];
+      const color = r > 70 && r > g * 1.5 && r > b * 1.5 ? 'red' : g > 70 && g > r * 1.5 && g > b * 1.5 ? 'green' : null;
+      if (!color) continue;
+      const region = regions[color] ||= { minX: x, maxX: x, minY: y, maxY: y };
+      region.minX = Math.min(region.minX, x); region.maxX = Math.max(region.maxX, x);
+      region.minY = Math.min(region.minY, y); region.maxY = Math.max(region.maxY, y);
+    }
+    return { width, height, ...regions };
+  }, png ? png.toString('base64') : null);
 }
 
 test('scene editing, procedural array, materials, undo/redo and visibility', async () => {
@@ -338,7 +361,7 @@ test('vertex selection, gizmo drag, snapping and undo operate on real geometry',
   const canvas = await page.locator('#viewport-canvas canvas').boundingBox();
   // With a framed 1.4-unit cube, the front-facing upper-right vertex projects
   // to this location. The first click picks it; the next drag hits its red X axis.
-  const extent = canvas.height / 2 * 0.7 / (Math.tan(20 * Math.PI / 180) * (1.4 * 2.6 - 0.7));
+  const extent = canvas.height / 2 * 0.7 / (Math.tan(20 * Math.PI / 180) * 1.4 * 2.6);
   const x = canvas.x + canvas.width / 2 + extent, y = canvas.y + canvas.height / 2 - extent;
   await page.mouse.click(x, y);
   assert.equal(await page.getByRole('spinbutton', { name: 'Vertex number' }).inputValue(), '7');
@@ -375,7 +398,7 @@ test('a selected array copy places the vertex gizmo correctly under object scali
   const canvas = await page.locator('#viewport-canvas canvas').boundingBox();
   // Three copies at offsets -1.8, 0, 1.8, scaled 1.5 on X; framing uses
   // their 7.5-unit bounding width. Pick vertex 7 on the rightmost copy.
-  const unit = canvas.height / 2 / (Math.tan(20 * Math.PI / 180) * (7.5 * 2.6 - 0.7));
+  const unit = canvas.height / 2 / (Math.tan(20 * Math.PI / 180) * 7.5 * 2.6);
   const x = canvas.x + canvas.width / 2 + (1.8 + 0.7) * 1.5 * unit;
   const y = canvas.y + canvas.height / 2 - 0.7 * unit;
   await page.mouse.click(x, y);
@@ -393,12 +416,248 @@ test('a selected array copy places the vertex gizmo correctly under object scali
   await context.close();
 });
 
+test('orthographic views keep equal-sized objects equal at different depths and support picking, zoom and framing', async () => {
+  const { page, context, errors } = await openPage();
+  const project = createStarterProject();
+  const near = createObject('cube', 'near', 'Near cube'); near.transform.position = [-2.1, 1.5, 0]; near.material.color = '#ff0000';
+  const far = createObject('cube', 'far', 'Far cube'); far.transform.position = [2.1, 1.5, -4]; far.material.color = '#00ff00';
+  project.objects = [near, far]; project.camera = { position: [0, 1.5, 10], target: [0, 1.5, 0] };
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('#file-menu summary').click(); await page.locator('#open-project').click();
+  await (await chooser).setFiles({ name: 'views.forma', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(project)) });
+  await page.waitForFunction(() => document.querySelector('#status-text').textContent.includes('Project opened'));
+  await page.locator('#view-select').selectOption('front');
+  assert.equal(await page.locator('#projection-toggle').getAttribute('aria-pressed'), 'true');
+  await page.locator('#toggle-grid').click();
+  const box = await page.locator('#viewport-canvas canvas').boundingBox();
+  await page.mouse.click(box.x + box.width * 0.1, box.y + box.height * 0.9); // deselect overlays
+  let pixels = await colorRegions(page);
+  assert.ok(pixels.red && pixels.green, 'both cubes are visible');
+  const width = (region) => region.maxX - region.minX + 1;
+  assert.ok(Math.abs(width(pixels.red) - width(pixels.green)) <= 2, 'orthographic projection ignores depth when sizing identical cubes');
+  await page.mouse.click(box.x + (pixels.green.minX + pixels.green.maxX) / 2 / pixels.width * box.width,
+    box.y + (pixels.green.minY + pixels.green.maxY) / 2 / pixels.height * box.height);
+  assert.equal(await page.getByRole('button', { name: 'Select Far cube' }).getAttribute('aria-pressed'), 'true', 'raycasting uses the orthographic camera');
+  await page.keyboard.press('q'); // remove the gizmo without changing the selected object
+  await page.locator('#projection-toggle').click();
+  assert.equal(await page.locator('#projection-toggle').getAttribute('aria-pressed'), 'false');
+  pixels = await colorRegions(page);
+  assert.ok(width(pixels.red) > width(pixels.green) * 1.3, 'perspective projection makes the distant cube smaller');
+  await page.locator('#projection-toggle').click();
+  pixels = await colorRegions(page);
+  const beforeZoom = width(pixels.green);
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6);
+  await page.mouse.wheel(0, -240);
+  pixels = await colorRegions(page);
+  const afterZoom = width(pixels.green);
+  assert.ok(afterZoom > beforeZoom, 'mouse wheel changes orthographic zoom');
+  const saved = await downloadFrom(page, () => page.getByRole('button', { name: 'Save project', exact: true }).click());
+  const savedCamera = JSON.parse(saved.bytes.toString('utf8')).camera;
+  const savedDistance = Math.hypot(...savedCamera.position.map((value, index) => value - savedCamera.target[index]));
+  assert.ok(Math.abs(savedDistance - 10 * beforeZoom / afterZoom) < 0.3, 'v2 camera pose approximates the zoomed orthographic target-plane framing');
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.getByRole('button', { name: 'Frame selected object' }).click();
+  pixels = await colorRegions(page);
+  assert.ok(pixels.green, 'framed object is visible at a narrow aspect ratio');
+  assert.ok(pixels.green.minX > 5 && pixels.green.maxX < pixels.width - 6, 'framing fits the entire object horizontally');
+  assert.ok(pixels.green.minY > 5 && pixels.green.maxY < pixels.height - 6, 'framing fits the entire object vertically');
+  assert.ok(Math.abs(width(pixels.green) - (pixels.green.maxY - pixels.green.minY + 1)) <= 3, 'resizing does not stretch the square');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('six axis presets, opposite numpad shortcuts and camera settings remain compatible with v2 projects', async () => {
+  const { page, context, errors } = await openPage();
+  await page.evaluate(() => {
+    window.cameraSaves = [];
+    window.forma = { saveProject: async (text) => { window.cameraSaves.push(JSON.parse(text)); return { canceled: false }; } };
+  });
+  const directions = { front: [0, 0, 1], back: [0, 0, -1], right: [1, 0, 0], left: [-1, 0, 0], top: [0, 1, 0], bottom: [0, -1, 0] };
+  let saveCount = 0;
+  for (const [name, expected] of Object.entries(directions)) {
+    await page.locator('#view-select').selectOption(name);
+    assert.equal(await page.locator('#projection-toggle').getAttribute('aria-pressed'), 'true', `${name} should use orthographic projection`);
+    await page.locator('#save-project').click();
+    await page.waitForFunction((count) => window.cameraSaves.length === count && !document.querySelector('#save-project').disabled, ++saveCount);
+    const saved = await page.evaluate(() => window.cameraSaves.at(-1));
+    assert.equal(saved.version, 2);
+    assert.deepEqual(Object.keys(saved.camera).sort(), ['position', 'target'], 'projection remains a session-only setting in the existing format');
+    const delta = saved.camera.position.map((value, index) => value - saved.camera.target[index]);
+    const length = Math.hypot(...delta);
+    delta.forEach((value, index) => assert.ok(Math.abs(value / length - expected[index]) < 1e-5, `${name} axis ${index}`));
+  }
+  await page.evaluate(() => document.activeElement.blur());
+  await page.keyboard.press('Numpad1');
+  assert.equal(await page.locator('#view-select').inputValue(), 'front');
+  await page.keyboard.press('Control+Numpad1');
+  assert.equal(await page.locator('#view-select').inputValue(), 'back');
+  await page.keyboard.press('Numpad3');
+  assert.equal(await page.locator('#view-select').inputValue(), 'right');
+  await page.keyboard.press('Control+Numpad3');
+  assert.equal(await page.locator('#view-select').inputValue(), 'left');
+  await page.keyboard.press('Numpad7');
+  assert.equal(await page.locator('#view-select').inputValue(), 'top');
+  await page.keyboard.press('Control+Numpad7');
+  assert.equal(await page.locator('#view-select').inputValue(), 'bottom');
+  await page.keyboard.press('Numpad5');
+  assert.equal(await page.locator('#projection-toggle').getAttribute('aria-pressed'), 'false');
+  await page.locator('#view-select').selectOption('front');
+  const canvas = await page.locator('#viewport-canvas canvas').boundingBox();
+  await page.mouse.move(canvas.x + canvas.width * 0.82, canvas.y + canvas.height * 0.65);
+  await page.mouse.down(); await page.mouse.move(canvas.x + canvas.width * 0.72, canvas.y + canvas.height * 0.55, { steps: 8 }); await page.mouse.up();
+  await page.waitForFunction(() => document.querySelector('#view-select').value === 'custom');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('proportional numeric edits, falloff, history, v2 save/open and GLB/PNG exports', async () => {
+  const { page, context, errors } = await openPage();
+  await page.locator('#file-menu summary').click(); await page.locator('#new-project').click();
+  await page.getByRole('button', { name: 'Plane', exact: true }).click();
+  await page.getByRole('tab', { name: 'Model', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+  await page.getByRole('button', { name: 'Subdivide mesh' }).click();
+  await page.getByRole('button', { name: 'Subdivide mesh' }).click();
+  assert.equal(await page.locator('#mesh-count').textContent(), '25 vertices · 16 faces');
+  await page.getByRole('button', { name: 'Vertex', exact: true }).click();
+  await commitInput(page.getByRole('spinbutton', { name: 'Vertex number' }), 5); // center of the original plane
+  await page.getByRole('checkbox', { name: 'Proportional vertex editing' }).check();
+  await commitInput(page.getByRole('spinbutton', { name: /Influence radius/ }), 2);
+  await page.getByLabel('Falloff').selectOption('linear');
+  await commitInput(page.getByRole('spinbutton', { name: 'Vertex Y' }), 1);
+  assert.equal(await page.getByRole('spinbutton', { name: 'Vertex Y' }).inputValue(), '1');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  assert.equal(await page.getByRole('spinbutton', { name: 'Vertex Y' }).inputValue(), '0');
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  assert.equal(await page.getByRole('spinbutton', { name: 'Vertex Y' }).inputValue(), '1');
+  await commitInput(page.getByRole('spinbutton', { name: /Influence radius/ }), 0);
+  assert.equal(await page.getByRole('spinbutton', { name: /Influence radius/ }).inputValue(), '2');
+  assert.match(await page.locator('#status-text').textContent(), /radius/);
+  await page.getByRole('checkbox', { name: 'Smooth mesh shading' }).check();
+  const saved = await downloadFrom(page, () => page.getByRole('button', { name: 'Save project', exact: true }).click());
+  const scene = JSON.parse(saved.bytes.toString('utf8'));
+  const mesh = scene.objects[0].mesh;
+  assert.equal(scene.version, 2); assert.equal(mesh.vertices.length, 25);
+  assert.equal(mesh.vertices[4][1], 1);
+  assert.equal(mesh.vertices[5][1], 0.5, 'a vertex one unit away gets half the movement with a two-unit linear radius');
+  assert.ok(Math.abs(mesh.vertices[0][1] - (1 - Math.SQRT2 / 2)) < 1e-10);
+  assert.equal('proportional' in scene, false, 'tool settings are not written into the project format');
+  const glb = await downloadFrom(page, async () => { await page.locator('.export-menu summary').click(); await page.locator('.export-menu [data-export=glb]').click(); });
+  const jsonLength = glb.bytes.readUInt32LE(12);
+  const gltf = JSON.parse(glb.bytes.subarray(20, 20 + jsonLength).toString('utf8').trim());
+  const accessor = gltf.accessors[gltf.meshes[0].primitives[0].attributes.POSITION];
+  const view = gltf.bufferViews[accessor.bufferView];
+  const binaryStart = 20 + jsonLength + 8;
+  const vertexY = (index) => glb.bytes.readFloatLE(binaryStart + (view.byteOffset || 0) + (accessor.byteOffset || 0) + index * (view.byteStride || 12) + 4);
+  assert.equal(accessor.count, 25);
+  assert.ok(Math.abs(vertexY(4) - 1) < 1e-6 && Math.abs(vertexY(5) - 0.5) < 1e-6, 'GLB contains the deformed vertex positions');
+  const editPng = await downloadFrom(page, async () => { await page.locator('.export-menu summary').click(); await page.locator('.export-menu [data-export=png]').click(); });
+  await page.keyboard.press('Escape');
+  const objectPng = await downloadFrom(page, async () => { await page.locator('.export-menu summary').click(); await page.locator('.export-menu [data-export=png]').click(); });
+  assert.deepEqual(editPng.bytes, objectPng.bytes, 'influence rings and points are excluded from PNG');
+  await page.locator('#file-menu summary').click(); await page.locator('#new-project').click();
+  const choose = page.waitForEvent('filechooser');
+  await page.locator('#file-menu summary').click(); await page.locator('#open-project').click();
+  await (await choose).setFiles({ name: 'terrain.forma', mimeType: 'application/json', buffer: saved.bytes });
+  await page.waitForFunction(() => document.querySelector('#status-text').textContent.includes('Project opened'));
+  await page.getByRole('tab', { name: 'Model', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+  await page.getByRole('button', { name: 'Vertex', exact: true }).click();
+  await commitInput(page.getByRole('spinbutton', { name: 'Vertex number' }), 5);
+  assert.equal(await page.getByRole('spinbutton', { name: 'Vertex Y' }).inputValue(), '1');
+  await page.evaluate(() => document.activeElement.blur());
+  await page.keyboard.press('o');
+  assert.equal(await page.getByRole('checkbox', { name: 'Proportional vertex editing' }).isChecked(), false);
+  await commitInput(page.getByRole('spinbutton', { name: 'Vertex Y' }), 1.2);
+  const after = await downloadFrom(page, () => page.getByRole('button', { name: 'Save project', exact: true }).click());
+  const afterMesh = JSON.parse(after.bytes.toString('utf8')).objects[0].mesh;
+  assert.equal(afterMesh.vertices[4][1], 1.2);
+  assert.equal(afterMesh.vertices[5][1], 0.5, 'disabled proportional editing moves only the selected vertex');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('proportional gizmo drag uses a fixed baseline and undoes as one edit', async () => {
+  const { page, context, errors } = await openPage();
+  await page.locator('#file-menu summary').click(); await page.locator('#new-project').click();
+  await page.getByRole('button', { name: 'Plane', exact: true }).click();
+  await page.getByRole('button', { name: 'Frame selected object' }).click();
+  await page.locator('#view-select').selectOption('front');
+  await page.getByRole('tab', { name: 'Model', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+  await page.getByRole('button', { name: 'Subdivide mesh' }).click();
+  await page.getByRole('button', { name: 'Vertex', exact: true }).click();
+  await commitInput(page.getByRole('spinbutton', { name: 'Vertex number' }), 5);
+  await page.getByRole('checkbox', { name: 'Proportional vertex editing' }).check();
+  await commitInput(page.getByRole('spinbutton', { name: /Influence radius/ }), 2);
+  await page.getByLabel('Falloff').selectOption('linear');
+  const canvas = await page.locator('#viewport-canvas canvas').boundingBox();
+  const x = canvas.x + canvas.width / 2, y = canvas.y + canvas.height / 2;
+  await page.mouse.move(x, y - 42); await page.mouse.down();
+  await page.mouse.move(x, y - 115, { steps: 15 }); await page.mouse.up();
+  await page.waitForFunction(() => Math.abs(Number(document.querySelector('[data-vertex-axis="1"]').value)) > 0.05);
+  const saved = await downloadFrom(page, () => page.getByRole('button', { name: 'Save project', exact: true }).click());
+  const mesh = JSON.parse(saved.bytes.toString('utf8')).objects[0].mesh;
+  const delta = mesh.vertices[4][1];
+  assert.ok(delta > 0.05);
+  assert.ok(Math.abs(mesh.vertices[5][1] - delta * 0.5) < 1e-7, 'neighbor weight remains based on the start of the drag');
+  assert.ok(Math.abs(mesh.vertices[0][1] - delta * (1 - Math.SQRT2 / 2)) < 1e-7);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  assert.equal(await page.getByRole('spinbutton', { name: 'Vertex Y' }).inputValue(), '0');
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  assert.ok(Math.abs(Number(await page.getByRole('spinbutton', { name: 'Vertex Y' }).inputValue()) - delta) < 1e-6);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('undo and redo preserve an orthographic zoom outside perspective camera limits', async () => {
+  const { page, context, errors } = await openPage();
+  const project = createStarterProject();
+  const red = createObject('cube', 'red', 'Red marker'); red.transform.position = [-0.14, 0.4, 0]; red.transform.scale = [0.03, 0.03, 0.03]; red.material.color = '#ff0000';
+  const green = createObject('cube', 'green', 'Green marker'); green.transform.position = [0.14, 0.4, 0]; green.transform.scale = [0.03, 0.03, 0.03]; green.material.color = '#00ff00';
+  const plane = createObject('plane', 'base', 'Base plane'); project.objects = [red, green, plane];
+  const choose = page.waitForEvent('filechooser');
+  await page.locator('#file-menu summary').click(); await page.locator('#open-project').click();
+  await (await choose).setFiles({ name: 'zoom.forma', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(project)) });
+  await page.waitForFunction(() => document.querySelector('#status-text').textContent.includes('Project opened'));
+  await page.getByRole('button', { name: 'Select Base plane' }).click();
+  await page.getByRole('button', { name: 'Frame selected object' }).click();
+  await page.locator('#view-select').selectOption('top');
+  await page.getByRole('tab', { name: 'Model', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+  await page.getByRole('button', { name: 'Subdivide mesh' }).click();
+  await page.getByRole('button', { name: 'Vertex', exact: true }).click();
+  await commitInput(page.getByRole('spinbutton', { name: 'Vertex number' }), 5);
+  const canvas = await page.locator('#viewport-canvas canvas').boundingBox();
+  await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+  await page.mouse.wheel(0, -5000);
+  const capture = () => downloadFrom(page, async () => { await page.locator('.export-menu summary').click(); await page.locator('.export-menu [data-export=png]').click(); });
+  const before = await colorRegions(page, (await capture()).bytes);
+  assert.ok(before.red && before.green, 'both scale markers remain visible');
+  assert.ok(before.red.maxX - before.red.minX > 40, 'orthographic zoom exceeds the minimum perspective distance');
+  await commitInput(page.getByRole('spinbutton', { name: 'Vertex Y' }), 0.2);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  assert.equal(await page.getByRole('spinbutton', { name: 'Vertex Y' }).inputValue(), '0');
+  const undone = await colorRegions(page, (await capture()).bytes);
+  for (const color of ['red', 'green']) for (const edge of ['minX', 'maxX', 'minY', 'maxY']) {
+    assert.ok(Math.abs(before[color][edge] - undone[color][edge]) <= 1, `undo preserves ${color} ${edge}`);
+  }
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  const redone = await colorRegions(page, (await capture()).bytes);
+  for (const color of ['red', 'green']) for (const edge of ['minX', 'maxX', 'minY', 'maxY']) {
+    assert.ok(Math.abs(before[color][edge] - redone[color][edge]) <= 1, `redo preserves ${color} ${edge}`);
+  }
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('editor panels and help dialog have no automated accessibility violations', async () => {
   const { page, context } = await openPage();
-  for (const state of ['Object', 'Model', 'Model face edit', 'Model vertex edit', 'Material', 'Scene', 'Help']) {
+  for (const state of ['Object', 'Model', 'Model face edit', 'Model vertex edit', 'Model proportional edit', 'Material', 'Scene', 'Help']) {
     if (state === 'Help') await page.getByRole('button', { name: 'Help and shortcuts' }).click();
     else if (state === 'Model face edit') await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
     else if (state === 'Model vertex edit') await page.getByRole('button', { name: 'Vertex', exact: true }).click();
+    else if (state === 'Model proportional edit') await page.getByRole('checkbox', { name: 'Proportional vertex editing' }).check();
     else await page.getByRole('tab', { name: state, exact: true }).click();
     const { violations } = await new AxeBuilder({ page }).analyze();
     assert.deepEqual(violations.map(({ id, nodes }) => `${id}: ${nodes.map((node) => node.target.join(' ')).join(', ')}`), [], state);
@@ -418,7 +677,15 @@ test('desktop, narrow window and small browser layouts remain usable without hor
     await page.getByRole('button', { name: 'Vertex', exact: true }).click();
     await commitInput(page.getByRole('spinbutton', { name: 'Vertex number' }), 7);
     assert.equal(await page.getByRole('spinbutton', { name: 'Vertex X' }).inputValue(), '0.7');
+    await page.getByRole('checkbox', { name: 'Proportional vertex editing' }).check();
+    await commitInput(page.getByRole('spinbutton', { name: /Influence radius/ }), 2);
+    assert.equal(await page.getByLabel('Falloff').inputValue(), 'smooth');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `model tools overflow at ${width}`);
+    const top = await page.locator('.viewport-top').boundingBox();
+    for (const selector of ['#view-select', '#projection-toggle', '#toggle-grid', '#toggle-snap', '#wireframe']) {
+      const bounds = await page.locator(selector).boundingBox();
+      assert.ok(bounds.x >= top.x && bounds.x + bounds.width <= top.x + top.width + 1, `${selector} is visible at ${width}`);
+    }
     assert.deepEqual(errors, []);
     await context.close();
   }
