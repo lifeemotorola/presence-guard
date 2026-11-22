@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { _electron: electron } = require('playwright-core');
 
+let phase = 'setup';
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function eventually(check, label, timeout = 30000) {
   const until = Date.now() + timeout;
@@ -54,7 +55,7 @@ async function menuAction(page, button) {
 }
 async function exportAction(page, button) {
   await page.locator('.export-menu summary').click();
-  await page.locator(button).click();
+  await page.locator('.export-menu').locator(button).click();
 }
 async function launch(exe, env) {
   const desktop = await electron.launch({ executablePath: exe, env, timeout: 120000 });
@@ -79,6 +80,7 @@ async function launch(exe, env) {
   const glb = path.join(temp, 'snapshot.glb'), png = path.join(temp, 'viewport.png');
   let desktop;
   try {
+    phase = 'launch and renderer security';
     let result = await launch(exe, env);
     ({ desktop } = result);
     let { page, errors } = result;
@@ -93,6 +95,7 @@ async function launch(exe, env) {
     if (process.env.FORMA_SCREENSHOT) await page.screenshot({ path: process.env.FORMA_SCREENSHOT });
 
     // Build a scene, with array and actual keyframe interpolation.
+    phase = 'edit scene, array and keyframes';
     await page.getByRole('button', { name: 'Cube', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Enable procedural array' }).check();
     await page.locator('#array-mode').selectOption('radial');
@@ -105,6 +108,7 @@ async function launch(exe, env) {
     if (process.env.FORMA_FEATURE_SCREENSHOT) await page.screenshot({ path: process.env.FORMA_FEATURE_SCREENSHOT });
 
     // Save, then overwrite the same file via the native bridge (atomic rename).
+    phase = 'save and overwrite';
     await choose(desktop, 'savePath', sceneA);
     await page.locator('#save-project').click();
     let project = await readProject(sceneA, (value) => value.objects.length === 5);
@@ -120,6 +124,7 @@ async function launch(exe, env) {
 
     // Save As switches the project path. A rejected or oversized Open must not
     // replace either the scene or the current save destination.
+    phase = 'save as and invalid open';
     await choose(desktop, 'savePath', sceneB);
     await menuAction(page, '#save-as');
     await readProject(sceneB, (value) => value.objects.some((object) => object.name === 'Saved cube A'));
@@ -139,6 +144,7 @@ async function launch(exe, env) {
     assert.ok((await readProject(sceneA)).objects.some((object) => object.name === 'Saved cube A'));
 
     // Open accepts the validated file as the new save destination.
+    phase = 'open and export';
     await choose(desktop, 'openPath', sceneA);
     await menuAction(page, '#open-project');
     await waitStatus(page, 'Project opened');
@@ -168,6 +174,7 @@ async function launch(exe, env) {
     await desktop.close(); desktop = null;
 
     // Reopen a real saved scene after quitting the packaged app.
+    phase = 'restart and reopen';
     result = await launch(exe, env);
     ({ desktop, page, errors } = result);
     await choose(desktop, 'openPath', sceneA);
@@ -179,6 +186,7 @@ async function launch(exe, env) {
 
     // Closing a dirty window invokes the host's warning. Cancel preserves the
     // scene; discard closes the real BrowserWindow.
+    phase = 'unsaved-close protection';
     await page.getByRole('button', { name: 'Sphere', exact: true }).click();
     await page.evaluate(() => window.close());
     await eventually(async () => (await desktop.evaluate(() => globalThis.__formaTestDialogs.warnings.length)) > 0, 'unsaved-close warning');
@@ -199,4 +207,11 @@ async function launch(exe, env) {
     }
     await fs.rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
   }
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+})().catch((error) => {
+  console.error(`Desktop test failed during ${phase}:`, error);
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    const message = `${phase}: ${error.stack || error}`.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+    console.log(`::error title=Forma Studio desktop test::${message}`);
+  }
+  process.exitCode = 1;
+});

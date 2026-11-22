@@ -444,7 +444,7 @@ $('#end-frame').addEventListener('change', (event) => {
   const raw = event.target.valueAsNumber; if (!Number.isFinite(raw)) { renderTimeline(); return; }
   const value = clamp(Math.round(raw), 1, 600);
   const latest = Math.max(0, ...state.project.objects.flatMap((object) => object.keyframes.map((key) => key.frame)));
-  if (value < latest) { renderTimeline(); say(`Delete or move keyframes after frame ${value} before shortening the timeline.`); return; }
+  if (value < latest) { renderTimeline(); say(`Delete keyframes after frame ${value} before shortening the timeline.`); return; }
   change(() => { state.project.timeline.end = value; state.frame = Math.min(state.frame, value); });
 });
 $('#key-markers').addEventListener('click', (event) => { const button = event.target.closest('[data-frame]'); if (button) { stopPlayback(); setFrame(Number(button.dataset.frame)); } });
