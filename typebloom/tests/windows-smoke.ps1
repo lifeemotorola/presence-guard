@@ -21,6 +21,10 @@ public interface IAccessibleNative {
 public static class Native {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
+  // PowerShell converts a null string argument to empty; call the P/Invoke in
+  // C# when a genuine null wildcard is needed.
+  public static IntPtr FindClass(string cls) { return FindWindow(cls, null); }
+  public static IntPtr FindTitle(string title) { return FindWindow(null, title); }
   [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr window, int id);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr window, uint msg, IntPtr wp, StringBuilder lp);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr window, uint msg, IntPtr wp, IntPtr lp);
@@ -105,7 +109,7 @@ function Tap-Many([byte]$key, [int]$count) { for ($i = 0; $i -lt $count; $i++) {
 function Close-Dialog([IntPtr]$dialog, [int]$id) { [void][Native]::PostMessage($dialog, 0x0111, [IntPtr]$id, [IntPtr]::Zero) }
 
 # Preserve the caller's three preferences if these tests are run outside CI.
-if ([Native]::FindWindow('TypeBloomWidgetWindow', $null) -ne [IntPtr]::Zero) {
+if ([Native]::FindClass('TypeBloomWidgetWindow') -ne [IntPtr]::Zero) {
   throw 'Close any running TypeBloom instance before the smoke test.'
 }
 $subkey = 'Software\TypeBloom'
@@ -136,14 +140,14 @@ try {
         $static = [Native]::GetDlgItem($initialError, -1)
         throw "TypeBloom reported a startup error: $([Native]::Text($static))"
       }
-      [Native]::FindWindow('TypeBloomWidgetWindow', $null) -ne [IntPtr]::Zero
+      [Native]::FindClass('TypeBloomWidgetWindow') -ne [IntPtr]::Zero
     } 'widget window'
   } catch {
     $appProcess.Refresh()
     $description = if ($appProcess.HasExited) { "exited: $($appProcess.ExitCode)" } else { "process $($appProcess.Id): $([Native]::DescribeWindows($appProcess.Id))" }
     throw "$_; $description"
   }
-  $widget = [Native]::FindWindow('TypeBloomWidgetWindow', $null)
+  $widget = [Native]::FindClass('TypeBloomWidgetWindow')
   Wait-For { (Text $widget 1001) -eq 'Start tracking' } 'ready state'
   Assert ((Text $widget 1101) -match '^Ready') 'App must start paused.'
   Assert ((Text $widget 1103) -eq '0 keys in the last 15 seconds') 'Fresh count must be empty.'
@@ -156,8 +160,8 @@ try {
   Write-Host 'Ready, floating, and named accessible controls: OK'
 
   $targetProcess = Start-Process -FilePath (Resolve-Path $Target).Path -PassThru
-  Wait-For { [Native]::FindWindow($null, 'TypeBloom Test Input') -ne [IntPtr]::Zero } 'separate input window'
-  $targetWindow = [Native]::FindWindow($null, 'TypeBloom Test Input')
+  Wait-For { [Native]::FindTitle('TypeBloom Test Input') -ne [IntPtr]::Zero } 'separate input window'
+  $targetWindow = [Native]::FindTitle('TypeBloom Test Input')
   Activate-Target $targetWindow
   Tap-Many 0x41 5
   Start-Sleep -Milliseconds 400
@@ -245,8 +249,8 @@ try {
   Wait-For { $appProcess.Refresh(); $appProcess.HasExited } 'close exits without a tray process'
   Assert ($appProcess.ExitCode -eq 0) 'App did not exit cleanly.'
   $appProcess = Start-Process -FilePath (Resolve-Path $App).Path -PassThru
-  Wait-For { [Native]::FindWindow('TypeBloomWidgetWindow', $null) -ne [IntPtr]::Zero } 'reopen widget'
-  $widget = [Native]::FindWindow('TypeBloomWidgetWindow', $null)
+  Wait-For { [Native]::FindClass('TypeBloomWidgetWindow') -ne [IntPtr]::Zero } 'reopen widget'
+  $widget = [Native]::FindClass('TypeBloomWidgetWindow')
   Wait-For { (Text $widget 1001) -eq 'Start tracking' } 'reopen starts paused'
   Assert ((Text $widget 1003) -eq 'Always on top: off') 'Pin preference must persist.'
   $after = New-Object Native+RECT
