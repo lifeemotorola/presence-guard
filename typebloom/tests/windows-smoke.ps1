@@ -30,6 +30,27 @@ public static class Native {
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr window, StringBuilder name, int capacity);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr window, StringBuilder name, int capacity);
+  public delegate bool EnumWindowsProc(IntPtr window, IntPtr extra);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr extra);
+  public static string DescribeWindows(int pid) {
+    var result = new StringBuilder();
+    EnumWindowsProc callback = delegate(IntPtr hwnd, IntPtr extra) {
+      uint owner;
+      GetWindowThreadProcessId(hwnd, out owner);
+      if (owner == (uint)pid) {
+        var cls = new StringBuilder(256); var title = new StringBuilder(512);
+        GetClassName(hwnd, cls, cls.Capacity); GetWindowText(hwnd, title, title.Capacity);
+        result.Append(" [").Append(cls).Append(" | ").Append(title).Append(" | visible=").Append(IsWindowVisible(hwnd)).Append("]");
+      }
+      return true;
+    };
+    EnumWindows(callback, IntPtr.Zero);
+    return result.Length == 0 ? "no top-level windows" : result.ToString();
+  }
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
   [DllImport("user32.dll")] public static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
   [DllImport("oleacc.dll")] public static extern int AccessibleObjectFromWindow(IntPtr hwnd, uint objectId, ref Guid iid,
@@ -106,16 +127,22 @@ $appProcess = $null
 $targetProcess = $null
 try {
   $appProcess = Start-Process -FilePath (Resolve-Path $App).Path -PassThru
-  Wait-For {
+  try {
+    Wait-For {
+      $appProcess.Refresh()
+      if ($appProcess.HasExited) { throw "TypeBloom exited before creating a window (exit code $($appProcess.ExitCode))." }
+      $initialError = [Native]::FindWindow('#32770', 'TypeBloom')
+      if ($initialError -ne [IntPtr]::Zero) {
+        $static = [Native]::GetDlgItem($initialError, -1)
+        throw "TypeBloom reported a startup error: $([Native]::Text($static))"
+      }
+      [Native]::FindWindow('TypeBloomWidgetWindow', $null) -ne [IntPtr]::Zero
+    } 'widget window'
+  } catch {
     $appProcess.Refresh()
-    if ($appProcess.HasExited) { throw "TypeBloom exited before creating a window (exit code $($appProcess.ExitCode))." }
-    $initialError = [Native]::FindWindow('#32770', 'TypeBloom')
-    if ($initialError -ne [IntPtr]::Zero) {
-      $static = [Native]::GetDlgItem($initialError, -1)
-      throw "TypeBloom reported a startup error: $([Native]::Text($static))"
-    }
-    [Native]::FindWindow('TypeBloomWidgetWindow', $null) -ne [IntPtr]::Zero
-  } 'widget window'
+    $description = if ($appProcess.HasExited) { "exited: $($appProcess.ExitCode)" } else { "process $($appProcess.Id): $([Native]::DescribeWindows($appProcess.Id))" }
+    throw "$_; $description"
+  }
   $widget = [Native]::FindWindow('TypeBloomWidgetWindow', $null)
   Wait-For { (Text $widget 1001) -eq 'Start tracking' } 'ready state'
   Assert ((Text $widget 1101) -match '^Ready') 'App must start paused.'
