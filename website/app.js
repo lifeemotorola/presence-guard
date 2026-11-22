@@ -18,6 +18,7 @@ const iconPaths = {
   grid: '<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>',
   sliders: '<path d="M5 4v16M12 4v16M19 4v16"/><path d="M2.5 8h5M9.5 15h5M16.5 9h5"/><circle cx="5" cy="8" r="2" fill="currentColor" stroke="none"/><circle cx="12" cy="15" r="2" fill="currentColor" stroke="none"/><circle cx="19" cy="9" r="2" fill="currentColor" stroke="none"/>',
   keyboard: '<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7.5 15h9"/>',
+  cube: '<path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.7 8-4.7M12 12.2V21"/>',
   record: '<rect x="3" y="4.5" width="18" height="13" rx="2.5"/><circle cx="12" cy="11" r="3"/><path d="M9 20h6"/>',
   shield: '<path d="M12 2.8 20 6v5.3c0 4.5-2.8 7.5-8 9.9-5.2-2.4-8-5.4-8-9.9V6l8-3.2Z"/><path d="m8.8 12 2.1 2.1 4.5-4.5"/>',
   frame: '<path d="M4 9V6a2 2 0 0 1 2-2h3M15 4h3a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2h-3M9 20H6a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="10" r="2.5"/><path d="M8 16c.6-1.5 2-2.2 4-2.2s3.4.7 4 2.2"/>',

@@ -19,6 +19,7 @@
 !/photoshop-face-retouch
 !/screen-forge
 !/keybloom
+!/forma-studio
 !/website
 !/src
 !/tests
@@ -76,6 +77,12 @@
 /keybloom/out/
 /keybloom/artifacts/
 /keybloom/test-results/
+
+# Forma Studio dependencies, generated bundle, and packaged output
+/forma-studio/node_modules/
+/forma-studio/app/bundle.js
+/forma-studio/out/
+/forma-studio/test-results/
 
 # Website development dependencies and test output
 /website/node_modules/

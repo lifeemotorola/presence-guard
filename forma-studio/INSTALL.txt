@@ -1,0 +1,32 @@
+FORMA STUDIO 0.1 — WINDOWS QUICK START
+By Emmanuel Suah
+
+Forma Studio is an early offline 3D scene editor. It is not Blender and does
+not yet contain AI, mesh editing, rigging, or a ray-traced renderer.
+
+REQUIREMENTS: Windows 10 or 11, 64-bit, a mouse, and a graphics driver with
+WebGL 2 support. Performance varies by GPU and scene complexity. No account
+or subscription is needed after downloading the app.
+
+1. Right-click the downloaded ZIP and select Extract All. Use a writable local
+   folder, such as Documents\Forma Studio. Do not run the EXE inside the ZIP.
+2. Open the extracted folder and double-click FormaStudio.exe. Keep all files
+   and folders together; this is a portable folder, not a single-file app.
+3. Select a starter object or add a shape from the left. Drag to orbit,
+   right-drag to pan, scroll to zoom. Use the gizmo or Object inspector to
+   move, rotate, and scale. Material controls color, roughness, and metalness.
+4. Enable Array on an object to create editable linear or radial repetitions.
+   Set a frame and Add keyframe; later transform edits on that object auto-key.
+5. Choose Save project to create a .forma project. Save often: there is NO
+   AUTOSAVE OR CLOUD BACKUP. File > Open project reopens a .forma file.
+6. Export > 3D model saves visible objects at the current frame as GLB. It
+   does not export animation, camera, lights, or the studio floor. Export >
+   Viewport image saves a realtime PNG without editor grid or gizmos.
+7. Click ? in the app for shortcuts, and read README.md for the full guide,
+   limits, privacy details, build instructions, and third-party notices.
+
+WINDOWS SECURITY: This executable is unsigned; Windows may show a publisher
+or reputation warning. Run downloads only if you trust them. Compare the hashes
+in SHA256SUMS.txt against the matching Actions run. A checksum identifies a
+build but does not prove publisher identity or safety. Do not turn off system
+security globally.
