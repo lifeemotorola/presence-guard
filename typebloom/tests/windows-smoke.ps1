@@ -42,6 +42,19 @@ public static class Native {
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr window, StringBuilder name, int capacity);
   public delegate bool EnumWindowsProc(IntPtr window, IntPtr extra);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr extra);
+  [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc callback, IntPtr extra);
+  [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr hwnd);
+  public static string DescribeChildren(IntPtr parent) {
+    var result = new StringBuilder();
+    EnumWindowsProc callback = delegate(IntPtr hwnd, IntPtr extra) {
+      var cls = new StringBuilder(256); var title = new StringBuilder(512);
+      GetClassName(hwnd, cls, cls.Capacity); GetWindowText(hwnd, title, title.Capacity);
+      result.Append(" [").Append(cls).Append(" | id=").Append(GetDlgCtrlID(hwnd)).Append(" | ").Append(title).Append("]");
+      return true;
+    };
+    EnumChildWindows(parent, callback, IntPtr.Zero);
+    return result.Length == 0 ? "no child windows" : result.ToString();
+  }
   public static string DescribeWindows(int pid) {
     var result = new StringBuilder();
     EnumWindowsProc callback = delegate(IntPtr hwnd, IntPtr extra) {
@@ -109,7 +122,9 @@ function Activate-Target([IntPtr]$targetWindow, [int]$id = 201) {
 }
 function Tap-Many([byte]$key, [int]$count) { for ($i = 0; $i -lt $count; $i++) { [Native]::Tap($key) } }
 function Close-Dialog([IntPtr]$dialog, [int]$id) {
-  Wait-For { [Native]::GetDlgItem($dialog, $id) -ne [IntPtr]::Zero } "dialog button $id"
+  try { Wait-For { [Native]::GetDlgItem($dialog, $id) -ne [IntPtr]::Zero } "dialog button $id" } catch {
+    throw "Dialog $dialog button $id unavailable: $([Native]::DescribeChildren($dialog))"
+  }
   [Native]::Click((Control $dialog $id))
 }
 
