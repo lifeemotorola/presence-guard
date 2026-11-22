@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'">
+  <title>Forma Studio — Make something dimensional</title>
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script defer src="./bundle.js"></script>
+</head>
+<body>
+  <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-cube" viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.7 8-4.7M12 12.2V21"/></symbol>
+    <symbol id="i-sphere" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.7 12h16.6M12 3.5c2.3 2.3 3.5 5.2 3.5 8.5S14.3 18.2 12 20.5C9.7 18.2 8.5 15.3 8.5 12S9.7 5.8 12 3.5Z"/></symbol>
+    <symbol id="i-torus" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8.5" ry="6.5"/><ellipse cx="12" cy="12" rx="3.8" ry="2.6"/></symbol>
+    <symbol id="i-cone" viewBox="0 0 24 24"><path d="m12 3 8 14c0 2-3.6 3.5-8 3.5S4 19 4 17L12 3Z"/><path d="M4 17c0 2 3.6 3.5 8 3.5s8-1.5 8-3.5"/></symbol>
+    <symbol id="i-cylinder" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"/></symbol>
+    <symbol id="i-plane" viewBox="0 0 24 24"><path d="m12 5 9 5-9 9-9-5 9-9Z"/><path d="m7.5 9.5 9 5M7.5 16.5l9-9"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M8 8 4 12l4 4M4 12h10a5 5 0 0 1 0 10"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="m16 8 4 4-4 4m4-4H10a5 5 0 0 0 0 10"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3h12l3 3v14H4V3h1Zm3 0v6h8V3M8 20v-7h8v7"/></symbol>
+    <symbol id="i-open" viewBox="0 0 24 24"><path d="M3 7h7l2 2h9l-2 10H3V7Z"/></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15V3m-4 4 4-4 4 4M5 14v6h14v-6"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="m4 4 16 16M9.8 6.8A10.6 10.6 0 0 1 12 6.5c6 0 9.5 5.5 9.5 5.5a14 14 0 0 1-3.2 3.4M6.5 7.9A14 14 0 0 0 2.5 12S6 17.5 12 17.5c1 0 2-.2 2.9-.5"/></symbol>
+    <symbol id="i-select" viewBox="0 0 24 24"><path d="M5 3v15l4-4 3 6 3-1.4-3-6h6L5 3Z"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 2v20M2 12h20M8 6l4-4 4 4M8 18l4 4 4-4M6 8l-4 4 4 4M18 8l4 4-4 4"/></symbol>
+    <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M19.4 9A8 8 0 1 0 20 12M20 4v5h-5"/></symbol>
+    <symbol id="i-scale" viewBox="0 0 24 24"><path d="M5 19 19 5M13 5h6v6M5 13v6h6"/></symbol>
+    <symbol id="i-focus" viewBox="0 0 24 24"><path d="M4 9V6a2 2 0 0 1 2-2h3M15 4h3a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2h-3M9 20H6a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h16v16H4zM9.3 4v16M14.7 4v16M4 9.3h16M4 14.7h16"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M5 5v14M19 5 8 12l11 7V5Z"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M19 5v14M5 5l11 7-11 7V5Z"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><path d="m12 3 9 9-9 9-9-9 9-9Z"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 17h.01"/></symbol>
+    <symbol id="i-light" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <a class="brand" href="#workspace" aria-label="Forma Studio workspace">
+      <span class="brand-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m16 3 11 6.3v13.4L16 29 5 22.7V9.3L16 3Z" fill="#b99bff"/><path d="m16 3 11 6.3-11 6.5L5 9.3 16 3Z" fill="#e1d4ff"/><path d="M16 15.8 27 9.3v13.4L16 29V15.8Z" fill="#9072ea"/><path d="M16 15.8 5 9.3v13.4L16 29V15.8Z" fill="#a989f8"/></svg></span>
+      <span class="brand-name">forma<span>studio</span></span>
+    </a>
+    <span class="top-separator"></span>
+    <details class="menu" id="file-menu"><summary>File <svg><use href="#i-chevron"/></svg></summary><div class="menu-popover">
+      <button type="button" id="new-project">New scene <kbd>Ctrl N</kbd></button>
+      <button type="button" id="open-project">Open project… <kbd>Ctrl O</kbd></button>
+      <button type="button" id="save-as">Save project as… <kbd>Ctrl Shift S</kbd></button>
+      <span class="menu-divider"></span>
+      <button type="button" data-export="glb">Export model (.glb)…</button>
+      <button type="button" data-export="png">Save viewport image (.png)…</button>
+    </div></details>
+    <div class="project-name"><span class="project-dot"></span><span id="project-title">Untitled scene</span><span id="dirty-indicator" class="dirty-indicator" aria-label="Unsaved changes" hidden>●</span><span class="project-kind">/ 3D scene</span></div>
+    <div class="workspace-tabs" role="group" aria-label="Workspace layout"><button type="button" class="workspace-tab active" data-layout="layout" aria-pressed="true">Layout</button><button type="button" class="workspace-tab" data-layout="animate" aria-pressed="false">Animate</button></div>
+    <div class="top-actions">
+      <button class="icon-button" id="undo" type="button" title="Undo (Ctrl+Z)" aria-label="Undo" disabled><svg><use href="#i-undo"/></svg></button>
+      <button class="icon-button" id="redo" type="button" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled><svg><use href="#i-redo"/></svg></button>
+      <span class="top-separator small"></span>
+      <button class="button button-ghost" id="save-project" type="button"><svg><use href="#i-save"/></svg><span>Save project</span></button>
+      <details class="menu export-menu"><summary class="button button-primary"><svg><use href="#i-export"/></svg><span>Export</span><svg class="down"><use href="#i-chevron"/></svg></summary><div class="menu-popover right"><button type="button" data-export="glb">3D model <span>.glb</span></button><button type="button" data-export="png">Viewport image <span>.png</span></button></div></details>
+    </div>
+  </header>
+
+  <main id="workspace" class="workspace">
+    <h1 class="sr-only">Forma Studio 3D scene editor</h1>
+    <aside class="left-panel panel" aria-label="Scene and shapes">
+      <div class="panel-heading"><div><span class="panel-kicker">YOUR WORKSPACE</span><h2>Scene collection</h2></div><button class="icon-button help-button" type="button" id="help" title="Help and shortcuts" aria-label="Help and shortcuts"><svg><use href="#i-help"/></svg></button></div>
+      <div class="collection-head"><span><span class="collection-icon">✦</span> Scene objects</span><span id="object-count" class="count-pill">0</span></div>
+      <div id="object-list" class="object-list" role="list" aria-label="Scene objects"></div>
+      <div class="panel-divider"></div>
+      <div class="section-head"><div><span class="panel-kicker">BUILD SOMETHING</span><h3>Add a shape</h3></div><span class="section-sparkle">✳</span></div>
+      <div class="shape-grid" aria-label="Add a shape">
+        <button type="button" data-add="rounded-box"><span class="shape-icon purple"><svg><use href="#i-cube"/></svg></span><span>Round</span></button>
+        <button type="button" data-add="cube"><span class="shape-icon blue"><svg><use href="#i-cube"/></svg></span><span>Cube</span></button>
+        <button type="button" data-add="sphere"><span class="shape-icon mint"><svg><use href="#i-sphere"/></svg></span><span>Sphere</span></button>
+        <button type="button" data-add="cylinder"><span class="shape-icon peach"><svg><use href="#i-cylinder"/></svg></span><span>Cylinder</span></button>
+        <button type="button" data-add="cone"><span class="shape-icon yellow"><svg><use href="#i-cone"/></svg></span><span>Cone</span></button>
+        <button type="button" data-add="torus"><span class="shape-icon pink"><svg><use href="#i-torus"/></svg></span><span>Torus</span></button>
+        <button type="button" data-add="plane"><span class="shape-icon blue"><svg><use href="#i-plane"/></svg></span><span>Plane</span></button>
+        <button type="button" data-add="icosahedron"><span class="shape-icon purple"><svg><use href="#i-sphere"/></svg></span><span>Icosphere</span></button>
+      </div>
+      <div class="aside-tip"><span>✦</span><p><strong>A little creative tip</strong><br>Select a shape, then try the Array tool in the inspector.</p></div>
+    </aside>
+
+    <section class="center-panel" aria-label="3D workspace">
+      <div class="viewport-top"><div class="viewport-title"><span class="viewport-dot"></span><strong>3D Viewport</strong><span class="viewport-subtitle">/ your creative space</span></div><div class="viewport-actions"><label for="view-select" class="sr-only">Camera view</label><select id="view-select" aria-label="Camera view"><option value="perspective">Perspective</option><option value="front">Front</option><option value="top">Top</option><option value="right">Right</option></select><button class="icon-button active" id="toggle-grid" type="button" title="Toggle grid" aria-label="Toggle grid" aria-pressed="true"><svg><use href="#i-grid"/></svg></button><button class="icon-button" id="wireframe" type="button" title="Toggle wireframe" aria-label="Toggle wireframe" aria-pressed="false"><svg><use href="#i-cube"/></svg></button></div></div>
+      <div id="viewport" class="viewport">
+        <div id="viewport-canvas" class="viewport-canvas"></div>
+        <div class="viewport-toolbar" role="group" aria-label="Transform tool">
+          <button type="button" class="tool-button" data-tool="select" title="Select (Q)" aria-label="Select tool" aria-pressed="false"><svg><use href="#i-select"/></svg></button>
+          <button type="button" class="tool-button active" data-tool="translate" title="Move (G)" aria-label="Move tool" aria-pressed="true"><svg><use href="#i-move"/></svg></button>
+          <button type="button" class="tool-button" data-tool="rotate" title="Rotate (R)" aria-label="Rotate tool" aria-pressed="false"><svg><use href="#i-rotate"/></svg></button>
+          <button type="button" class="tool-button" data-tool="scale" title="Scale (S)" aria-label="Scale tool" aria-pressed="false"><svg><use href="#i-scale"/></svg></button>
+          <span></span><button type="button" class="tool-button" id="focus-object" title="Frame selected (F)" aria-label="Frame selected object"><svg><use href="#i-focus"/></svg></button>
+        </div>
+        <div class="viewport-hint"><span class="hint-dot"></span> <span>Drag to orbit</span><i></i><span>Scroll to zoom</span><i></i><span>Right drag to pan</span></div>
+        <div class="viewport-brand" aria-hidden="true"><span>✳</span> MADE IN FORMA</div>
+        <div id="webgl-error" class="webgl-error" hidden><strong>3D view couldn’t start.</strong><p>Forma Studio needs WebGL. Try a computer with a supported graphics driver.</p></div>
+      </div>
+      <section class="timeline" id="timeline" aria-label="Animation timeline">
+        <div class="timeline-top"><div class="timeline-name"><span class="timeline-icon">▥</span><strong>Timeline</strong><span>Transform animation</span></div><div class="timeline-fps"><span id="fps-display">24 FPS</span><span class="timeline-divider"></span><span>END</span><label for="end-frame" class="sr-only">End frame</label><input type="number" id="end-frame" min="1" max="600" step="1" value="120"></div></div>
+        <div class="timeline-controls"><div class="transport"><button class="icon-button" id="first-frame" type="button" title="First frame" aria-label="First frame"><svg><use href="#i-prev"/></svg></button><button class="play-button" id="play" type="button" title="Play animation" aria-label="Play animation"><svg><use href="#i-play"/></svg></button><button class="icon-button" id="last-frame" type="button" title="Last frame" aria-label="Last frame"><svg><use href="#i-next"/></svg></button></div><span class="timeline-divider"></span><button class="key-button" id="add-key" type="button" title="Add or update keyframe"><svg><use href="#i-key"/></svg> Add keyframe</button><button class="icon-button" id="delete-key" type="button" title="Delete keyframe at current frame" aria-label="Delete keyframe at current frame"><svg><use href="#i-trash"/></svg></button><div class="frame-readout"><span>FRAME</span><label for="frame-input" class="sr-only">Current frame</label><input type="number" id="frame-input" min="0" max="120" step="1" value="0"><span id="end-readout">/ 120</span></div></div>
+        <div class="timeline-track"><div class="track-label"><span class="track-object-icon">◇</span><span id="track-name">Select an object</span></div><div class="track-body"><div class="ruler"><span>0</span><span>25%</span><span>50%</span><span>75%</span><span id="ruler-end">120</span></div><div class="range-wrap"><input id="frame-range" type="range" min="0" max="120" step="1" value="0" aria-label="Scrub animation frame"><div id="key-markers" class="key-markers"></div></div></div></div>
+      </section>
+    </section>
+
+    <aside class="right-panel panel" aria-label="Inspector">
+      <div class="inspector-top"><div><span class="panel-kicker">MAKE IT YOURS</span><h2>Inspector</h2></div><span class="inspector-sparkle">✳</span></div>
+      <div class="inspector-tabs" role="tablist" aria-label="Inspector sections"><button type="button" role="tab" id="tab-object" aria-controls="pane-object" aria-selected="true" data-tab="object">Object</button><button type="button" role="tab" id="tab-material" aria-controls="pane-material" aria-selected="false" data-tab="material">Material</button><button type="button" role="tab" id="tab-scene" aria-controls="pane-scene" aria-selected="false" data-tab="scene">Scene</button></div>
+      <div class="inspector-scroll">
+        <div id="no-selection" class="no-selection" hidden><span>◇</span><strong>Nothing selected</strong><p>Choose an object in the scene to edit its properties.</p></div>
+        <div id="pane-object" role="tabpanel" aria-labelledby="tab-object">
+          <div class="selected-card"><span class="selected-icon"><svg><use href="#i-cube"/></svg></span><div><span>SELECTED OBJECT</span><strong id="selected-name">Form 01</strong></div><span class="selected-dot"></span></div>
+          <div class="property-block"><div class="block-heading"><h3>Object</h3><span>01</span></div><label class="field-label" for="object-name">Name</label><input id="object-name" class="text-input" maxlength="80" autocomplete="off"></div>
+          <div class="property-block"><div class="block-heading"><h3>Transform</h3><span>XYZ</span></div><p class="block-subtitle">Fine-tune the position, rotation and scale.</p><div id="transform-fields"></div></div>
+          <div class="property-block array-block"><div class="block-heading"><div><h3>Array</h3><p class="block-subtitle">Repeat this shape, non-destructively.</p></div><label class="switch"><input type="checkbox" id="array-enabled" aria-label="Enable procedural array"><span></span></label></div><div id="array-controls" hidden><label class="field-label" for="array-mode">Arrangement</label><select id="array-mode" class="text-input"><option value="linear">Linear</option><option value="radial">Radial</option></select><div class="inline-fields"><label>Count<input type="number" id="array-count" min="1" max="20" step="1"></label><label id="array-distance-label">Spacing<input type="number" id="array-distance" min="0.1" max="20" step="0.1"></label></div></div></div>
+          <div class="object-actions"><button type="button" id="duplicate-object"><svg><use href="#i-copy"/></svg> Duplicate</button><button type="button" id="delete-object"><svg><use href="#i-trash"/></svg> Delete</button></div>
+        </div>
+        <div id="pane-material" role="tabpanel" aria-labelledby="tab-material" hidden><div class="property-block first-block"><div class="block-heading"><h3>Surface</h3><span>01</span></div><p class="block-subtitle">A little color goes a long way.</p><label class="field-label" for="material-color">Base color</label><div class="color-control"><input type="color" id="material-color" aria-label="Material color"><span id="color-value">#A78BFA</span><span>●</span></div><label class="slider-label" for="roughness"><span>Roughness</span><output id="roughness-value">0.40</output></label><input class="slider" type="range" id="roughness" min="0" max="1" step="0.01"><label class="slider-label" for="metalness"><span>Metalness</span><output id="metalness-value">0.08</output></label><input class="slider" type="range" id="metalness" min="0" max="1" step="0.01"></div><div class="material-note"><span>✦</span><p><strong>Make it shine.</strong><br>Lower roughness and raise metalness for a polished finish.</p></div></div>
+        <div id="pane-scene" role="tabpanel" aria-labelledby="tab-scene" hidden><div class="property-block first-block"><div class="block-heading"><h3>World &amp; light</h3><span><svg class="small-icon"><use href="#i-light"/></svg></span></div><p class="block-subtitle">Set the mood for your whole scene.</p><label class="field-label" for="project-name-input">Project name</label><input id="project-name-input" class="text-input" maxlength="100" autocomplete="off"><label class="field-label" for="background-color">Background</label><div class="color-control"><input type="color" id="background-color" aria-label="Background color"><span id="background-value">#252632</span><span>●</span></div><label class="slider-label" for="ambient"><span>Ambient light</span><output id="ambient-value">1.10</output></label><input class="slider" type="range" id="ambient" min="0" max="3" step="0.05"><label class="slider-label" for="key-light"><span>Key light</span><output id="key-light-value">2.70</output></label><input class="slider" type="range" id="key-light" min="0" max="6" step="0.05"><label class="slider-label" for="exposure"><span>Exposure</span><output id="exposure-value">1.00</output></label><input class="slider" type="range" id="exposure" min="0.1" max="3" step="0.05"></div><div class="material-note"><span>✦</span><p><strong>Quick lighting.</strong><br>These controls affect the realtime viewport and PNG export.</p></div></div>
+      </div>
+      <div class="inspector-footer"><span>✳</span> Made for making <span>v0.1</span></div>
+    </aside>
+  </main>
+  <footer class="statusbar"><div><span class="status-light"></span><span id="status-text" role="status">Ready to create</span></div><div><span id="scene-stats">4 objects</span><span class="status-separator"></span><span>Y UP</span><span class="status-separator"></span><span>FORMA STUDIO 0.1</span></div></footer>
+  <input id="file-input" type="file" accept=".forma,.json,application/json" hidden>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title"><div class="dialog-content"><span class="dialog-symbol">✳</span><h2 id="confirm-title">Save your changes?</h2><p>Your current scene has unsaved changes. Save it before continuing, or discard them.</p><div class="dialog-actions"><button class="button button-ghost" data-confirm="cancel" type="button">Cancel</button><button class="button button-ghost danger" data-confirm="discard" type="button">Discard</button><button class="button button-primary" data-confirm="save" type="button">Save project</button></div></div></dialog>
+  <dialog id="help-dialog" aria-labelledby="help-title"><div class="dialog-content help-content"><button class="dialog-close icon-button" id="close-help" type="button" aria-label="Close help">×</button><span class="panel-kicker">A LITTLE HELPING HAND</span><h2 id="help-title">Your creative space.</h2><p>Forma Studio is an early 3D scene editor, not a replacement for Blender. Add shapes, adjust materials, create arrays, and animate transforms.</p><div class="shortcut-list"><div><span>Orbit / pan / zoom</span><kbd>Drag / right-drag / scroll</kbd></div><div><span>Select / move / rotate / scale</span><kbd>Q / G / R / S</kbd></div><div><span>Frame selected object</span><kbd>F</kbd></div><div><span>Duplicate / delete</span><kbd>Ctrl D / Delete</kbd></div><div><span>Undo / redo / save</span><kbd>Ctrl Z / Shift Ctrl Z / Ctrl S</kbd></div></div><p class="help-note">Keyframes animate transforms only. GLB export contains the current frame; it does not include animation. AI, mesh editing, rigging, and ray tracing are not included in this version.</p></div></dialog>
+</body>
+</html>

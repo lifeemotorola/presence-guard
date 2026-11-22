@@ -4,6 +4,7 @@ Looking for all the plugins and apps in this repository? See **[The Creator Tool
 
 Looking for the independent audio mixer? See **[MixBloom for OBS](mixbloom/README.md)**.
 For a workspace that brings together many OBS and web docks, see **[DockBloom for OBS](dockbloom/README.md)**.
+For the early offline 3D scene editor, see **[Forma Studio](forma-studio/README.md)**. It is not Blender feature parity and does not yet include AI.
 Each guide covers its own Windows download, precautions, and installation steps.
 
 An OBS Studio plugin that keeps the stream looking alive while you are not:

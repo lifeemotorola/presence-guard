@@ -16,9 +16,9 @@ const goodRun = {
 const goodArtifact = { id: 456, name: 'obs-dockbloom-windows-x64', expired: false, expires_at: '2030-01-01T00:00:00Z', digest };
 
 test('the complete catalog has unique products, assets and valid source workflows', async () => {
-  assert.equal(PRODUCTS.length, 13);
+  assert.equal(PRODUCTS.length, 14);
   assert.deepEqual(CATEGORIES.map((category) => category.id), ['all', 'obs', 'apps', 'photoshop']);
-  assert.deepEqual(Object.fromEntries(['obs', 'apps', 'photoshop'].map((category) => [category, PRODUCTS.filter((product) => product.category === category).length])), { obs: 9, apps: 2, photoshop: 2 });
+  assert.deepEqual(Object.fromEntries(['obs', 'apps', 'photoshop'].map((category) => [category, PRODUCTS.filter((product) => product.category === category).length])), { obs: 9, apps: 3, photoshop: 2 });
   for (const field of ['id', 'name', 'asset']) assert.equal(new Set(PRODUCTS.map((product) => product[field])).size, PRODUCTS.length, `${field} must be unique`);
   for (const product of PRODUCTS) {
     assert.match(product.id, /^[a-z0-9-]+$/);
@@ -26,7 +26,10 @@ test('the complete catalog has unique products, assets and valid source workflow
     assert.ok(product.artifact || (product.artifactPattern && product.artifactLabel));
     assert.ok(product.compatibility && product.note && product.description && product.detail);
     assert.ok(product.steps.length >= 3);
-    assert.match(product.fallbackExpires, /^\d{4}-\d\d-\d\dT/);
+    // A new product may not yet have a successful main-branch build; its
+    // fallback goes to the workflow until a public ZIP has been published.
+    if (product.fallbackRun) assert.match(product.fallbackExpires, /^\d{4}-\d\d-\d\dT/);
+    else assert.equal(fallbackUrl(product), workflowUrl(product));
     assert.ok(artifactName(product));
     await access(new URL(`../../.github/workflows/${product.workflow}`, import.meta.url));
     await access(new URL(`../../${product.guide}`, import.meta.url));
@@ -104,6 +107,9 @@ test('important compatibility and installation limits remain visible', () => {
   assert.match(get('presence-guard').note, /OBS 33 has not been verified/i);
   assert.match(get('screenforge').note, /ffmpeg/i);
   assert.match(get('keybloom').note, /portable folder/i);
+  assert.match(get('forma-studio').note, /no AI, mesh editing, or rigging/i);
+  assert.match(get('forma-studio').note, /current-frame/i);
+  assert.match(get('forma-studio').note, /unsigned/i);
   assert.match(get('onair-twin').note, /does not perform failover/i);
   for (const id of ['face-retouch', 'export-kit']) {
     assert.match(get(id).compatibility, /UXP Developer Tool/);

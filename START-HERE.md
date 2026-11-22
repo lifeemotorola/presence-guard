@@ -346,3 +346,22 @@ affiliated with it.
 See [`keybloom/README.md`](keybloom/README.md) for instructions, scoring, data
 storage, and limitations. The executable is unsigned; a checksum identifies a
 build but is not a digital signature.
+
+## The early 3D scene editor: Forma Studio
+
+`forma-studio/` is the first stage of an offline Windows 3D suite. Assemble
+primitive shapes, adjust materials and lighting, use linear/radial arrays,
+animate object transforms, and export a current-frame GLB or viewport PNG. It
+is an early editor, not a Blender replacement: no AI, mesh editing, rigging, or
+ray tracing is included.
+
+| | Forma Studio (`forma-studio/`) |
+|---|---|
+| Computer | Windows 10/11 x64 and a working WebGL 2 graphics driver |
+| Download | **Actions → Forma Studio** → a successful main run → `forma-studio-windows-x64` |
+| Use it | Extract the entire ZIP and run `FormaStudio.exe` from the extracted folder |
+| Projects | Save `.forma` projects locally; no autosave or cloud backup |
+
+See [`forma-studio/README.md`](forma-studio/README.md) for instructions and
+limits. The executable is unsigned. A checksum identifies a build, not its
+publisher or safety.

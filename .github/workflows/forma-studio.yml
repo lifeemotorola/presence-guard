@@ -1,0 +1,137 @@
+name: Forma Studio
+
+run-name: Forma Studio · ${{ github.ref_name }}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'forma-studio/**'
+      - '.github/workflows/forma-studio.yml'
+  pull_request:
+    paths:
+      - 'forma-studio/**'
+      - '.github/workflows/forma-studio.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 'forma-studio-${{ github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Model, browser, WebGL and accessibility tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: forma-studio
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: forma-studio/package-lock.json
+      - name: Install pinned dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build the offline renderer
+        run: npm run build
+      - name: Test project model
+        run: npm test
+      - name: Exercise the 3D editor in Chromium
+        run: |
+          CHROMIUM_PATH="$(command -v google-chrome || command -v chromium)"
+          test -n "$CHROMIUM_PATH"
+          CHROMIUM_PATH="$CHROMIUM_PATH" npm run test:browser
+
+  windows:
+    name: Windows portable app and desktop tests
+    runs-on: windows-latest
+    needs: browser
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: forma-studio
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: forma-studio/package-lock.json
+      - name: Install pinned dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build the Windows x64 portable app
+        run: npm run package:win
+      - name: Check packaged files and Windows metadata
+        shell: pwsh
+        run: |
+          $folder = 'out/FormaStudio-win32-x64'
+          foreach ($item in @('FormaStudio.exe', 'resources/app.asar', 'LICENSE', 'LICENSES.chromium.html', 'FORMA-LICENSE.txt', 'INSTALL.txt', 'README.md', 'THREE-LICENSE.txt', 'SOURCE/INSTALL.txt', 'SOURCE/app/editor.js', 'SOURCE/app/viewport.js', 'SOURCE/desktop/main.cjs', 'SOURCE/package-lock.json', 'SOURCE/app/assets/fonts/DM-SANS-LICENSE.txt', 'SOURCE/app/assets/fonts/PLUS-JAKARTA-SANS-LICENSE.txt')) {
+            if (-not (Test-Path (Join-Path $folder $item))) { throw "Missing package file: $item" }
+          }
+          $info = (Get-Item "$folder/FormaStudio.exe").VersionInfo
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $info | Format-List CompanyName,ProductName,FileDescription,FileVersion
+          if ($info.CompanyName -ne 'Emmanuel Suah' -or $info.ProductName -ne 'Forma Studio' -or
+              -not $info.FileVersion.StartsWith($package.version)) { throw 'Incorrect Windows publisher or version metadata.' }
+      - name: Exercise the packaged app
+        shell: pwsh
+        env:
+          FORMA_SCREENSHOT: ${{ runner.temp }}\forma-studio.png
+          FORMA_FEATURE_SCREENSHOT: ${{ runner.temp }}\forma-studio-array-animation.png
+        run: npm run test:desktop
+      - name: Calculate executable and app checksums
+        id: hashes
+        shell: pwsh
+        run: |
+          $folder = 'out/FormaStudio-win32-x64'
+          $exeHash = (Get-FileHash -Algorithm SHA256 "$folder/FormaStudio.exe").Hash.ToLowerInvariant()
+          $appHash = (Get-FileHash -Algorithm SHA256 "$folder/resources/app.asar").Hash.ToLowerInvariant()
+          @("$exeHash  FormaStudio.exe", "$appHash  resources/app.asar") | Set-Content "$folder/SHA256SUMS.txt" -Encoding ascii
+          "exe=$exeHash" >> $env:GITHUB_OUTPUT
+          "app=$appHash" >> $env:GITHUB_OUTPUT
+          $signature = (Get-AuthenticodeSignature "$folder/FormaStudio.exe").Status
+          Add-Content $env:GITHUB_STEP_SUMMARY '### Forma Studio Windows x64 checksums'
+          Add-Content $env:GITHUB_STEP_SUMMARY "- FormaStudio.exe: ``$exeHash``"
+          Add-Content $env:GITHUB_STEP_SUMMARY "- resources/app.asar: ``$appHash``"
+          Add-Content $env:GITHUB_STEP_SUMMARY "- Authenticode status: $signature. This app is unsigned."
+          Add-Content $env:GITHUB_STEP_SUMMARY 'Hashes identify these files from this run; they do not establish publisher identity or safety.'
+      - name: Upload Windows app
+        uses: actions/upload-artifact@v4
+        with:
+          name: forma-studio-windows-x64
+          path: forma-studio/out/FormaStudio-win32-x64/
+          if-no-files-found: error
+          compression-level: 6
+      - name: Upload UI screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: forma-studio-windows-ui
+          path: |
+            ${{ runner.temp }}\forma-studio.png
+            ${{ runner.temp }}\forma-studio-array-animation.png
+          if-no-files-found: error
+      - name: Download the uploaded app for integrity verification
+        uses: actions/download-artifact@v4
+        with:
+          name: forma-studio-windows-x64
+          path: ${{ runner.temp }}\forma-studio-integrity
+      - name: Verify the downloaded files
+        shell: pwsh
+        env:
+          EXPECTED_EXE: ${{ steps.hashes.outputs.exe }}
+          EXPECTED_APP: ${{ steps.hashes.outputs.app }}
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'forma-studio-integrity'
+          $exe = (Get-FileHash -Algorithm SHA256 (Join-Path $folder 'FormaStudio.exe')).Hash.ToLowerInvariant()
+          $app = (Get-FileHash -Algorithm SHA256 (Join-Path $folder 'resources/app.asar')).Hash.ToLowerInvariant()
+          $lines = @(Get-Content (Join-Path $folder 'SHA256SUMS.txt'))
+          if ($exe -ne $env:EXPECTED_EXE -or $app -ne $env:EXPECTED_APP -or
+              $lines[0] -ne "$exe  FormaStudio.exe" -or $lines[1] -ne "$app  resources/app.asar") {
+            throw 'Downloaded artifact does not match the staged application.'
+          }
