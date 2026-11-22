@@ -15,8 +15,10 @@ using System.Text;
 
 [ComImport, Guid("618736e0-3c3d-11cf-810c-00aa00389b71"), InterfaceType(ComInterfaceType.InterfaceIsIDispatch)]
 public interface IAccessibleNative {
-  [DispId(-5003)] [return: MarshalAs(UnmanagedType.BStr)]
-  string get_accName([In, Optional, MarshalAs(UnmanagedType.Struct)] object child);
+  [DispId(-5003)]
+  string this[[In, MarshalAs(UnmanagedType.Struct)] object child] {
+    [return: MarshalAs(UnmanagedType.BStr)] get;
+  }
 }
 public static class Native {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
@@ -69,7 +71,7 @@ public static class Native {
     IAccessibleNative result;
     int hr = AccessibleObjectFromWindow(hwnd, 0xFFFFFFFC, ref iid, out result);
     if (hr != 0 || result == null) throw new Exception("AccessibleObjectFromWindow: " + hr);
-    return result.get_accName(0);
+    return result[0];
   }
   public static void Click(IntPtr hwnd) {
     RECT r;
