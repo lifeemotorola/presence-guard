@@ -1,7 +1,7 @@
 {
   "name": "forma-studio",
   "productName": "Forma Studio",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A friendly, offline 3D scene and motion studio for Windows.",
   "main": "desktop/main.cjs",
   "author": "Emmanuel Suah",

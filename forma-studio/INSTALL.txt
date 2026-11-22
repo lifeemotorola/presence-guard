@@ -1,4 +1,4 @@
-FORMA STUDIO 0.2 — WINDOWS QUICK START
+FORMA STUDIO 0.3 — WINDOWS QUICK START
 By Emmanuel Suah
 
 Forma Studio is an early offline 3D scene editor. It is not Blender and does
@@ -13,21 +13,25 @@ or subscription is needed after downloading the app.
 2. Open the extracted folder and double-click FormaStudio.exe. Keep all files
    and folders together; this is a portable folder, not a single-file app.
 3. Select a starter object or add a shape from the left. Drag to orbit,
-   right-drag to pan, scroll to zoom. Use the gizmo or Object inspector to
-   move, rotate, and scale. Material controls color, roughness, and metalness.
+   right-drag to pan, scroll to zoom. The view menu offers six orthographic
+   axis views; ORTHO/PERSP switches projection. Use the gizmo or Object
+   inspector to move, rotate, and scale. Material controls the surface.
 4. To model a shape, select it, choose Model > Edit mesh, then pick a face or
-   vertex. Extrude and Inset act on one selected face. Drag a selected vertex's
-   gizmo or type its local coordinates. Subdivide splits the entire mesh
-   without smoothing it. Click Done to return to object mode. Undo reverses
-   edits and the original conversion. Dense meshes have size limits.
+   vertex. Extrude and Inset act on one face. Drag a selected vertex's gizmo
+   or type local coordinates. In Vertex mode, Proportional editing moves all
+   nearby points in local space, even on disconnected surfaces; adjust radius
+   and falloff before moving. Subdivide splits the entire mesh without
+   smoothing it. Click Done to return to object mode. Undo reverses edits and
+   the original conversion. Dense meshes have size limits.
 5. Enable Array on an object for editable linear or radial repetitions. Mesh
    edits change every copy. Set a frame and Add keyframe; later object-transform
    edits auto-key. Mesh geometry itself is not animated.
 6. Choose Save project to create a .forma project. Save often: there is NO
-   AUTOSAVE OR CLOUD BACKUP. File > Open project reopens a .forma file. Version
-   0.2 can open 0.1 projects, but 0.1 cannot open 0.2 projects. The first save
-   of a 0.1 project asks for a new path: choose a different filename to keep
-   the original compatible with 0.1. Keep independent backups.
+   AUTOSAVE OR CLOUD BACKUP. File > Open project reopens a .forma file. Versions
+   0.2 and 0.3 use the same version-2 format; 0.1 cannot open those projects.
+   The first save of a 0.1 project asks for a new path: choose a different
+   filename to keep the original compatible with 0.1. Projection and tool
+   settings are not saved; reopening starts in perspective. Keep backups.
 7. Export > 3D model saves visible objects at the current frame as GLB. It
    does not export animation, camera, lights, or the studio floor. Export >
    Viewport image saves a realtime PNG without editor grid, gizmos or overlays.

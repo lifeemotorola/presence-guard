@@ -5,11 +5,15 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { arrayOffsets, evaluatedTransform } from './model.js';
-import { createCubeMesh, createPlaneMesh, meshFromTriangles, triangulateFace } from './mesh.js';
+import { createCubeMesh, createPlaneMesh, meshFromTriangles, triangulateFace, proportionalWeights } from './mesh.js';
 
 const radians = (degrees) => degrees * Math.PI / 180;
 const degrees = (radiansValue) => radiansValue * 180 / Math.PI;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const VIEW_DIRECTIONS = {
+  perspective: [1, 0.75, 1.2], front: [0, 0, 1], back: [0, 0, -1],
+  right: [1, 0, 0], left: [-1, 0, 0], top: [0, 1, 0], bottom: [0, -1, 0],
+};
 
 function geometryFor(type) {
   switch (type) {
@@ -90,12 +94,18 @@ export class Viewport {
     this.vertexHandleRoot = null;
     this.vertexHandle = null;
     this.lastValidVertex = null;
+    this.proportional = { enabled: false, radius: 1.5, falloff: 'smooth' };
+    this.proportionalDragMesh = null;
     this.snapping = false;
     this.dragSnapshot = false;
+    this.cameraSettling = false;
     this.capturing = false;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(40, 1, 0.05, 300);
+    this.perspectiveCamera = new THREE.PerspectiveCamera(40, 1, 0.05, 300);
+    this.orthographicCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.05, 300);
+    this.orthographicHeight = 10;
+    this.camera = this.perspectiveCamera;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -136,13 +146,22 @@ export class Viewport {
     this.orbit.dampingFactor = 0.1;
     this.orbit.minDistance = 1;
     this.orbit.maxDistance = 100;
-    this.orbit.maxPolarAngle = Math.PI / 2 + 0.35;
-    this.orbit.addEventListener('end', () => this.reportCamera());
+    this.orbit.minZoom = 0.02;
+    this.orbit.maxZoom = 100;
+    this.orbit.maxPolarAngle = Math.PI;
+    this.orbit.addEventListener('change', () => this.reportView());
+    this.orbit.addEventListener('end', () => { this.reportCamera(); this.cameraSettling = true; });
     this.gizmo = new TransformControls(this.camera, this.renderer.domElement);
     this.gizmo.setSize(0.8);
     this.scene.add(this.gizmo.getHelper());
     this.gizmo.addEventListener('dragging-changed', (event) => { this.orbit.enabled = !event.value; });
-    this.gizmo.addEventListener('mouseDown', () => { this.dragSnapshot = true; this.callbacks.onDragStart?.(); });
+    this.gizmo.addEventListener('mouseDown', () => {
+      this.dragSnapshot = true;
+      // Keep the same influence weights for every update of a single drag.
+      const object = this.project.objects.find((item) => item.id === this.meshEdit?.id);
+      this.proportionalDragMesh = this.vertexHandle && this.proportional.enabled ? object?.mesh : null;
+      this.callbacks.onDragStart?.();
+    });
     this.gizmo.addEventListener('objectChange', () => {
       if (!this.dragSnapshot || !this.gizmo.object) return;
       if (this.vertexHandle && this.gizmo.object === this.vertexHandle) {
@@ -166,6 +185,7 @@ export class Viewport {
     });
     this.gizmo.addEventListener('mouseUp', () => {
       if (!this.dragSnapshot) return;
+      this.proportionalDragMesh = null;
       this.callbacks.onDragEnd?.();
       // Pointerup can also be a click; do not select through the transform gizmo.
       setTimeout(() => { this.dragSnapshot = false; }, 0);
@@ -197,7 +217,8 @@ export class Viewport {
     this.resize();
     const tick = (time) => {
       this.callbacks.onTick?.(time);
-      this.orbit.update();
+      const moved = this.orbit.update();
+      if (this.cameraSettling && !moved) { this.cameraSettling = false; this.reportCamera(); }
       if (!this.capturing) this.renderer.render(this.scene, this.camera);
       requestAnimationFrame(tick);
     };
@@ -258,14 +279,45 @@ export class Viewport {
     edges.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
     const edgeMaterial = new THREE.LineBasicMaterial({ color: 0xbda6ff, transparent: true, opacity: 0.82, depthTest: false });
     let points = null, pointMaterial = null, selectedGeometry = null, selectedMaterial = null;
+    let influencedGeometry = null, influencedMaterial = null, radiusGeometry = null, radiusMaterial = null;
     if (this.meshEdit.component === 'vertex') {
       points = new THREE.BufferGeometry();
       points.setAttribute('position', new THREE.Float32BufferAttribute(mesh.vertices.flat(), 3));
       pointMaterial = new THREE.PointsMaterial({ color: 0xf5eefa, size: 7, sizeAttenuation: false, depthTest: false });
       if (Number.isInteger(this.meshEdit.index) && mesh.vertices[this.meshEdit.index]) {
+        const active = this.meshEdit.index;
         selectedGeometry = new THREE.BufferGeometry();
-        selectedGeometry.setAttribute('position', new THREE.Float32BufferAttribute(mesh.vertices[this.meshEdit.index], 3));
+        selectedGeometry.setAttribute('position', new THREE.Float32BufferAttribute(mesh.vertices[active], 3));
         selectedMaterial = new THREE.PointsMaterial({ color: 0xffb872, size: 12, sizeAttenuation: false, depthTest: false });
+        if (this.proportional.enabled) {
+          const { radius, falloff } = this.proportional;
+          const weights = proportionalWeights(this.proportionalDragMesh || mesh, active, radius, falloff);
+          const positions = [], colors = [];
+          weights.forEach((weight, index) => {
+            if (index === active || weight <= 0) return;
+            positions.push(...mesh.vertices[index]);
+            colors.push(1, 0.12 + 0.30 * (1 - weight), 0.02 + 0.18 * (1 - weight));
+          });
+          if (positions.length) {
+            influencedGeometry = new THREE.BufferGeometry();
+            influencedGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            influencedGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            influencedMaterial = new THREE.PointsMaterial({ vertexColors: true, size: 9, sizeAttenuation: false, depthTest: false });
+          }
+          // Three local-space circles describe the spherical influence radius.
+          // Object rotation/scale and array offsets transform the preview too.
+          const ring = [], center = mesh.vertices[active], segments = 48;
+          for (const [a, b] of [[0, 1], [0, 2], [1, 2]]) for (let i = 0; i < segments; i++) {
+            for (const angle of [i * Math.PI * 2 / segments, (i + 1) * Math.PI * 2 / segments]) {
+              const point = [...center];
+              point[a] += radius * Math.cos(angle); point[b] += radius * Math.sin(angle);
+              ring.push(...point);
+            }
+          }
+          radiusGeometry = new THREE.BufferGeometry();
+          radiusGeometry.setAttribute('position', new THREE.Float32BufferAttribute(ring, 3));
+          radiusMaterial = new THREE.LineBasicMaterial({ color: 0xf7b99a, transparent: true, opacity: 0.36, depthTest: false });
+        }
       }
     } else if (Number.isInteger(this.meshEdit.index) && mesh.faces[this.meshEdit.index]) {
       const positions = [];
@@ -275,13 +327,17 @@ export class Viewport {
       selectedMaterial = new THREE.MeshBasicMaterial({ color: 0xffb872, transparent: true, opacity: 0.48, depthTest: false, side: THREE.DoubleSide });
     }
     this.editOverlay = new THREE.Group();
-    for (const offset of arrayOffsets(object.array)) {
+    for (const [copyIndex, offset] of arrayOffsets(object.array).entries()) {
       const copy = new THREE.Group(); copy.position.fromArray(offset);
+      if (radiusGeometry && copyIndex === clamp(this.meshEdit.copyIndex || 0, 0, node.children.length - 1)) {
+        const radius = new THREE.LineSegments(radiusGeometry, radiusMaterial); radius.renderOrder = 999; copy.add(radius);
+      }
       const lines = new THREE.LineSegments(edges, edgeMaterial); lines.renderOrder = 1000; copy.add(lines);
       if (points) { const vertices = new THREE.Points(points, pointMaterial); vertices.renderOrder = 1001; copy.add(vertices); }
+      if (influencedGeometry) { const influenced = new THREE.Points(influencedGeometry, influencedMaterial); influenced.renderOrder = 1002; copy.add(influenced); }
       if (selectedGeometry) {
         const selected = this.meshEdit.component === 'vertex' ? new THREE.Points(selectedGeometry, selectedMaterial) : new THREE.Mesh(selectedGeometry, selectedMaterial);
-        selected.renderOrder = 1002; copy.add(selected);
+        selected.renderOrder = 1003; copy.add(selected);
       }
       this.editOverlay.add(copy);
     }
@@ -343,21 +399,95 @@ export class Viewport {
     this.meshEdit = edit ? { ...edit } : null;
     if (refresh) this.select(this.selectedId);
   }
+  setProportional(value) {
+    this.proportional = { ...value };
+    if (this.meshEdit?.component === 'vertex') this.select(this.selectedId);
+  }
+  updateCameraFrusta() {
+    const width = this.host.clientWidth, height = this.host.clientHeight;
+    if (!width || !height) return;
+    const aspect = width / height;
+    this.perspectiveCamera.aspect = aspect;
+    this.perspectiveCamera.updateProjectionMatrix();
+    const halfHeight = this.orthographicHeight / 2;
+    Object.assign(this.orthographicCamera, { top: halfHeight, bottom: -halfHeight, left: -halfHeight * aspect, right: halfHeight * aspect });
+    this.orthographicCamera.updateProjectionMatrix();
+  }
   resize() {
     const width = this.host.clientWidth, height = this.host.clientHeight;
     if (!width || !height) return;
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
+    this.updateCameraFrusta();
     this.renderer.setSize(width, height, false);
   }
-  getCamera() { return { position: this.camera.position.toArray(), target: this.orbit.target.toArray() }; }
-  reportCamera() {
-    this.callbacks.onCamera?.(this.getCamera());
+  getCamera() {
+    const target = this.orbit.target.clone();
+    const position = this.camera.position.clone();
+    if (this.camera.isOrthographicCamera) {
+      // The v2 format stores only a perspective camera pose. Record an
+      // equivalent distance so older versions reopen near the same framing.
+      const height = (this.camera.top - this.camera.bottom) / this.camera.zoom;
+      const distance = clamp(height / (2 * Math.tan(radians(this.perspectiveCamera.fov / 2))), this.orbit.minDistance, this.orbit.maxDistance);
+      const direction = position.clone().sub(target).normalize();
+      position.copy(target).addScaledVector(direction, distance);
+    }
+    return { position: position.toArray(), target: target.toArray() };
+  }
+  reportCamera() { this.callbacks.onCamera?.(this.getCamera()); }
+  reportView() {
+    const direction = this.camera.position.clone().sub(this.orbit.target).normalize();
+    const view = Object.entries(VIEW_DIRECTIONS).find(([, vector]) => direction.dot(new THREE.Vector3(...vector).normalize()) > 1 - 1e-8)?.[0] || 'custom';
+    if (view !== this.reportedView) { this.reportedView = view; this.callbacks.onView?.(view); }
+  }
+  settleOrbit() {
+    // Flush residual damping before assigning an exact preset direction.
+    this.cameraSettling = false;
+    const damping = this.orbit.enableDamping;
+    this.orbit.enableDamping = false;
+    this.orbit.update();
+    this.orbit.enableDamping = damping;
   }
   setCamera(camera) {
+    this.settleOrbit();
     this.camera.position.fromArray(camera.position);
     this.orbit.target.fromArray(camera.target);
+    if (this.camera.isOrthographicCamera) {
+      const distance = clamp(this.camera.position.distanceTo(this.orbit.target), this.orbit.minDistance, this.orbit.maxDistance);
+      this.orthographicHeight = 2 * distance * Math.tan(radians(this.perspectiveCamera.fov / 2));
+      this.camera.zoom = 1;
+      this.updateCameraFrusta();
+    }
     this.orbit.update();
+    this.reportView();
+  }
+  setProjection(projection, report = true) {
+    const orthographic = projection === 'orthographic';
+    if (!orthographic && projection !== 'perspective') return;
+    if (this.camera.isOrthographicCamera === orthographic) return;
+    this.settleOrbit();
+    const previous = this.camera;
+    const distance = previous.position.distanceTo(this.orbit.target);
+    if (orthographic) {
+      // Match the visible height at the target plane to avoid a visual jump.
+      this.orthographicHeight = 2 * distance * Math.tan(radians(this.perspectiveCamera.fov / 2)) / previous.zoom;
+      this.orthographicCamera.zoom = 1;
+      this.orthographicCamera.position.copy(previous.position);
+      this.camera = this.orthographicCamera;
+    } else {
+      const height = (previous.top - previous.bottom) / previous.zoom;
+      const equivalentDistance = height / (2 * Math.tan(radians(this.perspectiveCamera.fov / 2)));
+      const direction = previous.position.clone().sub(this.orbit.target).normalize();
+      this.perspectiveCamera.position.copy(this.orbit.target).addScaledVector(direction, clamp(equivalentDistance, this.orbit.minDistance, this.orbit.maxDistance));
+      this.camera = this.perspectiveCamera;
+    }
+    this.camera.up.copy(previous.up);
+    this.camera.quaternion.copy(previous.quaternion);
+    this.updateCameraFrusta();
+    this.orbit.object = this.camera;
+    this.gizmo.camera = this.camera;
+    this.orbit.update();
+    this.callbacks.onProjection?.(orthographic ? 'orthographic' : 'perspective');
+    this.reportView();
+    if (report) this.reportCamera();
   }
   setWorld(world) {
     this.scene.background = new THREE.Color(world.background);
@@ -453,10 +583,27 @@ export class Viewport {
     if (!node || !node.visible) return false;
     const box = new THREE.Box3().setFromObject(node);
     if (box.isEmpty()) return false;
+    this.settleOrbit();
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const distance = Math.max(size.x, size.y, size.z, 1) * 2.6;
     const direction = this.camera.position.clone().sub(this.orbit.target).normalize();
+    if (this.camera.isOrthographicCamera) {
+      // Fit the projected bounding box in both viewport dimensions. Zooming
+      // an orthographic camera changes its frustum, not its distance.
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+      const corners = [];
+      for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) corners.push(new THREE.Vector3(x, y, z));
+      const horizontal = corners.map((corner) => corner.dot(right));
+      const vertical = corners.map((corner) => corner.dot(up));
+      const aspect = this.host.clientWidth / Math.max(this.host.clientHeight, 1);
+      const width = Math.max(...horizontal) - Math.min(...horizontal);
+      const height = Math.max(...vertical) - Math.min(...vertical);
+      this.orthographicHeight = Math.max(height, width / Math.max(aspect, 0.001), 0.1) * 1.35;
+      this.camera.zoom = 1;
+      this.updateCameraFrusta();
+    }
     this.orbit.target.copy(center);
     this.camera.position.copy(center).addScaledVector(direction, distance);
     this.orbit.update();
@@ -464,12 +611,14 @@ export class Viewport {
     return true;
   }
   setView(view) {
+    const direction = VIEW_DIRECTIONS[view];
+    if (!direction) return;
+    this.settleOrbit();
+    this.setProjection(view === 'perspective' ? 'perspective' : 'orthographic', false);
     const distance = Math.max(this.camera.position.distanceTo(this.orbit.target), 3);
-    const direction = {
-      perspective: [1, 0.75, 1.2], front: [0, 0.001, 1], top: [0, 1, 0.001], right: [1, 0.001, 0],
-    }[view] || [1, 0.75, 1.2];
     this.camera.position.copy(this.orbit.target).add(new THREE.Vector3(...direction).normalize().multiplyScalar(distance));
     this.orbit.update();
+    this.reportView();
     this.reportCamera();
   }
   async exportGlb() {

@@ -7,6 +7,8 @@ export const MAX_PROJECT_MESH_VERTICES = 24000;
 export const MAX_PROJECT_MESH_FACES = 48000;
 export const MAX_FACE_CORNERS = 8;
 const MAX_COORDINATE = 1000;
+export const MIN_PROPORTIONAL_RADIUS = 0.01;
+export const MAX_PROPORTIONAL_RADIUS = 1000;
 const AREA_EPSILON = 1e-16;
 
 const fail = (message) => { throw new Error(`Invalid mesh: ${message}`); };
@@ -153,6 +155,38 @@ export function moveVertex(mesh, vertexIndex, axis, value) {
   const position = [...mesh.vertices[vertexIndex]];
   position[axis] = value;
   return moveVertexTo(mesh, vertexIndex, position);
+}
+
+// Weights are calculated in the original object's local space, not along mesh
+// edges. Disconnected or hidden-by-the-surface vertices can therefore move too.
+// Callers use the same original mesh for every update of a continuous drag.
+export function proportionalWeights(mesh, vertexIndex, radius, falloff = 'smooth') {
+  if (!Number.isInteger(vertexIndex) || !mesh.vertices[vertexIndex]) throw new Error('Select a vertex first.');
+  if (!Number.isFinite(radius) || radius < MIN_PROPORTIONAL_RADIUS || radius > MAX_PROPORTIONAL_RADIUS) throw new Error(`Influence radius must be between ${MIN_PROPORTIONAL_RADIUS} and ${MAX_PROPORTIONAL_RADIUS} local units.`);
+  if (!['smooth', 'linear', 'sharp'].includes(falloff)) throw new Error('Choose a valid falloff.');
+  const center = mesh.vertices[vertexIndex];
+  return mesh.vertices.map((vertex) => {
+    const distance = Math.hypot(...vertex.map((coordinate, axis) => coordinate - center[axis]));
+    if (distance >= radius) return 0;
+    const t = 1 - distance / radius;
+    if (falloff === 'smooth') return t * t * (3 - 2 * t);
+    return falloff === 'sharp' ? t * t : t;
+  });
+}
+
+export function moveVertexProportionally(mesh, vertexIndex, position, radius, falloff = 'smooth') {
+  const weights = proportionalWeights(mesh, vertexIndex, radius, falloff);
+  if (!Array.isArray(position) || position.length !== 3 || position.some((value) => typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > MAX_COORDINATE)) throw new Error('Vertex coordinates must be between -1000 and 1000.');
+  const start = mesh.vertices[vertexIndex];
+  const delta = position.map((value, axis) => value - start[axis]);
+  const result = copyMesh(mesh);
+  result.vertices = mesh.vertices.map((vertex, index) => {
+    if (index === vertexIndex) return [...position];
+    if (weights[index] === 0) return [...vertex];
+    return vertex.map((value, axis) => value + delta[axis] * weights[index]);
+  });
+  if (result.vertices.some((vertex) => vertex.some((value) => !Number.isFinite(value) || Math.abs(value) > MAX_COORDINATE))) throw new Error('This move would take a vertex outside -1000 to 1000 local units.');
+  return validateMesh(result);
 }
 
 export function extrudeFace(mesh, faceIndex, distance) {
