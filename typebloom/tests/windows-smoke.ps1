@@ -27,6 +27,8 @@ public static class Native {
   // C# when a genuine null wildcard is needed.
   public static IntPtr FindClass(string cls) { return FindWindow(cls, null); }
   public static IntPtr FindTitle(string title) { return FindWindow(null, title); }
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
+  public static IntPtr FindButton(IntPtr parent, string title) { return FindWindowEx(parent, IntPtr.Zero, "Button", title); }
   [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr window, int id);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr window, uint msg, IntPtr wp, StringBuilder lp);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr window, uint msg, IntPtr wp, IntPtr lp);
@@ -121,11 +123,23 @@ function Activate-Target([IntPtr]$targetWindow, [int]$id = 201) {
   Wait-For { [Native]::GetForegroundWindow() -eq $targetWindow } 'test input window did not become active'
 }
 function Tap-Many([byte]$key, [int]$count) { for ($i = 0; $i -lt $count; $i++) { [Native]::Tap($key) } }
-function Close-Dialog([IntPtr]$dialog, [int]$id) {
-  try { Wait-For { [Native]::GetDlgItem($dialog, $id) -ne [IntPtr]::Zero } "dialog button $id" } catch {
-    throw "Dialog $dialog button $id unavailable: $([Native]::DescribeChildren($dialog))"
+function Save-WidgetScreenshot([IntPtr]$widget, [string]$path) {
+  if (-not $path) { return }
+  Add-Type -AssemblyName System.Drawing
+  $rect = New-Object Native+RECT
+  Assert ([Native]::GetWindowRect($widget, [ref]$rect)) 'Cannot capture widget rect.'
+  $bitmap = [System.Drawing.Bitmap]::new($rect.Right - $rect.Left, $rect.Bottom - $rect.Top)
+  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+  try {
+    $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+    $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+  } finally { $graphics.Dispose(); $bitmap.Dispose() }
+}
+function Close-Dialog([IntPtr]$dialog, [string]$label) {
+  try { Wait-For { [Native]::FindButton($dialog, $label) -ne [IntPtr]::Zero } "dialog button $label" } catch {
+    throw "Dialog $dialog button $label unavailable: $([Native]::DescribeChildren($dialog))"
   }
-  [Native]::Click((Control $dialog $id))
+  [Native]::Click([Native]::FindButton($dialog, $label))
 }
 
 # Preserve the caller's three preferences if these tests are run outside CI.
@@ -178,6 +192,7 @@ try {
     Assert ($name -eq $entry[1]) "Accessible name mismatch for $($entry[0]): $name"
   }
   Write-Host 'Ready, floating, and named accessible controls: OK'
+  Save-WidgetScreenshot $widget $Screenshot
 
   $targetProcess = Start-Process -FilePath (Resolve-Path $Target).Path -PassThru
   Wait-For { [Native]::FindTitle('TypeBloom Test Input') -ne [IntPtr]::Zero } 'separate input window'
@@ -190,17 +205,17 @@ try {
   Click-Control $widget 1004
   Wait-For { [Native]::FindWindow('#32770', 'TypeBloom Privacy') -ne [IntPtr]::Zero } 'privacy dialog'
   $dialog = [Native]::FindWindow('#32770', 'TypeBloom Privacy')
-  Close-Dialog $dialog 1
+  Close-Dialog $dialog 'OK'
   Wait-For { [Native]::FindWindow('#32770', 'TypeBloom Privacy') -eq [IntPtr]::Zero } 'privacy dialog close'
   Click-Control $widget 1001
   Wait-For { [Native]::FindWindow('#32770', 'Start tracking?') -ne [IntPtr]::Zero } 'consent prompt'
   $dialog = [Native]::FindWindow('#32770', 'Start tracking?')
-  Close-Dialog $dialog 2
+  Close-Dialog $dialog 'Cancel'
   Wait-For { [Native]::FindWindow('#32770', 'Start tracking?') -eq [IntPtr]::Zero } 'consent cancellation'
   Assert ((Text $widget 1001) -eq 'Start tracking') 'Cancel must leave tracking off.'
   Click-Control $widget 1001
   Wait-For { [Native]::FindWindow('#32770', 'Start tracking?') -ne [IntPtr]::Zero } 'consent prompt again'
-  Close-Dialog ([Native]::FindWindow('#32770', 'Start tracking?')) 1
+  Close-Dialog ([Native]::FindWindow('#32770', 'Start tracking?')) 'OK'
   Wait-For { (Text $widget 1001) -eq 'Pause tracking' } 'hook installed and active'
   Assert ((Text $widget 1101) -match '^Live') 'Live state missing.'
   Write-Host 'Informed consent and real hook installation: OK'
@@ -221,17 +236,7 @@ try {
   Wait-For { (Text $widget 1103) -eq '24 keys in the last 15 seconds' } 'password-field keys contribute only to the count'
   Write-Host 'Cross-app counts, shortcut filtering, password-field limitation, and WPM: OK'
 
-  if ($Screenshot) {
-    Add-Type -AssemblyName System.Drawing
-    $rect = New-Object Native+RECT
-    Assert ([Native]::GetWindowRect($widget, [ref]$rect)) 'Cannot capture widget rect.'
-    $bitmap = [System.Drawing.Bitmap]::new($rect.Right - $rect.Left, $rect.Bottom - $rect.Top)
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    try {
-      $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
-      $bitmap.Save($Screenshot, [System.Drawing.Imaging.ImageFormat]::Png)
-    } finally { $graphics.Dispose(); $bitmap.Dispose() }
-  }
+  Save-WidgetScreenshot $widget $Screenshot
 
   Click-Control $widget 1001
   Wait-For { (Text $widget 1001) -eq 'Resume tracking' } 'pause'
