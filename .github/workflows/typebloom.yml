@@ -1,0 +1,116 @@
+name: TypeBloom
+
+run-name: TypeBloom · ${{ github.ref_name }}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'typebloom/**'
+      - '.github/workflows/typebloom.yml'
+  pull_request:
+    paths:
+      - 'typebloom/**'
+      - '.github/workflows/typebloom.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 'typebloom-${{ github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  meter:
+    name: Rolling meter and keyboard policy tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run portable C++ tests with address and undefined-behavior sanitizers
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Wpedantic -fsanitize=address,undefined -fno-omit-frame-pointer -Itypebloom/src typebloom/tests/meter_test.cpp -o /tmp/typebloom-meter-test
+          /tmp/typebloom-meter-test
+
+  windows:
+    name: Windows x64 app and real keyboard-hook smoke test
+    runs-on: windows-latest
+    needs: meter
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: typebloom
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build with the Windows SDK and statically linked MSVC runtime
+        shell: pwsh
+        run: |
+          cmake -S . -B out/build -A x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build out/build --config Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir out/build -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Stage the portable app, instructions, license, and corresponding source
+        shell: pwsh
+        run: |
+          $folder = 'out/TypeBloom-windows-x64'
+          New-Item -ItemType Directory -Force "$folder/SOURCE" | Out-Null
+          Copy-Item 'out/build/Release/TypeBloom.exe' "$folder/TypeBloom.exe"
+          Copy-Item INSTALL.txt, README.md "$folder/"
+          Copy-Item ../LICENSE "$folder/TYPEBLOOM-LICENSE.txt"
+          Copy-Item CMakeLists.txt "$folder/SOURCE/"
+          Copy-Item src, assets, tests "$folder/SOURCE/" -Recurse
+          foreach ($item in @('TypeBloom.exe', 'INSTALL.txt', 'README.md', 'TYPEBLOOM-LICENSE.txt', 'SOURCE/CMakeLists.txt', 'SOURCE/src/main.cpp', 'SOURCE/src/meter.h', 'SOURCE/assets/typebloom.ico', 'SOURCE/assets/typebloom.manifest')) {
+            if (-not (Test-Path (Join-Path $folder $item))) { throw "Missing package file: $item" }
+          }
+          $info = (Get-Item "$folder/TypeBloom.exe").VersionInfo
+          $info | Format-List CompanyName,ProductName,FileDescription,FileVersion
+          if ($info.CompanyName -ne 'Emmanuel Suah' -or $info.ProductName -ne 'TypeBloom' -or -not $info.FileVersion.StartsWith('1.0.0')) { throw 'Incorrect Windows metadata.' }
+      - name: Exercise consent, floating UI, privacy, and the real cross-app hook
+        shell: pwsh
+        env:
+          TYPEBLOOM_SCREENSHOT: ${{ runner.temp }}\typebloom-widget.png
+        run: |
+          ./tests/windows-smoke.ps1 -App out/TypeBloom-windows-x64/TypeBloom.exe -Target out/build/Release/typebloom_test_target.exe -Screenshot $env:TYPEBLOOM_SCREENSHOT
+      - name: Calculate executable checksum
+        id: hashes
+        shell: pwsh
+        run: |
+          $folder = 'out/TypeBloom-windows-x64'
+          $hash = (Get-FileHash -Algorithm SHA256 "$folder/TypeBloom.exe").Hash.ToLowerInvariant()
+          "$hash  TypeBloom.exe" | Set-Content "$folder/SHA256SUMS.txt" -Encoding ascii
+          "exe=$hash" >> $env:GITHUB_OUTPUT
+          $signature = (Get-AuthenticodeSignature "$folder/TypeBloom.exe").Status
+          Add-Content $env:GITHUB_STEP_SUMMARY '### TypeBloom Windows x64 checksum'
+          Add-Content $env:GITHUB_STEP_SUMMARY "- TypeBloom.exe: ``$hash``"
+          Add-Content $env:GITHUB_STEP_SUMMARY "- Authenticode status: $signature. This app is unsigned."
+          Add-Content $env:GITHUB_STEP_SUMMARY 'A checksum identifies this build; it does not establish its publisher or safety.'
+      - name: Upload portable Windows widget
+        uses: actions/upload-artifact@v4
+        with:
+          name: typebloom-windows-x64
+          path: typebloom/out/TypeBloom-windows-x64/
+          if-no-files-found: error
+          compression-level: 6
+      - name: Upload widget screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: typebloom-windows-ui
+          path: ${{ runner.temp }}\typebloom-widget.png
+          if-no-files-found: error
+      - name: Download the uploaded widget for integrity verification
+        uses: actions/download-artifact@v4
+        with:
+          name: typebloom-windows-x64
+          path: ${{ runner.temp }}\typebloom-integrity
+      - name: Verify the downloaded executable
+        shell: pwsh
+        env:
+          EXPECTED_EXE: ${{ steps.hashes.outputs.exe }}
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'typebloom-integrity'
+          $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $folder 'TypeBloom.exe')).Hash.ToLowerInvariant()
+          $line = (Get-Content (Join-Path $folder 'SHA256SUMS.txt'))[0]
+          if ($actual -ne $env:EXPECTED_EXE -or $line -ne "$actual  TypeBloom.exe") { throw 'Downloaded artifact does not match the staged executable.' }

@@ -20,6 +20,7 @@
 !/screen-forge
 !/keybloom
 !/forma-studio
+!/typebloom
 !/website
 !/src
 !/tests
@@ -83,6 +84,10 @@
 /forma-studio/app/bundle.js
 /forma-studio/out/
 /forma-studio/test-results/
+
+# TypeBloom binaries and test output are built in CI
+/typebloom/out/
+/typebloom/test-results/
 
 # Website development dependencies and test output
 /website/node_modules/

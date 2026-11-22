@@ -16,9 +16,9 @@ const goodRun = {
 const goodArtifact = { id: 456, name: 'obs-dockbloom-windows-x64', expired: false, expires_at: '2030-01-01T00:00:00Z', digest };
 
 test('the complete catalog has unique products, assets and valid source workflows', async () => {
-  assert.equal(PRODUCTS.length, 14);
+  assert.equal(PRODUCTS.length, 15);
   assert.deepEqual(CATEGORIES.map((category) => category.id), ['all', 'obs', 'apps', 'photoshop']);
-  assert.deepEqual(Object.fromEntries(['obs', 'apps', 'photoshop'].map((category) => [category, PRODUCTS.filter((product) => product.category === category).length])), { obs: 9, apps: 3, photoshop: 2 });
+  assert.deepEqual(Object.fromEntries(['obs', 'apps', 'photoshop'].map((category) => [category, PRODUCTS.filter((product) => product.category === category).length])), { obs: 9, apps: 4, photoshop: 2 });
   for (const field of ['id', 'name', 'asset']) assert.equal(new Set(PRODUCTS.map((product) => product[field])).size, PRODUCTS.length, `${field} must be unique`);
   for (const product of PRODUCTS) {
     assert.match(product.id, /^[a-z0-9-]+$/);
@@ -107,6 +107,9 @@ test('important compatibility and installation limits remain visible', () => {
   assert.match(get('presence-guard').note, /OBS 33 has not been verified/i);
   assert.match(get('screenforge').note, /ffmpeg/i);
   assert.match(get('keybloom').note, /portable folder/i);
+  assert.match(get('typebloom').note, /Password fields are not detected/i);
+  assert.match(get('typebloom').detail, /starts paused/i);
+  assert.match(get('typebloom').note, /unsigned/i);
   assert.match(get('forma-studio').detail, /basic face and vertex editing/i);
   assert.match(get('forma-studio').note, /no AI, sculpting or rigging/i);
   assert.match(get('forma-studio').detail, /proportional movement, orthographic views/i);

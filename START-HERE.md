@@ -368,3 +368,16 @@ source, so check the downloaded build's version.
 See [`forma-studio/README.md`](forma-studio/README.md) for instructions and
 limits. The executable is unsigned. A checksum identifies a build, not its
 publisher or safety.
+
+## The floating typing-speed widget: TypeBloom
+
+[TypeBloom](typebloom/README.md) is a small, native Windows desktop window that
+estimates typing speed while you work in other apps. Download **Actions →
+TypeBloom → a successful run → `typebloom-windows-x64`**, extract the ZIP, and
+run `TypeBloom.exe`. Drag the header to move it; it is pinned on top by default.
+
+It starts paused and asks before tracking. **Pause before sensitive input:**
+password fields are not detected, so their key presses can affect the visible
+number. No text or key codes are stored or transmitted. The executable is
+unsigned; see the [guide](typebloom/README.md) for privacy, limitations, and
+SmartScreen information.

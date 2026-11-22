@@ -1,0 +1,15 @@
+TYPEBLOOM 1.0 - WINDOWS 11 / WINDOWS 10 x64
+
+1. Extract the downloaded ZIP into a folder you trust, such as Documents\TypeBloom.
+2. Double-click TypeBloom.exe. No installer, account, Node.js, or internet connection is required.
+3. Drag the top of the widget to move it. It is pinned above normal windows by default.
+4. The widget starts PAUSED. Choose Start tracking and read the privacy prompt. If you agree, click OK, then type in another app.
+5. Use Pause tracking before typing sensitive information, Reset to clear the current reading, and the X to quit completely. Use the bottom-left pin control to toggle always-on-top.
+
+PRIVACY: While live, TypeBloom observes typing-like key presses across ordinary apps. It keeps only recent timing/counts in memory and does not save or send typed text, key codes, or window titles. It cannot detect password fields: their key presses can affect the displayed number. Pause before passwords or other sensitive input. Closing removes the hook. The app saves only its position and pin preference under HKCU\Software\TypeBloom. Read README.md or the widget's Privacy button for details.
+
+The WPM is an estimate (five counted keys per word), not an accuracy test. Shortcuts are generally excluded; IMEs, accessibility input, some keyboard layouts, secure desktops, and full-screen or elevated apps may not be measured accurately. The widget is a normal floating desktop window, not a Windows Widgets panel item.
+
+This app is unsigned. Windows SmartScreen may warn about an unknown publisher. Review the source and download, and compare the SHA-256 in SHA256SUMS.txt to the matching Actions run; a checksum does not prove the app is safe or digitally signed. Do not disable Windows security globally.
+
+Source and licensing are included. See README.md for controls, limitations, troubleshooting and build instructions.
