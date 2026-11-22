@@ -16,7 +16,7 @@ const { version } = require('../package.json');
       FileDescription: 'Forma Studio — offline 3D scene and motion editor',
       InternalName: 'FormaStudio', OriginalFilename: 'FormaStudio.exe',
     },
-    ignore: [/^\/(out|test-results|tests|scripts)(\/|$)/, /^\/app\/(editor|model|viewport)\.js$/],
+    ignore: [/^\/(out|test-results|tests|scripts)(\/|$)/, /^\/app\/(editor|mesh|model|viewport)\.js$/],
   });
   for (const folder of output) await stageRelease(root, folder);
   console.log('Packaged:', output.join(', '));

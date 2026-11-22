@@ -16,7 +16,7 @@ test('portable staging preserves Electron notices and includes the source needed
     assert.equal(await readFile(join(folder, 'LICENSE'), 'utf8'), 'Existing Electron license');
     assert.deepEqual(await readFile(join(folder, 'FORMA-LICENSE.txt')), await readFile(join(root, 'LICENSE')));
     for (const file of ['INSTALL.txt', 'README.md', 'THREE-LICENSE.txt', 'SOURCE/INSTALL.txt', 'SOURCE/LICENSE',
-      'SOURCE/package.json', 'SOURCE/package-lock.json', 'SOURCE/app/editor.js', 'SOURCE/app/model.js',
+      'SOURCE/package.json', 'SOURCE/package-lock.json', 'SOURCE/app/editor.js', 'SOURCE/app/mesh.js', 'SOURCE/app/model.js',
       'SOURCE/app/viewport.js', 'SOURCE/desktop/main.cjs', 'SOURCE/scripts/stage-release.cjs',
       'SOURCE/app/assets/fonts/DM-SANS-LICENSE.txt', 'SOURCE/app/assets/fonts/PLUS-JAKARTA-SANS-LICENSE.txt']) {
       await access(join(folder, file));

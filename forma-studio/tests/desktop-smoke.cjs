@@ -77,6 +77,7 @@ async function launch(exe, env) {
   const env = { ...process.env, FORMA_TEST_DATA_DIR: path.join(temp, 'profile'), FORMA_TEST_SOFTWARE_GL: '1' };
   const sceneA = path.join(temp, 'scene A.forma'), sceneB = path.join(temp, 'scene B.forma');
   const invalid = path.join(temp, 'invalid.forma'), large = path.join(temp, 'large.forma');
+  const legacyFile = path.join(temp, 'legacy-v1.forma'), migratedFile = path.join(temp, 'migrated-v2.forma');
   const glb = path.join(temp, 'snapshot.glb'), png = path.join(temp, 'viewport.png');
   let desktop;
   try {
@@ -107,12 +108,34 @@ async function launch(exe, env) {
     assert.equal(await page.getByRole('spinbutton', { name: 'Position X' }).inputValue(), '3');
     if (process.env.FORMA_FEATURE_SCREENSHOT) await page.screenshot({ path: process.env.FORMA_FEATURE_SCREENSHOT });
 
+    phase = 'editable mesh operations';
+    await page.getByRole('tab', { name: 'Model', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+    assert.equal(await page.locator('#mesh-count').textContent(), '8 vertices · 6 faces');
+    await commit(page.getByRole('spinbutton', { name: 'Face number' }), 2);
+    await page.getByRole('button', { name: 'Extrude face' }).click();
+    await page.getByRole('button', { name: 'Inset face' }).click();
+    assert.equal(await page.locator('#mesh-count').textContent(), '16 vertices · 14 faces');
+    await page.getByRole('button', { name: 'Subdivide mesh' }).click();
+    assert.equal(await page.locator('#mesh-count').textContent(), '58 vertices · 56 faces');
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await page.getByRole('button', { name: 'Vertex', exact: true }).click();
+    await commit(page.getByRole('spinbutton', { name: 'Vertex number' }), 7);
+    await commit(page.getByRole('spinbutton', { name: 'Vertex X' }), 1);
+    await page.getByRole('checkbox', { name: 'Smooth mesh shading' }).check();
+    if (process.env.FORMA_MESH_SCREENSHOT) await page.screenshot({ path: process.env.FORMA_MESH_SCREENSHOT });
+    await page.getByRole('tab', { name: 'Object', exact: true }).click();
+
     // Save, then overwrite the same file via the native bridge (atomic rename).
     phase = 'save and overwrite';
     await choose(desktop, 'savePath', sceneA);
     await page.locator('#save-project').click();
     let project = await readProject(sceneA, (value) => value.objects.length === 5);
     let cube = project.objects.find((object) => object.name === 'Cube 01');
+    assert.equal(project.version, 2);
+    assert.equal(cube.type, 'mesh'); assert.equal(cube.shading, 'smooth');
+    assert.equal(cube.mesh.vertices.length, 16); assert.equal(cube.mesh.faces.length, 14);
+    assert.equal(cube.mesh.vertices[6][0], 1);
     assert.deepEqual(cube.keyframes.map((key) => key.frame), [0, 24]);
     assert.deepEqual({ mode: cube.array.mode, count: cube.array.count }, { mode: 'radial', count: 4 });
     await commit(page.locator('#object-name'), 'Saved cube A');
@@ -151,6 +174,13 @@ async function launch(exe, env) {
     await page.getByRole('button', { name: 'Select Saved cube A' }).click();
     await commit(page.getByRole('spinbutton', { name: 'Current frame' }), 12);
     assert.equal(await page.getByRole('spinbutton', { name: 'Position X' }).inputValue(), '3');
+    await page.getByRole('tab', { name: 'Model', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+    assert.equal(await page.locator('#mesh-count').textContent(), '16 vertices · 14 faces');
+    assert.equal(await page.getByRole('checkbox', { name: 'Smooth mesh shading' }).isChecked(), true);
+    await page.getByRole('button', { name: 'Vertex', exact: true }).click();
+    await commit(page.getByRole('spinbutton', { name: 'Vertex number' }), 7);
+    assert.equal(await page.getByRole('spinbutton', { name: 'Vertex X' }).inputValue(), '1');
 
     await choose(desktop, 'savePath', glb);
     await exportAction(page, '[data-export=glb]');
@@ -162,7 +192,11 @@ async function launch(exe, env) {
     const jsonLength = glbBytes.readUInt32LE(12);
     const gltf = JSON.parse(glbBytes.subarray(20, 20 + jsonLength).toString('utf8').trim());
     assert.ok(gltf.nodes.filter((node) => Number.isInteger(node.mesh)).length >= 8, 'array copies must be baked into GLB');
-    assert.equal(gltf.nodes.find((node) => node.name === 'Saved cube A').translation[0], 3, 'GLB must reflect the interpolated current frame');
+    const cubeNode = gltf.nodes.find((node) => node.name === 'Saved cube A');
+    assert.equal(cubeNode.translation[0], 3, 'GLB must reflect the interpolated current frame');
+    const cubeMeshNode = cubeNode.children.map((index) => gltf.nodes[index]).find((node) => Number.isInteger(node.mesh));
+    const position = gltf.meshes[cubeMeshNode.mesh].primitives[0].attributes.POSITION;
+    assert.equal(gltf.accessors[position].count, 16, 'GLB contains the edited smooth mesh');
     assert.equal(gltf.animations, undefined, 'GLB is a current-frame snapshot, not animation');
     await choose(desktop, 'savePath', png);
     await exportAction(page, '[data-export=png]');
@@ -170,6 +204,26 @@ async function launch(exe, env) {
     const pngBytes = await fs.readFile(png);
     assert.equal(pngBytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
     assert.ok(pngBytes.readUInt32BE(16) > 200 && pngBytes.readUInt32BE(20) > 100);
+
+    phase = 'version-1 migration and safe first save';
+    const { createStarterProject } = await import('../app/model.js');
+    const legacy = createStarterProject(); legacy.version = 1; legacy.name = 'Old project';
+    const legacyContents = JSON.stringify(legacy, null, 2);
+    await fs.writeFile(legacyFile, legacyContents, 'utf8');
+    await choose(desktop, 'openPath', legacyFile);
+    await menuAction(page, '#open-project');
+    await waitStatus(page, 'first save');
+    const saveCount = (await desktop.evaluate(() => globalThis.__formaTestDialogs.saves.length));
+    await page.locator('#save-project').click(); // Cancel the first Save As.
+    await eventually(async () => (await desktop.evaluate(() => globalThis.__formaTestDialogs.saves.length)) === saveCount + 1, 'canceled migration save dialog');
+    await page.waitForFunction(() => !document.querySelector('#save-project').disabled);
+    await choose(desktop, 'savePath', migratedFile);
+    await page.locator('#save-project').click();
+    const migrated = await readProject(migratedFile);
+    assert.equal(migrated.version, 2); assert.equal(migrated.name, 'Old project');
+    assert.equal(await fs.readFile(legacyFile, 'utf8'), legacyContents, 'opening and saving must not overwrite the legacy file by default');
+    dialogs = await desktop.evaluate(() => globalThis.__formaTestDialogs);
+    assert.ok(dialogs.saves.slice(-2).every((entry) => entry.defaultPath.endsWith('-v2.forma')));
     assert.deepEqual(errors, []);
     await desktop.close(); desktop = null;
 
@@ -183,6 +237,9 @@ async function launch(exe, env) {
     await page.getByRole('button', { name: 'Select Saved cube A' }).click();
     await commit(page.getByRole('spinbutton', { name: 'Current frame' }), 12);
     assert.equal(await page.getByRole('spinbutton', { name: 'Position X' }).inputValue(), '3');
+    await page.getByRole('tab', { name: 'Model', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+    assert.equal(await page.locator('#mesh-count').textContent(), '16 vertices · 14 faces');
 
     // Closing a dirty window invokes the host's warning. Cancel preserves the
     // scene; discard closes the real BrowserWindow.
@@ -199,7 +256,7 @@ async function launch(exe, env) {
     assert.deepEqual(errors, []);
     await desktop.close().catch(() => {});
     desktop = null;
-    console.log('Packaged Windows app: sandbox, offline renderer, editing, arrays, animation, save/overwrite/open, size limits, GLB/PNG, restart and unsaved-close protection passed.');
+    console.log('Packaged Windows app: sandbox, offline renderer, mesh editing, arrays, animation, project migration and save/open, size limits, GLB/PNG, restart and unsaved-close protection passed.');
   } finally {
     if (desktop) {
       await choose(desktop, 'confirm', 1).catch(() => {});

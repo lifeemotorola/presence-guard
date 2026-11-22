@@ -349,11 +349,12 @@ build but is not a digital signature.
 
 ## The early 3D scene editor: Forma Studio
 
-`forma-studio/` is the first stage of an offline Windows 3D suite. Assemble
-primitive shapes, adjust materials and lighting, use linear/radial arrays,
-animate object transforms, and export a current-frame GLB or viewport PNG. It
-is an early editor, not a Blender replacement: no AI, mesh editing, rigging, or
-ray tracing is included.
+`forma-studio/` is an early stage of an offline Windows 3D suite. Assemble
+shapes, edit basic faces and vertices, adjust materials and lighting, use
+linear/radial arrays, animate object transforms, and export a current-frame GLB
+or viewport PNG. It is not a Blender replacement: there is no AI, sculpting,
+rigging, or ray tracing. Version 0.2 projects cannot be opened in 0.1; keep a
+separate copy of older projects and check the downloaded build's version.
 
 | | Forma Studio (`forma-studio/`) |
 |---|---|

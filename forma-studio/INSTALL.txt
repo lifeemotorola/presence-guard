@@ -1,8 +1,8 @@
-FORMA STUDIO 0.1 — WINDOWS QUICK START
+FORMA STUDIO 0.2 — WINDOWS QUICK START
 By Emmanuel Suah
 
 Forma Studio is an early offline 3D scene editor. It is not Blender and does
-not yet contain AI, mesh editing, rigging, or a ray-traced renderer.
+not include AI, sculpting, rigging, or a ray-traced renderer.
 
 REQUIREMENTS: Windows 10 or 11, 64-bit, a mouse, and a graphics driver with
 WebGL 2 support. Performance varies by GPU and scene complexity. No account
@@ -15,14 +15,23 @@ or subscription is needed after downloading the app.
 3. Select a starter object or add a shape from the left. Drag to orbit,
    right-drag to pan, scroll to zoom. Use the gizmo or Object inspector to
    move, rotate, and scale. Material controls color, roughness, and metalness.
-4. Enable Array on an object to create editable linear or radial repetitions.
-   Set a frame and Add keyframe; later transform edits on that object auto-key.
-5. Choose Save project to create a .forma project. Save often: there is NO
-   AUTOSAVE OR CLOUD BACKUP. File > Open project reopens a .forma file.
-6. Export > 3D model saves visible objects at the current frame as GLB. It
+4. To model a shape, select it, choose Model > Edit mesh, then pick a face or
+   vertex. Extrude and Inset act on one selected face. Drag a selected vertex's
+   gizmo or type its local coordinates. Subdivide splits the entire mesh
+   without smoothing it. Click Done to return to object mode. Undo reverses
+   edits and the original conversion. Dense meshes have size limits.
+5. Enable Array on an object for editable linear or radial repetitions. Mesh
+   edits change every copy. Set a frame and Add keyframe; later object-transform
+   edits auto-key. Mesh geometry itself is not animated.
+6. Choose Save project to create a .forma project. Save often: there is NO
+   AUTOSAVE OR CLOUD BACKUP. File > Open project reopens a .forma file. Version
+   0.2 can open 0.1 projects, but 0.1 cannot open 0.2 projects. The first save
+   of a 0.1 project asks for a new path: choose a different filename to keep
+   the original compatible with 0.1. Keep independent backups.
+7. Export > 3D model saves visible objects at the current frame as GLB. It
    does not export animation, camera, lights, or the studio floor. Export >
-   Viewport image saves a realtime PNG without editor grid or gizmos.
-7. Click ? in the app for shortcuts, and read README.md for the full guide,
+   Viewport image saves a realtime PNG without editor grid, gizmos or overlays.
+8. Click ? in the app for shortcuts, and read README.md for the full guide,
    limits, privacy details, build instructions, and third-party notices.
 
 WINDOWS SECURITY: This executable is unsigned; Windows may show a publisher

@@ -13,7 +13,7 @@ test('starter project round-trips without losing scene, materials, or camera', (
 test('invalid or future projects fail before replacing any scene', () => {
   const valid = createStarterProject();
   const cases = [
-    { ...valid, version: 2 }, { ...valid, format: 'other' }, { ...valid, objects: new Array(MAX_OBJECTS + 1).fill(valid.objects[0]) },
+    { ...valid, version: 3 }, { ...valid, format: 'other' }, { ...valid, objects: new Array(MAX_OBJECTS + 1).fill(valid.objects[0]) },
     { ...valid, timeline: { fps: 24, end: 0 } },
     { ...valid, objects: [valid.objects[0], valid.objects[0]] },
     { ...valid, objects: [{ ...valid.objects[0], type: 'javascript' }] },

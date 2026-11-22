@@ -1,16 +1,18 @@
 /* Forma Studio editor. Copyright (C) 2026 Emmanuel Suah. GPL-2.0-or-later. */
 import { createStarterProject, createObject, validateProject, evaluatedTransform, putKeyframe, clone, History, TYPE_LABELS, MAX_OBJECTS } from './model.js';
-import { Viewport } from './viewport.js';
+import { extrudeFace, insetFace, subdivideMesh, moveVertex, moveVertexTo } from './mesh.js';
+import { Viewport, primitiveToMesh } from './viewport.js';
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const format = (value) => Number(value.toFixed(2)).toString();
 const icon = (name) => `<svg aria-hidden="true"><use href="#i-${name}"></use></svg>`;
-const glyph = (type) => ({ 'rounded-box': 'cube', cube: 'cube', sphere: 'sphere', cylinder: 'cylinder', cone: 'cone', torus: 'torus', plane: 'plane', icosahedron: 'sphere' }[type]);
+const glyph = (type) => ({ 'rounded-box': 'cube', cube: 'cube', sphere: 'sphere', cylinder: 'cylinder', cone: 'cone', torus: 'torus', plane: 'plane', icosahedron: 'sphere', mesh: 'cube' }[type]);
 const state = {
   project: createStarterProject(), selectedId: 'starter-form', frame: 0,
   tab: 'object', tool: 'translate', playing: false, playStart: 0, playFrame: 0,
+  meshEdit: null, legacySource: false, documentId: 0,
   history: new History(), saved: '', nextId: 0, dragBefore: null, viewport: null,
 };
 state.saved = JSON.stringify(state.project);
@@ -31,6 +33,8 @@ function refreshDirty() {
   document.title = `${isDirty() ? '● ' : ''}${state.project.name} — Forma Studio`;
   $('#undo').disabled = state.history.past.length === 0;
   $('#redo').disabled = state.history.future.length === 0;
+  $('#save-project').disabled = saveInProgress;
+  $('#save-as').disabled = saveInProgress;
 }
 function stopPlayback() {
   if (!state.playing) return;
@@ -76,6 +80,8 @@ function redo() {
 function selectObject(id) {
   stopPlayback();
   state.selectedId = state.project.objects.some((object) => object.id === id) ? id : null;
+  if (state.meshEdit && state.meshEdit.id !== state.selectedId) state.meshEdit = null;
+  state.viewport?.setMeshEdit(state.meshEdit, false);
   state.viewport?.select(state.selectedId);
   renderObjectList();
   renderInspector();
@@ -85,19 +91,18 @@ function addShape(type) {
   if (state.project.objects.length >= MAX_OBJECTS) { say(`A scene can contain up to ${MAX_OBJECTS} objects.`); return; }
   const count = state.project.objects.filter((object) => object.type === type).length + 1;
   const id = `object-${Date.now().toString(36)}-${(++state.nextId).toString(36)}`;
-  change(() => {
+  if (change(() => {
     const object = createObject(type, id, `${TYPE_LABELS[type]} ${String(count).padStart(2, '0')}`);
     state.project.objects.push(object);
     state.selectedId = id;
-  });
-  say(`${TYPE_LABELS[type]} added. Use the move tool or inspector to position it.`);
+  })) say(`${TYPE_LABELS[type]} added. Use the move tool or inspector to position it.`);
 }
 function duplicateObject() {
   const source = selected();
   if (!source) return;
   if (state.project.objects.length >= MAX_OBJECTS) { say(`A scene can contain up to ${MAX_OBJECTS} objects.`); return; }
   const id = `object-${Date.now().toString(36)}-${(++state.nextId).toString(36)}`;
-  change(() => {
+  if (change(() => {
     const copy = clone(source);
     copy.id = id;
     copy.name = `${source.name.slice(0, 73)} copy`;
@@ -105,23 +110,30 @@ function duplicateObject() {
     for (const key of copy.keyframes) key.transform.position[0] = clamp(key.transform.position[0] + 1, -1000, 1000);
     state.project.objects.push(copy);
     state.selectedId = id;
-  });
-  say('Duplicated the selected object.');
+  })) say('Duplicated the selected object.');
 }
 function deleteObject() {
   const object = selected();
   if (!object) return;
-  change(() => {
+  if (change(() => {
     state.project.objects = state.project.objects.filter((item) => item.id !== object.id);
     state.selectedId = null;
-  });
-  say('Object deleted. Use Undo to bring it back.');
+  })) say('Object deleted. Use Undo to bring it back.');
 }
 function updateTransform(object, value) {
   if (object.keyframes.length) putKeyframe(object, state.frame, value);
   else object.transform = clone(value);
 }
+function reconcileMeshEdit() {
+  if (!state.meshEdit) return;
+  const object = selected();
+  if (!object || object.id !== state.meshEdit.id || object.type !== 'mesh' || !object.visible) { state.meshEdit = null; return; }
+  const size = state.meshEdit.component === 'face' ? object.mesh.faces.length : object.mesh.vertices.length;
+  if (!Number.isInteger(state.meshEdit.index) || state.meshEdit.index < 0 || state.meshEdit.index >= size) state.meshEdit.index = null;
+}
 function redraw() {
+  reconcileMeshEdit();
+  state.viewport?.setMeshEdit(state.meshEdit, false);
   state.viewport?.rebuild(state.project);
   state.viewport?.setFrame(state.frame);
   state.viewport?.select(state.selectedId);
@@ -195,8 +207,12 @@ function renderInspector() {
   const object = selected();
   $('#no-selection').hidden = Boolean(object) || state.tab === 'scene';
   $('#pane-object').hidden = state.tab !== 'object' || !object;
+  $('#pane-model').hidden = state.tab !== 'model' || !object;
   $('#pane-material').hidden = state.tab !== 'material' || !object;
   $('#pane-scene').hidden = state.tab !== 'scene';
+  $('#mesh-mode-indicator').hidden = !state.meshEdit;
+  if (state.meshEdit) $('#mesh-mode-kind').textContent = `${state.meshEdit.component.toUpperCase()} SELECT`;
+  for (const button of $$('[data-tool]')) button.disabled = Boolean(state.meshEdit);
   $('#project-name-input').value = state.project.name;
   $('#background-color').value = state.project.world.background;
   $('#background-value').textContent = state.project.world.background.toUpperCase();
@@ -217,6 +233,37 @@ function renderInspector() {
   $('#color-value').textContent = object.material.color.toUpperCase();
   $('#roughness').value = object.material.roughness; $('#roughness-value').textContent = object.material.roughness.toFixed(2);
   $('#metalness').value = object.material.metalness; $('#metalness-value').textContent = object.material.metalness.toFixed(2);
+  renderMeshInspector(object);
+}
+function renderMeshInspector(object) {
+  const edit = state.meshEdit;
+  $('#model-object-name').textContent = object.name;
+  $('#mesh-start').hidden = Boolean(edit);
+  $('#mesh-controls').hidden = !edit;
+  $('#enter-mesh-mode').disabled = !object.visible || !state.viewport;
+  $('#enter-mesh-mode').title = object.visible ? 'Edit the selected geometry' : 'Show this object before editing it';
+  $('#mesh-start-note').textContent = object.type === 'mesh' ? 'Resume editing the saved mesh.' : 'Converts the shape to editable geometry; conversion can be undone. Curved shapes use triangular faces.';
+  if (!edit || object.type !== 'mesh') return;
+  const isFace = edit.component === 'face', index = edit.index;
+  const count = isFace ? object.mesh.faces.length : object.mesh.vertices.length;
+  $('#mesh-count').textContent = `${object.mesh.vertices.length} vertices · ${object.mesh.faces.length} faces`;
+  $('#mesh-smooth').checked = object.shading === 'smooth';
+  for (const button of $$('[data-component]')) button.setAttribute('aria-pressed', String(button.dataset.component === edit.component));
+  $('#mesh-instruction').textContent = isFace ? 'Click a face in the viewport, or enter its number below.' : 'Click a vertex, then drag its local-axis gizmo or set its coordinates below.';
+  $('#mesh-component-label').textContent = isFace ? 'Face number' : 'Vertex number';
+  $('#mesh-component-number').max = count;
+  $('#mesh-component-number').value = Number.isInteger(index) ? String(index + 1) : '';
+  $('#face-controls').hidden = !isFace;
+  $('#vertex-controls').hidden = isFace;
+  $('#selected-face-label').textContent = isFace && Number.isInteger(index) ? `#${index + 1}` : 'NONE';
+  $('#selected-vertex-label').textContent = !isFace && Number.isInteger(index) ? `#${index + 1}` : 'NONE';
+  $('#extrude-face').disabled = !isFace || !Number.isInteger(index);
+  $('#inset-face').disabled = !isFace || !Number.isInteger(index);
+  for (const input of $$('#vertex-fields input')) {
+    const vertex = !isFace && Number.isInteger(index) ? object.mesh.vertices[index] : null;
+    input.disabled = !vertex;
+    input.value = vertex ? String(Number(vertex[Number(input.dataset.vertexAxis)].toFixed(6))) : '';
+  }
 }
 function renderTimeline() {
   const object = selected();
@@ -277,6 +324,71 @@ function setTool(tool) {
   for (const button of $$('[data-tool]')) { const active = button.dataset.tool === tool; button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active)); }
   state.viewport?.setTool(tool);
 }
+function setWorkspace(layout) {
+  for (const button of $$('[data-layout]')) {
+    const active = button.dataset.layout === layout;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  }
+  $('.center-panel').classList.toggle('animate-mode', layout === 'animate');
+  if (layout === 'model') state.tab = 'model';
+  else if (layout === 'layout') state.tab = 'object';
+  renderInspector();
+}
+function enterMeshMode() {
+  const object = selected();
+  if (!object || !object.visible || !state.viewport) { say('Select a visible object and make sure the 3D view is available.'); return; }
+  stopPlayback();
+  if (object.type !== 'mesh') {
+    try {
+      const mesh = primitiveToMesh(object.type);
+      const shading = ['rounded-box', 'sphere', 'torus'].includes(object.type) ? 'smooth' : 'flat';
+      if (!change(() => { object.type = 'mesh'; object.mesh = mesh; object.shading = shading; })) return;
+    } catch (error) { say(`Could not convert this shape: ${error.message}`); return; }
+  }
+  state.meshEdit = { id: state.selectedId, component: 'face', index: null, copyIndex: 0 };
+  setWorkspace('model');
+  redraw();
+  say('Edit mode: select a face or vertex. Changes affect every array copy.');
+}
+function exitMeshMode() {
+  if (!state.meshEdit) return;
+  state.meshEdit = null;
+  redraw();
+  say('Object mode. The edited mesh is kept in your project.');
+}
+function setMeshComponent(component) {
+  if (!state.meshEdit || !['face', 'vertex'].includes(component)) return;
+  state.meshEdit.component = component;
+  state.meshEdit.index = null;
+  state.meshEdit.copyIndex = 0;
+  state.viewport?.setMeshEdit(state.meshEdit);
+  renderInspector();
+}
+function setMeshSelection(index, copyIndex = 0) {
+  if (!state.meshEdit) return;
+  const object = selected();
+  const size = state.meshEdit.component === 'face' ? object.mesh.faces.length : object.mesh.vertices.length;
+  state.meshEdit.index = Number.isInteger(index) && index >= 0 && index < size ? index : null;
+  state.meshEdit.copyIndex = Number.isInteger(copyIndex) && copyIndex >= 0 ? copyIndex : 0;
+  state.viewport?.setMeshEdit(state.meshEdit);
+  renderInspector();
+}
+function applyFaceOperation(operation) {
+  const object = selected(), edit = state.meshEdit;
+  if (!object || !edit || edit.component !== 'face' || !Number.isInteger(edit.index)) { say('Select a face first.'); return; }
+  const value = operation === 'extrude' ? $('#extrude-distance').valueAsNumber : $('#inset-amount').valueAsNumber;
+  if (change(() => { object.mesh = operation === 'extrude' ? extrudeFace(object.mesh, edit.index, value) : insetFace(object.mesh, edit.index, value); })) {
+    say(operation === 'extrude' ? 'Face extruded. Use Undo to go back.' : 'Face inset. Use Undo to go back.');
+  }
+}
+function applySubdivision() {
+  const object = selected(); if (!object || !state.meshEdit) return;
+  if (change(() => { object.mesh = subdivideMesh(object.mesh); })) {
+    setMeshSelection(null);
+    say('Mesh subdivided linearly. Use Undo to go back.');
+  }
+}
 function safeName() {
   return state.project.name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').trim().replace(/[. ]+$/g, '').slice(0, 70) || 'Untitled scene';
 }
@@ -289,17 +401,24 @@ function download(bytes, filename, type) {
 async function saveProject(saveAs = false) {
   if (saveInProgress) { say('A save is already in progress.'); return false; }
   saveInProgress = true;
+  refreshDirty();
   try {
     if (state.viewport) state.project.camera = state.viewport.getCamera();
     const projectToSave = validateProject(state.project);
     const savedSnapshot = JSON.stringify(projectToSave);
     const text = JSON.stringify(projectToSave, null, 2);
+    const documentId = state.documentId, legacy = state.legacySource;
+    // A v2 save cannot be opened in 0.1. Ask for a new path by default so the
+    // original v1 project remains available to the older app.
+    const name = legacy ? `${safeName().slice(0, 65)}-v2` : safeName();
     if (window.forma) {
-      const result = await window.forma.saveProject(text, safeName(), saveAs);
+      const result = await window.forma.saveProject(text, name, saveAs || legacy);
       if (result.canceled) return false;
-    } else download(text, `${safeName()}.forma`, 'application/json');
-    // The native dialog and disk write are asynchronous. Do not mark edits
-    // made while the save was pending as saved or discard them on New/Open.
+    } else download(text, `${name}.forma`, 'application/json');
+    // Do not mark a different document or newer changes as saved if a native
+    // dialog was open while the user continued working.
+    if (documentId !== state.documentId) { say('Earlier project saved; the current scene is unchanged.'); return false; }
+    state.legacySource = false;
     state.saved = savedSnapshot;
     refreshDirty();
     if (isDirty()) { say('Project saved, but newer changes are not saved yet.'); return false; }
@@ -324,26 +443,30 @@ function confirmUnsaved() {
   });
 }
 async function newProject() {
+  if (saveInProgress) { say('Wait for the current save to finish before creating a scene.'); return; }
   if (!await confirmUnsaved()) return;
   if (window.forma) await window.forma.forgetProject();
   const project = createStarterProject(); project.objects = [];
-  state.project = project; state.selectedId = null; state.frame = 0; state.history.clear();
+  state.project = project; state.selectedId = null; state.frame = 0; state.meshEdit = null; state.legacySource = false; state.documentId++; state.history.clear();
   state.saved = JSON.stringify(project); state.viewport?.setCamera(project.camera); redraw(); say('New scene ready. Add a shape to begin.');
 }
 function parseProject(text) {
   if (typeof text !== 'string' || text.length > 10 * 1024 * 1024) throw new Error('Project file is too large.');
-  return validateProject(JSON.parse(text));
+  const value = JSON.parse(text);
+  return { project: validateProject(value), legacy: value.version === 1 };
 }
 async function loadText(text, acceptNative = false) {
   try {
-    const project = parseProject(text);
+    const { project, legacy } = parseProject(text);
     if (acceptNative) await window.forma.acceptOpenedProject();
-    state.project = project; state.selectedId = project.objects[0]?.id || null; state.frame = 0;
+    state.project = project; state.selectedId = project.objects[0]?.id || null; state.frame = 0; state.meshEdit = null; state.legacySource = legacy; state.documentId++;
     state.history.clear(); state.saved = JSON.stringify(project);
-    state.viewport?.setCamera(project.camera); redraw(); say('Project opened.');
+    state.viewport?.setCamera(project.camera); redraw();
+    say(legacy ? 'Project opened from 0.1. The first save will ask for a new v0.2 file.' : 'Project opened.');
   } catch (error) { say(`Could not open project: ${error.message}`); }
 }
 async function openProject() {
+  if (saveInProgress) { say('Wait for the current save to finish before opening a project.'); return; }
   if (!await confirmUnsaved()) return;
   if (window.forma) {
     try { const result = await window.forma.openProject(); if (!result.canceled) await loadText(result.text, true); }
@@ -369,9 +492,19 @@ buildTransformFields();
 try {
   state.viewport = new Viewport($('#viewport-canvas'), state.project, {
     onSelect: selectObject,
+    onMeshSelect: setMeshSelection,
     onTick,
     onCamera: (camera) => { state.project.camera = camera; refreshDirty(); },
     onDragStart: () => { stopPlayback(); state.dragBefore = snapshot(); },
+    onVertexDrag: (position) => {
+      const object = selected(), edit = state.meshEdit;
+      if (!object || !edit || edit.component !== 'vertex' || !Number.isInteger(edit.index)) return null;
+      try {
+        object.mesh = moveVertexTo(object.mesh, edit.index, position);
+        renderMeshInspector(object); refreshDirty();
+        return object.mesh;
+      } catch (error) { say(error.message); return null; }
+    },
     onDrag: (value) => {
       const object = selected(); if (!object) return;
       try { updateTransform(object, value); updateTransformInputs(); renderTimeline(); refreshDirty(); }
@@ -402,13 +535,31 @@ $('#object-list').addEventListener('click', (event) => {
 });
 for (const button of $$('[data-add]')) button.addEventListener('click', () => addShape(button.dataset.add));
 for (const button of $$('[data-tool]')) button.addEventListener('click', () => setTool(button.dataset.tool));
-for (const button of $$('.inspector-tabs [role=tab]')) button.addEventListener('click', () => { state.tab = button.dataset.tab; renderInspector(); });
-for (const button of $$('[data-layout]')) button.addEventListener('click', () => {
-  for (const tab of $$('[data-layout]')) { const active = tab === button; tab.classList.toggle('active', active); tab.setAttribute('aria-pressed', String(active)); }
-  $('.center-panel').classList.toggle('animate-mode', button.dataset.layout === 'animate');
+for (const button of $$('.inspector-tabs [role=tab]')) button.addEventListener('click', () => {
+  state.tab = button.dataset.tab;
+  if (state.tab === 'model') setWorkspace('model'); else renderInspector();
 });
+for (const button of $$('[data-layout]')) button.addEventListener('click', () => setWorkspace(button.dataset.layout));
 $('#undo').addEventListener('click', undo); $('#redo').addEventListener('click', redo);
 $('#duplicate-object').addEventListener('click', duplicateObject); $('#delete-object').addEventListener('click', deleteObject);
+$('#enter-mesh-mode').addEventListener('click', enterMeshMode);
+$('#exit-mesh-mode').addEventListener('click', exitMeshMode);
+for (const button of $$('[data-component]')) button.addEventListener('click', () => setMeshComponent(button.dataset.component));
+$('#mesh-component-number').addEventListener('change', (event) => {
+  const value = event.target.valueAsNumber;
+  setMeshSelection(Number.isInteger(value) ? value - 1 : null);
+});
+$('#extrude-face').addEventListener('click', () => applyFaceOperation('extrude'));
+$('#inset-face').addEventListener('click', () => applyFaceOperation('inset'));
+$('#subdivide-mesh').addEventListener('click', applySubdivision);
+$('#mesh-smooth').addEventListener('change', (event) => change(() => { selected().shading = event.target.checked ? 'smooth' : 'flat'; }));
+$('#vertex-fields').addEventListener('change', (event) => {
+  const input = event.target.closest('input[data-vertex-axis]'), object = selected(), edit = state.meshEdit;
+  if (!input || !object || !edit || edit.component !== 'vertex' || !Number.isInteger(edit.index)) return;
+  const value = input.valueAsNumber;
+  if (!Number.isFinite(value)) { renderInspector(); return; }
+  if (change(() => { object.mesh = moveVertex(object.mesh, edit.index, Number(input.dataset.vertexAxis), value); })) say('Vertex moved in local space.');
+});
 $('#object-name').addEventListener('change', (event) => { const value = event.target.value.trim().slice(0, 80); if (!value) { renderInspector(); say('An object needs a name.'); return; } change(() => { selected().name = value; }); });
 $('#transform-fields').addEventListener('change', (event) => {
   const input = event.target.closest('input[data-property]'); const object = selected(); if (!input || !object) return;
@@ -437,6 +588,7 @@ for (const [id, key, min, max] of [['ambient', 'ambient', 0, 3], ['key-light', '
 $('#focus-object').addEventListener('click', () => { if (!state.viewport?.frameSelected()) say('Select a visible object to frame it.'); });
 $('#view-select').addEventListener('change', (event) => state.viewport?.setView(event.target.value));
 $('#toggle-grid').addEventListener('click', (event) => { const button = event.currentTarget; const value = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', String(value)); button.classList.toggle('active', value); state.viewport?.setGrid(value); });
+$('#toggle-snap').addEventListener('click', (event) => { const button = event.currentTarget; const value = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', String(value)); button.classList.toggle('active', value); state.viewport?.setSnap(value); say(value ? 'Transform snapping on: 0.5 units, 15 degrees, 0.1 scale.' : 'Transform snapping off.'); });
 $('#wireframe').addEventListener('click', (event) => { const button = event.currentTarget; const value = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', String(value)); button.classList.toggle('active', value); state.viewport?.setWireframe(value); });
 $('#frame-range').addEventListener('input', (event) => { stopPlayback(); setFrame(Number(event.target.value)); });
 $('#frame-input').addEventListener('change', (event) => { stopPlayback(); setFrame(event.target.valueAsNumber); });
@@ -470,8 +622,16 @@ document.addEventListener('keydown', (event) => {
     else newProject();
     return;
   }
-  // Keep ordinary text-editing shortcuts and letters inside form fields.
+  // Keep ordinary text-editing shortcuts and native button activation.
   if (editing) return;
+  if (!mod && key === ' ' && event.target.closest('button, summary, a, [role="button"]')) return;
+  if (state.meshEdit && !mod) {
+    if (key === 'escape') { event.preventDefault(); exitMeshMode(); return; }
+    if (key === '1' || key === '3') { event.preventDefault(); setMeshComponent(key === '1' ? 'vertex' : 'face'); return; }
+    if (key === 'e' || key === 'i') { event.preventDefault(); applyFaceOperation(key === 'e' ? 'extrude' : 'inset'); return; }
+    if (key === 'delete' || ['q', 'g', 'r', 's'].includes(key)) { event.preventDefault(); say('Exit mesh edit mode to use object tools.'); return; }
+  }
+  if (state.meshEdit && mod && key === 'd') { event.preventDefault(); say('Exit mesh edit mode to duplicate the object.'); return; }
   if (mod && key === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); }
   else if (mod && key === 'y') { event.preventDefault(); redo(); }
   else if (mod && key === 'd') { event.preventDefault(); duplicateObject(); }
