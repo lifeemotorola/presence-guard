@@ -87,7 +87,12 @@ jobs:
           $path = Join-Path $env:RUNNER_TEMP 'typebloom-widget.png'
           if (Test-Path $path) {
             $base64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($path))
-            if ($base64.Length -lt 60000) { Write-Output "::notice title=TypeBloom screenshot::$base64" }
+            if ($base64.Length -lt 60000) {
+              for ($offset = 0; $offset -lt $base64.Length; $offset += 3000) {
+                $part = $base64.Substring($offset, [Math]::Min(3000, $base64.Length - $offset))
+                Write-Output ("::notice title=TypeBloom screenshot part {0:D3}::{1}" -f [int]($offset / 3000), $part)
+              }
+            }
           }
       - name: Calculate executable checksum
         id: hashes
@@ -127,5 +132,5 @@ jobs:
         run: |
           $folder = Join-Path $env:RUNNER_TEMP 'typebloom-integrity'
           $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $folder 'TypeBloom.exe')).Hash.ToLowerInvariant()
-          $line = (Get-Content (Join-Path $folder 'SHA256SUMS.txt'))[0]
+          $line = @(Get-Content (Join-Path $folder 'SHA256SUMS.txt'))[0]
           if ($actual -ne $env:EXPECTED_EXE -or $line -ne "$actual  TypeBloom.exe") { throw 'Downloaded artifact does not match the staged executable.' }
