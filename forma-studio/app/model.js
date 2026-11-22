@@ -1,12 +1,15 @@
 /* Forma Studio scene model. Copyright (C) 2026 Emmanuel Suah. GPL-2.0-or-later. */
+import { validateMesh, MAX_PROJECT_MESH_VERTICES, MAX_PROJECT_MESH_FACES } from './mesh.js';
+
 export const FORMAT = 'forma-studio';
-export const VERSION = 1;
+export const VERSION = 2;
 export const MAX_OBJECTS = 120;
 export const MAX_KEYS = 300;
-export const TYPES = ['rounded-box', 'cube', 'sphere', 'cylinder', 'cone', 'torus', 'plane', 'icosahedron'];
+export const PRIMITIVE_TYPES = ['rounded-box', 'cube', 'sphere', 'cylinder', 'cone', 'torus', 'plane', 'icosahedron'];
+export const TYPES = [...PRIMITIVE_TYPES, 'mesh'];
 export const TYPE_LABELS = {
   'rounded-box': 'Rounded cube', cube: 'Cube', sphere: 'Sphere', cylinder: 'Cylinder',
-  cone: 'Cone', torus: 'Torus', plane: 'Plane', icosahedron: 'Icosphere',
+  cone: 'Cone', torus: 'Torus', plane: 'Plane', icosahedron: 'Icosphere', mesh: 'Editable mesh',
 };
 
 export const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -14,7 +17,7 @@ export function transform(position = [0, 0.8, 0], rotation = [0, 0, 0], scale = 
   return { position: [...position], rotation: [...rotation], scale: [...scale] };
 }
 export function createObject(type, id, name = TYPE_LABELS[type]) {
-  if (!TYPES.includes(type)) throw new Error('Unknown shape');
+  if (!PRIMITIVE_TYPES.includes(type)) throw new Error('Unknown shape');
   return {
     id, name, type, visible: true,
     transform: transform(type === 'plane' ? [0, 0.01, 0] : [0, 0.8, 0]),
@@ -80,7 +83,10 @@ function color(value, label) {
 // bounds protect the renderer from malformed, huge, or non-finite values.
 export function validateProject(value) {
   record(value, 'root');
-  if (value.format !== FORMAT || value.version !== VERSION) fail('unsupported format or version');
+  // Version 1 projects contain only primitives. Read them into version 2;
+  // version 2 files are intentionally rejected by the older 0.1 app.
+  if (value.format !== FORMAT || ![1, VERSION].includes(value.version)) fail('unsupported format or version');
+  const sourceVersion = value.version;
   const name = text(value.name, 'project name', 100);
   if (!Array.isArray(value.objects) || value.objects.length > MAX_OBJECTS) fail('object count');
   const timeline = record(value.timeline, 'timeline');
@@ -89,12 +95,13 @@ export function validateProject(value) {
   const world = record(value.world, 'world');
   const camera = record(value.camera, 'camera');
   const ids = new Set();
+  let totalMeshVertices = 0, totalMeshFaces = 0;
   const objects = value.objects.map((item) => {
     record(item, 'object');
     const id = text(item.id, 'object ID', 80);
     if (!/^[a-z0-9_-]+$/i.test(id) || ids.has(id)) fail('object ID must be unique');
     ids.add(id);
-    if (!TYPES.includes(item.type)) fail('unknown object type');
+    if (!TYPES.includes(item.type) || (sourceVersion === 1 && item.type === 'mesh')) fail('unknown object type');
     const material = record(item.material, 'material');
     const array = record(item.array, 'array');
     if (!['linear', 'radial'].includes(array.mode)) fail('array mode');
@@ -107,13 +114,22 @@ export function validateProject(value) {
       frames.add(frame);
       return { frame, transform: checkedTransform(key.transform, 'keyframe transform') };
     }).sort((a, b) => a.frame - b.frame);
-    return {
+    const object = {
       id, name: text(item.name, 'object name', 80), type: item.type, visible: bool(item.visible, 'visibility'),
       transform: checkedTransform(item.transform, 'object transform'),
       material: { color: color(material.color, 'material color'), roughness: number(material.roughness, 'roughness', 0, 1), metalness: number(material.metalness, 'metalness', 0, 1) },
       array: { enabled: bool(array.enabled, 'array enabled'), mode: array.mode, count: number(array.count, 'array count', 1, 20, true), spacing: number(array.spacing, 'array spacing', 0.1, 20), radius: number(array.radius, 'array radius', 0.1, 20) },
       keyframes,
     };
+    if (item.type === 'mesh') {
+      try { object.mesh = validateMesh(item.mesh); } catch (error) { fail(error.message); }
+      object.shading = item.shading === undefined ? 'flat' : item.shading;
+      if (!['flat', 'smooth'].includes(object.shading)) fail('mesh shading');
+      totalMeshVertices += object.mesh.vertices.length;
+      totalMeshFaces += object.mesh.faces.length;
+      if (totalMeshVertices > MAX_PROJECT_MESH_VERTICES || totalMeshFaces > MAX_PROJECT_MESH_FACES) fail('total editable mesh size');
+    }
+    return object;
   });
   return {
     format: FORMAT, version: VERSION, name, objects,

@@ -42,6 +42,7 @@
     <symbol id="i-key" viewBox="0 0 24 24"><path d="m12 3 9 9-9 9-9-9 9-9Z"/></symbol>
     <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 17h.01"/></symbol>
     <symbol id="i-light" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></symbol>
+    <symbol id="i-snap" viewBox="0 0 24 24"><path d="M5 4v8a7 7 0 0 0 14 0V4h-4v8a3 3 0 0 1-6 0V4H5ZM5 8h4M15 8h4"/></symbol>
   </svg>
 
   <header class="topbar">
@@ -59,7 +60,7 @@
       <button type="button" data-export="png">Save viewport image (.png)…</button>
     </div></details>
     <div class="project-name"><span class="project-dot"></span><span id="project-title">Untitled scene</span><span id="dirty-indicator" class="dirty-indicator" aria-label="Unsaved changes" hidden>●</span><span class="project-kind">/ 3D scene</span></div>
-    <div class="workspace-tabs" role="group" aria-label="Workspace layout"><button type="button" class="workspace-tab active" data-layout="layout" aria-pressed="true">Layout</button><button type="button" class="workspace-tab" data-layout="animate" aria-pressed="false">Animate</button></div>
+    <div class="workspace-tabs" role="group" aria-label="Workspace layout"><button type="button" class="workspace-tab active" data-layout="layout" aria-pressed="true">Layout</button><button type="button" class="workspace-tab" data-layout="model" aria-pressed="false">Model</button><button type="button" class="workspace-tab" data-layout="animate" aria-pressed="false">Animate</button></div>
     <div class="top-actions">
       <button class="icon-button" id="undo" type="button" title="Undo (Ctrl+Z)" aria-label="Undo" disabled><svg><use href="#i-undo"/></svg></button>
       <button class="icon-button" id="redo" type="button" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled><svg><use href="#i-redo"/></svg></button>
@@ -91,7 +92,7 @@
     </aside>
 
     <section class="center-panel" aria-label="3D workspace">
-      <div class="viewport-top"><div class="viewport-title"><span class="viewport-dot"></span><strong>3D Viewport</strong><span class="viewport-subtitle">/ your creative space</span></div><div class="viewport-actions"><label for="view-select" class="sr-only">Camera view</label><select id="view-select" aria-label="Camera view"><option value="perspective">Perspective</option><option value="front">Front</option><option value="top">Top</option><option value="right">Right</option></select><button class="icon-button active" id="toggle-grid" type="button" title="Toggle grid" aria-label="Toggle grid" aria-pressed="true"><svg><use href="#i-grid"/></svg></button><button class="icon-button" id="wireframe" type="button" title="Toggle wireframe" aria-label="Toggle wireframe" aria-pressed="false"><svg><use href="#i-cube"/></svg></button></div></div>
+      <div class="viewport-top"><div class="viewport-title"><span class="viewport-dot"></span><strong>3D Viewport</strong><span class="viewport-subtitle">/ your creative space</span></div><div class="viewport-actions"><label for="view-select" class="sr-only">Camera view</label><select id="view-select" aria-label="Camera view"><option value="perspective">Perspective</option><option value="front">Front</option><option value="top">Top</option><option value="right">Right</option></select><button class="icon-button active" id="toggle-grid" type="button" title="Toggle grid" aria-label="Toggle grid" aria-pressed="true"><svg><use href="#i-grid"/></svg></button><button class="icon-button" id="toggle-snap" type="button" title="Snap gizmo: 0.5 units, 15 degrees, 0.1 scale" aria-label="Toggle transform snapping" aria-pressed="false"><svg><use href="#i-snap"/></svg></button><button class="icon-button" id="wireframe" type="button" title="Toggle wireframe" aria-label="Toggle wireframe" aria-pressed="false"><svg><use href="#i-cube"/></svg></button></div></div>
       <div id="viewport" class="viewport">
         <div id="viewport-canvas" class="viewport-canvas"></div>
         <div class="viewport-toolbar" role="group" aria-label="Transform tool">
@@ -101,6 +102,7 @@
           <button type="button" class="tool-button" data-tool="scale" title="Scale (S)" aria-label="Scale tool" aria-pressed="false"><svg><use href="#i-scale"/></svg></button>
           <span></span><button type="button" class="tool-button" id="focus-object" title="Frame selected (F)" aria-label="Frame selected object"><svg><use href="#i-focus"/></svg></button>
         </div>
+        <div id="mesh-mode-indicator" class="mesh-mode-indicator" hidden><span class="mesh-mode-dot"></span><strong>EDIT MODE</strong><span id="mesh-mode-kind">FACE SELECT</span><button type="button" id="exit-mesh-mode">Done</button></div>
         <div class="viewport-hint"><span class="hint-dot"></span> <span>Drag to orbit</span><i></i><span>Scroll to zoom</span><i></i><span>Right drag to pan</span></div>
         <div class="viewport-brand" aria-hidden="true"><span>✳</span> MADE IN FORMA</div>
         <div id="webgl-error" class="webgl-error" hidden><strong>3D view couldn’t start.</strong><p>Forma Studio needs WebGL. Try a computer with a supported graphics driver.</p></div>
@@ -114,7 +116,7 @@
 
     <aside class="right-panel panel" aria-label="Inspector">
       <div class="inspector-top"><div><span class="panel-kicker">MAKE IT YOURS</span><h2>Inspector</h2></div><span class="inspector-sparkle">✳</span></div>
-      <div class="inspector-tabs" role="tablist" aria-label="Inspector sections"><button type="button" role="tab" id="tab-object" aria-controls="pane-object" aria-selected="true" data-tab="object">Object</button><button type="button" role="tab" id="tab-material" aria-controls="pane-material" aria-selected="false" data-tab="material">Material</button><button type="button" role="tab" id="tab-scene" aria-controls="pane-scene" aria-selected="false" data-tab="scene">Scene</button></div>
+      <div class="inspector-tabs" role="tablist" aria-label="Inspector sections"><button type="button" role="tab" id="tab-object" aria-controls="pane-object" aria-selected="true" data-tab="object">Object</button><button type="button" role="tab" id="tab-model" aria-controls="pane-model" aria-selected="false" data-tab="model">Model</button><button type="button" role="tab" id="tab-material" aria-controls="pane-material" aria-selected="false" data-tab="material">Material</button><button type="button" role="tab" id="tab-scene" aria-controls="pane-scene" aria-selected="false" data-tab="scene">Scene</button></div>
       <div class="inspector-scroll">
         <div id="no-selection" class="no-selection" hidden><span>◇</span><strong>Nothing selected</strong><p>Choose an object in the scene to edit its properties.</p></div>
         <div id="pane-object" role="tabpanel" aria-labelledby="tab-object">
@@ -124,15 +126,50 @@
           <div class="property-block array-block"><div class="block-heading"><div><h3>Array</h3><p class="block-subtitle">Repeat this shape, non-destructively.</p></div><label class="switch"><input type="checkbox" id="array-enabled" aria-label="Enable procedural array"><span></span></label></div><div id="array-controls" hidden><label class="field-label" for="array-mode">Arrangement</label><select id="array-mode" class="text-input"><option value="linear">Linear</option><option value="radial">Radial</option></select><div class="inline-fields"><label>Count<input type="number" id="array-count" min="1" max="20" step="1"></label><label id="array-distance-label">Spacing<input type="number" id="array-distance" min="0.1" max="20" step="0.1"></label></div></div></div>
           <div class="object-actions"><button type="button" id="duplicate-object"><svg><use href="#i-copy"/></svg> Duplicate</button><button type="button" id="delete-object"><svg><use href="#i-trash"/></svg> Delete</button></div>
         </div>
+        <div id="pane-model" role="tabpanel" aria-labelledby="tab-model" hidden>
+          <div class="selected-card"><span class="selected-icon"><svg><use href="#i-cube"/></svg></span><div><span>MODELING OBJECT</span><strong id="model-object-name">Form 01</strong></div><span class="selected-dot"></span></div>
+          <div id="mesh-start" class="property-block">
+            <div class="block-heading"><h3>Make it your own</h3><span>MESH</span></div>
+            <p class="block-subtitle">Edit the actual faces and vertices of this shape.</p>
+            <button class="button button-primary mesh-primary" id="enter-mesh-mode" type="button"><svg><use href="#i-cube"/></svg> Edit mesh</button>
+            <p class="mesh-note" id="mesh-start-note">Converts the shape to editable geometry; conversion can be undone. Curved shapes use triangular faces.</p>
+          </div>
+          <div id="mesh-controls" hidden>
+            <div class="property-block"><div class="block-heading"><h3>Mesh editing</h3><span>LOCAL SPACE</span></div>
+              <p class="mesh-count" id="mesh-count">0 vertices · 0 faces</p>
+              <div class="component-toggle" role="group" aria-label="Mesh selection type"><button type="button" data-component="face" aria-pressed="true"><span aria-hidden="true">▧</span> Face</button><button type="button" data-component="vertex" aria-pressed="false"><span aria-hidden="true">●</span> Vertex</button></div>
+              <p class="mesh-note" id="mesh-instruction">Click a face in the viewport, or enter its number below.</p>
+              <label class="field-label" id="mesh-component-label" for="mesh-component-number">Face number</label><input class="text-input" id="mesh-component-number" type="number" min="1" step="1" placeholder="None selected">
+            </div>
+            <div id="face-controls" class="property-block">
+              <div class="block-heading"><h3>Selected face</h3><span id="selected-face-label">NONE</span></div>
+              <label class="field-label" for="extrude-distance">Extrude distance</label><input class="text-input" id="extrude-distance" type="number" min="-20" max="20" step="0.1" value="1">
+              <button class="mesh-action" id="extrude-face" type="button" disabled>Extrude face <span aria-hidden="true">↗</span></button>
+              <label class="field-label" for="inset-amount">Inset fraction</label><input class="text-input" id="inset-amount" type="number" min="0.01" max="0.9" step="0.05" value="0.25">
+              <button class="mesh-action" id="inset-face" type="button" disabled>Inset face <span aria-hidden="true">↗</span></button>
+            </div>
+            <div id="vertex-controls" class="property-block" hidden>
+              <div class="block-heading"><h3>Selected vertex</h3><span id="selected-vertex-label">NONE</span></div>
+              <p class="block-subtitle">Drag the vertex gizmo or set coordinates in the object's local space.</p>
+              <div class="axis-fields" id="vertex-fields">
+                <label class="axis-field"><span>X</span><input type="number" data-vertex-axis="0" aria-label="Vertex X" min="-1000" max="1000" step="0.1" disabled></label>
+                <label class="axis-field"><span>Y</span><input type="number" data-vertex-axis="1" aria-label="Vertex Y" min="-1000" max="1000" step="0.1" disabled></label>
+                <label class="axis-field"><span>Z</span><input type="number" data-vertex-axis="2" aria-label="Vertex Z" min="-1000" max="1000" step="0.1" disabled></label>
+              </div>
+            </div>
+            <div class="property-block"><div class="block-heading"><h3>Refine</h3><span>ALL FACES</span></div><p class="block-subtitle">Split the mesh into smaller connected faces.</p><button class="mesh-action" id="subdivide-mesh" type="button">Subdivide mesh <span aria-hidden="true">↗</span></button><p class="mesh-note">Linear subdivision; it does not smooth the shape.</p></div>
+            <div class="property-block"><div class="block-heading"><div><h3>Surface shading</h3><p class="mesh-note">Smooth shading averages normals across shared vertices; it does not change the shape.</p></div><label class="switch"><input type="checkbox" id="mesh-smooth" aria-label="Smooth mesh shading"><span></span></label></div></div>
+          </div>
+        </div>
         <div id="pane-material" role="tabpanel" aria-labelledby="tab-material" hidden><div class="property-block first-block"><div class="block-heading"><h3>Surface</h3><span>01</span></div><p class="block-subtitle">A little color goes a long way.</p><label class="field-label" for="material-color">Base color</label><div class="color-control"><input type="color" id="material-color" aria-label="Material color"><span id="color-value">#A78BFA</span><span>●</span></div><label class="slider-label" for="roughness"><span>Roughness</span><output id="roughness-value">0.40</output></label><input class="slider" type="range" id="roughness" min="0" max="1" step="0.01"><label class="slider-label" for="metalness"><span>Metalness</span><output id="metalness-value">0.08</output></label><input class="slider" type="range" id="metalness" min="0" max="1" step="0.01"></div><div class="material-note"><span>✦</span><p><strong>Make it shine.</strong><br>Lower roughness and raise metalness for a polished finish.</p></div></div>
         <div id="pane-scene" role="tabpanel" aria-labelledby="tab-scene" hidden><div class="property-block first-block"><div class="block-heading"><h3>World &amp; light</h3><span><svg class="small-icon"><use href="#i-light"/></svg></span></div><p class="block-subtitle">Set the mood for your whole scene.</p><label class="field-label" for="project-name-input">Project name</label><input id="project-name-input" class="text-input" maxlength="100" autocomplete="off"><label class="field-label" for="background-color">Background</label><div class="color-control"><input type="color" id="background-color" aria-label="Background color"><span id="background-value">#252632</span><span>●</span></div><label class="slider-label" for="ambient"><span>Ambient light</span><output id="ambient-value">1.10</output></label><input class="slider" type="range" id="ambient" min="0" max="3" step="0.05"><label class="slider-label" for="key-light"><span>Key light</span><output id="key-light-value">2.70</output></label><input class="slider" type="range" id="key-light" min="0" max="6" step="0.05"><label class="slider-label" for="exposure"><span>Exposure</span><output id="exposure-value">1.00</output></label><input class="slider" type="range" id="exposure" min="0.1" max="3" step="0.05"></div><div class="material-note"><span>✦</span><p><strong>Quick lighting.</strong><br>These controls affect the realtime viewport and PNG export.</p></div></div>
       </div>
-      <div class="inspector-footer"><span>✳</span> Made for making <span>v0.1</span></div>
+      <div class="inspector-footer"><span>✳</span> Made for making <span>v0.2</span></div>
     </aside>
   </main>
-  <footer class="statusbar"><div><span class="status-light"></span><span id="status-text" role="status">Ready to create</span></div><div><span id="scene-stats">4 objects</span><span class="status-separator"></span><span>Y UP</span><span class="status-separator"></span><span>FORMA STUDIO 0.1</span></div></footer>
+  <footer class="statusbar"><div><span class="status-light"></span><span id="status-text" role="status">Ready to create</span></div><div><span id="scene-stats">4 objects</span><span class="status-separator"></span><span>Y UP</span><span class="status-separator"></span><span>FORMA STUDIO 0.2</span></div></footer>
   <input id="file-input" type="file" accept=".forma,.json,application/json" hidden>
   <dialog id="confirm-dialog" aria-labelledby="confirm-title"><div class="dialog-content"><span class="dialog-symbol">✳</span><h2 id="confirm-title">Save your changes?</h2><p>Your current scene has unsaved changes. Save it before continuing, or discard them.</p><div class="dialog-actions"><button class="button button-ghost" data-confirm="cancel" type="button">Cancel</button><button class="button button-ghost danger" data-confirm="discard" type="button">Discard</button><button class="button button-primary" data-confirm="save" type="button">Save project</button></div></div></dialog>
-  <dialog id="help-dialog" aria-labelledby="help-title"><div class="dialog-content help-content"><button class="dialog-close icon-button" id="close-help" type="button" aria-label="Close help">×</button><span class="panel-kicker">A LITTLE HELPING HAND</span><h2 id="help-title">Your creative space.</h2><p>Forma Studio is an early 3D scene editor, not a replacement for Blender. Add shapes, adjust materials, create arrays, and animate transforms.</p><div class="shortcut-list"><div><span>Orbit / pan / zoom</span><kbd>Drag / right-drag / scroll</kbd></div><div><span>Select / move / rotate / scale</span><kbd>Q / G / R / S</kbd></div><div><span>Frame selected object</span><kbd>F</kbd></div><div><span>Duplicate / delete</span><kbd>Ctrl D / Delete</kbd></div><div><span>Undo / redo / save</span><kbd>Ctrl Z / Shift Ctrl Z / Ctrl S</kbd></div></div><p class="help-note">Keyframes animate transforms only. GLB export contains the current frame; it does not include animation. AI, mesh editing, rigging, and ray tracing are not included in this version.</p></div></dialog>
+  <dialog id="help-dialog" aria-labelledby="help-title"><div class="dialog-content help-content"><button class="dialog-close icon-button" id="close-help" type="button" aria-label="Close help">×</button><span class="panel-kicker">A LITTLE HELPING HAND</span><h2 id="help-title">Your creative space.</h2><p>Forma Studio is an early 3D scene editor, not a replacement for Blender. Add shapes, edit their meshes, adjust materials, create arrays, and animate transforms.</p><div class="shortcut-list"><div><span>Orbit / pan / zoom</span><kbd>Drag / right-drag / scroll</kbd></div><div><span>Select / move / rotate / scale</span><kbd>Q / G / R / S</kbd></div><div><span>Frame selected object</span><kbd>F</kbd></div><div><span>Mesh vertex / face select</span><kbd>1 / 3</kbd></div><div><span>Extrude / inset / finish mesh</span><kbd>E / I / Esc</kbd></div><div><span>Duplicate / delete</span><kbd>Ctrl D / Delete</kbd></div><div><span>Undo / redo / save</span><kbd>Ctrl Z / Shift Ctrl Z / Ctrl S</kbd></div></div><p class="help-note">Mesh editing selects one face or vertex at a time. Keyframes animate object transforms only. GLB contains the current frame, not animation. Version 0.2 saves projects in a new format that 0.1 cannot open. AI, sculpting, rigging, and ray tracing are not included.</p></div></dialog>
 </body>
 </html>

@@ -71,7 +71,7 @@ jobs:
         shell: pwsh
         run: |
           $folder = 'out/FormaStudio-win32-x64'
-          foreach ($item in @('FormaStudio.exe', 'resources/app.asar', 'LICENSE', 'LICENSES.chromium.html', 'FORMA-LICENSE.txt', 'INSTALL.txt', 'README.md', 'THREE-LICENSE.txt', 'SOURCE/INSTALL.txt', 'SOURCE/app/editor.js', 'SOURCE/app/viewport.js', 'SOURCE/desktop/main.cjs', 'SOURCE/package-lock.json', 'SOURCE/app/assets/fonts/DM-SANS-LICENSE.txt', 'SOURCE/app/assets/fonts/PLUS-JAKARTA-SANS-LICENSE.txt')) {
+          foreach ($item in @('FormaStudio.exe', 'resources/app.asar', 'LICENSE', 'LICENSES.chromium.html', 'FORMA-LICENSE.txt', 'INSTALL.txt', 'README.md', 'THREE-LICENSE.txt', 'SOURCE/INSTALL.txt', 'SOURCE/app/editor.js', 'SOURCE/app/mesh.js', 'SOURCE/app/viewport.js', 'SOURCE/desktop/main.cjs', 'SOURCE/package-lock.json', 'SOURCE/app/assets/fonts/DM-SANS-LICENSE.txt', 'SOURCE/app/assets/fonts/PLUS-JAKARTA-SANS-LICENSE.txt')) {
             if (-not (Test-Path (Join-Path $folder $item))) { throw "Missing package file: $item" }
           }
           $info = (Get-Item "$folder/FormaStudio.exe").VersionInfo
@@ -84,6 +84,7 @@ jobs:
         env:
           FORMA_SCREENSHOT: ${{ runner.temp }}\forma-studio.png
           FORMA_FEATURE_SCREENSHOT: ${{ runner.temp }}\forma-studio-array-animation.png
+          FORMA_MESH_SCREENSHOT: ${{ runner.temp }}\forma-studio-mesh-edit.png
         run: npm run test:desktop
       - name: Calculate executable and app checksums
         id: hashes
@@ -115,6 +116,7 @@ jobs:
           path: |
             ${{ runner.temp }}\forma-studio.png
             ${{ runner.temp }}\forma-studio-array-animation.png
+            ${{ runner.temp }}\forma-studio-mesh-edit.png
           if-no-files-found: error
       - name: Download the uploaded app for integrity verification
         uses: actions/download-artifact@v4

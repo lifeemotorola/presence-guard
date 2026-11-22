@@ -1,12 +1,12 @@
-# Forma Studio 0.1
+# Forma Studio 0.2
 
-Forma Studio is an **early, offline Windows 3D scene editor** by Emmanuel Suah. This is the first stage of a larger, easier-to-use creation suite—not a replacement for Blender. It lets you assemble primitive-based scenes, style them, make non-destructive arrays, animate object transforms, and export a still or a 3D snapshot. There is **no AI in this version**.
+Forma Studio is an **early, offline Windows 3D scene editor** by Emmanuel Suah. This is one stage of a larger, easier-to-use creation suite—not a replacement for Blender. Assemble shapes, edit basic mesh geometry, style a scene, make non-destructive arrays, animate object transforms, and export a still or a 3D snapshot. There is **no AI in this version**.
 
 ## Install and start
 
 The target is 64-bit Windows 10 or 11 with a graphics driver that supports **WebGL 2**, a mouse, and room for the extracted folder. Performance depends on the graphics hardware and scene complexity. The Windows build is a portable folder, not a single executable or a conventional installer.
 
-1. Download the `forma-studio-windows-x64` ZIP from a successful **Forma Studio** GitHub Actions run in this repository. If it is published on the Creator Toolkit downloads page, you can get the ZIP there instead. Actions artifacts may require GitHub sign-in and expire.
+1. Download the `forma-studio-windows-x64` ZIP from a successful **Forma Studio** GitHub Actions run in this repository. If it is published on the Creator Toolkit downloads page, you can get the ZIP there instead. Actions artifacts may require GitHub sign-in and expire. Check the included `INSTALL.txt` or the app's footer for the build version; a rolling download can lag behind the source.
 2. Right-click the ZIP → **Extract All**. Put the extracted files in a writable local folder, for example `Documents\Forma Studio`. Do not run the app inside the ZIP.
 3. Double-click **FormaStudio.exe**. Keep `resources` and every other packaged file and folder beside the executable. To move the app, move the whole folder.
 4. The starter scene opens. Select an object in the list or viewport; add a shape from the left, then use the gizmo and inspector. Choose **File → New scene** for a blank project.
@@ -17,20 +17,30 @@ The executable is **unsigned**. Windows may display an unknown-publisher/reputat
 ## Making a scene
 
 - **Build:** Add rounded cubes, cubes, spheres, cylinders, cones, toruses, planes, and low-poly icospheres. Select, move, rotate, scale, duplicate, hide, delete, and rename objects. Numeric position, rotation in degrees, and scale are in the Object inspector. Undo/redo retains up to 40 scene edits in the current session.
+- **Model:** Select a visible shape, open **Model** in the workspace or inspector, and choose **Edit mesh**. This converts the primitive into editable geometry as an undoable scene change; its transform, material, animation and array settings remain. Cubes and planes start with quad faces; curved shapes are converted to triangles. Converting can change surface shading. Select **Face** or **Vertex**, then click a component in the viewport, or enter its 1-based number in the inspector. One component is selected at a time. Edges and points are shown through the mesh, so a click near overlapping vertices picks the nearest point on screen (and the nearer one if exactly tied). Orbit the view or use the number field when a point is hard to pick.
+  - With a face selected, **Extrude face** moves a new face along its local normal and creates side walls. Enter a signed distance with magnitude from 0.001 to 20. **Inset face** creates an inner face and a border using a fraction from 0.01 to 0.9 toward the face centroid; it is not a constant-width inset.
+  - With a vertex selected, drag the colored local-axis gizmo or enter its local X, Y and Z coordinates. Invalid changes that would create a degenerate or self-intersecting face are rejected. Meshes can still overlap or intersect elsewhere; the app is not a solid-modeling validator.
+  - **Subdivide mesh** splits all faces into connected smaller faces. It is linear subdivision, not a smoothing modifier. **Smooth mesh shading** averages normals across shared vertices; it changes shading, not topology, and can soften edges. It can be toggled back to flat shading.
+  - Mesh edits affect the source geometry and therefore every array copy, at every animation frame. Transform keyframes do not animate the mesh itself. Click **Done** (or press **Esc** when not typing) to return to object mode. Undo can reverse mesh operations and the initial conversion.
 - **Look:** The Material inspector controls one base color, roughness, and metalness per object. Scene controls the background, ambient/key light intensities, and exposure. The fixed studio floor and rim light are viewport helpers, not editable light objects.
 - **Repeat:** Enable **Array** in the Object inspector. Choose a centered linear array along the object's local X axis, or a radial array in its local XZ plane. Change count and spacing/radius. Transforming the object also transforms its copies. Arrays remain editable in `.forma`; they are baked as individual meshes in GLB.
-- **Navigate:** Drag to orbit, right-drag to pan, and scroll to zoom. The view menu offers perspective-positioned front, top, and right views (these are not orthographic cameras). Grid and wireframe buttons affect the editor view only. Frame selected with **F**.
+- **Navigate:** Drag to orbit, right-drag to pan, and scroll to zoom. The view menu offers perspective-positioned front, top, and right views (these are not orthographic cameras). Grid and wireframe buttons affect the editor view only. Frame selected with **F**. The magnet button toggles gizmo snapping: object translation 0.5 units, rotation 15°, and scale 0.1; vertex gizmos snap to 0.5 local units. Snapping does not change numeric input, extrude or inset values.
 - **Animate:** Select an object, set a frame, and choose **Add keyframe**. Once an object has a keyframe, transform edits automatically create/update a key at the current frame. Add another key at another frame, scrub or press Play. Position, Euler rotation, and scale interpolate linearly. Delete a key at the current frame using the trash button. The default rate is 24 fps; the end frame is editable. The current frame and view toggles are not saved as project settings; projects reopen at frame 0.
-- **Export:** **3D model** exports a binary glTF (`.glb`) snapshot of **visible objects at the current frame**, including basic materials and baked array copies. It does not include animation, the camera, lights, grid, or studio floor. **Viewport image** saves a PNG of the realtime view, with background, fixed floor, lighting and shadows but without the grid or selection gizmos. The image size follows the viewport; this is not an offline or ray-traced renderer.
+- **Export:** **3D model** exports a binary glTF (`.glb`) snapshot of **visible objects at the current frame**, including edited mesh geometry, basic materials and baked array copies. It does not include animation, the camera, lights, grid, or studio floor. **Viewport image** saves a PNG of the realtime view, with background, fixed floor, lighting and shadows but without the grid, selection gizmos or mesh overlays. The image size follows the viewport; this is not an offline or ray-traced renderer.
 
-Shortcuts when not typing: **Q** select, **G** move, **R** rotate, **S** scale, **F** frame selected, **Space** play/pause, **Ctrl+D** duplicate, **Delete** delete, **Ctrl+Z** undo, **Ctrl+Shift+Z** or **Ctrl+Y** redo. **Ctrl+S**, **Ctrl+Shift+S**, **Ctrl+O**, and **Ctrl+N** work from property fields too. The `?` button in the app shows the quick reference.
+Shortcuts when not typing: **Q** select, **G** move, **R** rotate, **S** scale, **F** frame selected, **Space** play/pause, **Ctrl+D** duplicate, **Delete** delete, **Ctrl+Z** undo, **Ctrl+Shift+Z** or **Ctrl+Y** redo. In mesh edit mode, **1** selects vertex mode, **3** selects face mode, **E** extrudes the selected face, **I** insets it, and **Esc** exits. E and I immediately apply the values in the inspector; they do not start an interactive drag. Object tool and delete shortcuts are disabled in mesh mode. **Ctrl+S**, **Ctrl+Shift+S**, **Ctrl+O**, and **Ctrl+N** work from property fields too. The `?` button in the app shows the quick reference.
+
+## Project compatibility
+
+Forma Studio 0.2 opens version-1 `.forma` projects from 0.1 and reads them into the new version-2 format. The first desktop save of an opened version-1 project prompts for a new path and suggests a `-v2` filename. Choose a **different** filename to preserve the original; deliberately selecting the original path can still overwrite it. A browser preview downloads a separate `-v2.forma` file instead.
+
+**Forma Studio 0.1 cannot open version-2 projects**, even if the scene has no edited meshes. Keep an independent copy of any version-1 project you may need to open in 0.1. `.forma` is Forma Studio's versioned JSON format, **not** `.blend`; Forma cannot open Blender files or import GLB/other 3D formats. GLB is a one-way current-frame interchange, so keep the `.forma` project to retain editable geometry, arrays and animation.
 
 ## Important limits
 
-- This is object-level primitive assembly, not polygon/vertex/sculpt editing. No UVs, textures, imported models, custom mesh topology, modifiers beyond the simple array, rigging, particles, physics, video editor, compositing, or ray tracing are implemented.
-- There is no AI assistant, generative model, prompt interface, or automatic retopology. Any such capabilities are future work and are not promised by the current build.
-- `.forma` is Forma Studio's versioned JSON project format, **not** `.blend`. Forma cannot open Blender files or import GLB/other 3D formats. GLB export is a one-way current-frame interchange; keep the `.forma` project to retain editable arrays and animation.
-- Up to 120 objects, 20 array copies per object, 300 transform keys per object, and 600 end frames. Dense scenes can be slow well before those limits. Project files must be at most 10 MiB; exports are limited to 100 MiB in the desktop app.
+- Mesh editing is deliberately basic: one face or vertex at a time, no edge selection, multiselect, bevel, loop cuts, sculpting or Blender-compatible modifiers. Polygon triangulation supports simple faces; extremely distorted, crossing or degenerate faces are refused. Extrusion/inset can still create intersections with other faces or objects.
+- At most 4,096 vertices and 8,192 faces per editable mesh, 24,000 vertices and 48,000 faces in the whole project, and 8 corners per face. Dense primitives may reach a limit on the first subdivision. Up to 120 objects, 20 array copies per object, 300 transform keys per object, and 600 end frames. Dense scenes can be slow well before those limits. Project files must be at most 10 MiB; exports are limited to 100 MiB in the desktop app.
+- No UVs, textures, imported models, modifiers beyond the simple array, rigging, particles, physics, video editor, compositing, or ray tracing are implemented. There is no AI assistant, generative model, prompt interface, or automatic retopology.
 - No autosave or cloud sync. On New, Open, or Close, unsaved scene changes prompt you to save or discard; a crash or power loss can still lose unsaved work. Project files are written through a temporary file in the selected directory; an I/O error can prevent saving. Keep independent backups of important work.
 - On a machine without working WebGL 2, the project controls can appear but the 3D view and exports cannot run. Update the graphics driver or use a supported GPU. The automated software-rendering tests do not replace testing on your hardware.
 
@@ -40,7 +50,7 @@ No account is needed. The app does not intentionally make network requests, and 
 
 ## Roadmap, not current features
 
-Further stages could add real editable meshes, richer materials and lights, import/export, more procedural operators, advanced animation, rendering, and eventually AI assistance. Those are design directions only, not commitments that they already exist or a claim of Blender feature parity.
+Further stages could add more advanced modeling, richer materials and lights, import/export, more procedural operators, advanced animation, rendering, and eventually AI assistance. Those are design directions only, not commitments that they already exist or a claim of Blender feature parity.
 
 ## Build and test from source
 
@@ -50,7 +60,7 @@ On Windows with Node.js 22 and Git installed:
 cd forma-studio
 npm ci --no-audit --no-fund
 npm run start                 # build renderer and launch Electron
-npm test                      # project model tests
+npm test                      # project and mesh model tests
 npm run package:win           # creates out/FormaStudio-win32-x64
 npm run test:desktop          # exercises the packaged Windows executable
 ```

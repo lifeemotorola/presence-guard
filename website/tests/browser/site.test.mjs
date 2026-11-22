@@ -74,7 +74,9 @@ test('details, accurate requirements, download links, and Escape focus return', 
   assert.equal(await page.locator('dialog').isVisible(), false);
   assert.equal(await details.evaluate((element) => document.activeElement === element), true);
   await page.getByRole('button', { name: 'View Forma Studio details' }).click();
-  assert.match(await page.locator('dialog').innerText(), /no AI, mesh editing, or rigging/i);
+  assert.match(await page.locator('dialog').innerText(), /basic face and vertex editing/i);
+  assert.match(await page.locator('dialog').innerText(), /no AI, sculpting or rigging/i);
+  assert.match(await page.locator('dialog').innerText(), /0\.2 projects cannot be opened in 0\.1/i);
   assert.match(await page.locator('dialog').innerText(), /There is no autosave or cloud backup/i);
   assert.equal(await page.locator('dialog').getByRole('link', { name: 'Download Forma Studio ZIP' }).getAttribute('href'), 'https://github.com/lifeemotorola/presence-guard/releases/download/creator-downloads/forma-studio-windows-x64.zip');
   await page.getByRole('button', { name: 'Close details' }).click();

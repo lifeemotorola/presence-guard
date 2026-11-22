@@ -7,6 +7,7 @@ import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import AxeBuilder from '@axe-core/playwright';
+import { createStarterProject } from '../../app/model.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../app');
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2' };
@@ -207,10 +208,197 @@ test('GLB and PNG exports are real files and GLB contains baked visible meshes',
   await context.close();
 });
 
+test('opening an older project requests a new version-2 save path and preserves that requirement after cancel', async () => {
+  const { page, context, errors } = await openPage();
+  const legacy = createStarterProject(); legacy.version = 1;
+  await page.evaluate((text) => {
+    window.legacySaves = [];
+    window.forma = {
+      openProject: async () => ({ canceled: false, text }),
+      acceptOpenedProject: async () => {},
+      saveProject: async (contents, name, saveAs) => {
+        window.legacySaves.push({ contents, name, saveAs });
+        return { canceled: window.legacySaves.length === 1 };
+      },
+    };
+  }, JSON.stringify(legacy));
+  await page.locator('#file-menu summary').click(); await page.locator('#open-project').click();
+  await page.waitForFunction(() => document.querySelector('#status-text').textContent.includes('first save'));
+  await page.locator('#save-project').click();
+  await page.waitForFunction(() => window.legacySaves.length === 1);
+  await page.locator('#save-project').click();
+  await page.waitForFunction(() => window.legacySaves.length === 2 && document.querySelector('#status-text').textContent === 'Project saved.');
+  let calls = await page.evaluate(() => window.legacySaves);
+  assert.ok(calls.slice(0, 2).every((call) => call.saveAs && call.name.endsWith('-v2')));
+  assert.equal(JSON.parse(calls[1].contents).version, 2);
+  await page.getByRole('button', { name: 'Cube', exact: true }).click();
+  await page.locator('#save-project').click();
+  await page.waitForFunction(() => window.legacySaves.length === 3);
+  calls = await page.evaluate(() => window.legacySaves);
+  assert.equal(calls[2].saveAs, false, 'subsequent saves reuse the new version-2 path');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('mesh editing modifies topology, persists shading and arrays, and exports a clean current frame', async () => {
+  const { page, context, errors } = await openPage();
+  await page.locator('#file-menu summary').click(); await page.locator('#new-project').click();
+  await page.getByRole('button', { name: 'Cube', exact: true }).click();
+  await page.getByRole('button', { name: 'Frame selected object' }).click();
+  await page.locator('#view-select').selectOption('front');
+  await page.getByRole('button', { name: 'Model', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+  assert.equal(await page.locator('#mesh-count').textContent(), '8 vertices · 6 faces');
+  assert.equal(await page.getByRole('button', { name: 'Move tool' }).isDisabled(), true);
+  const canvas = await page.locator('#viewport-canvas canvas').boundingBox();
+  await page.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+  assert.equal(await page.locator('#mesh-component-number').inputValue(), '2', 'the visible front face is picked by raycasting');
+  await commitInput(page.locator('#extrude-distance'), 0);
+  await page.getByRole('button', { name: 'Extrude face' }).click();
+  assert.match(await page.locator('#status-text').textContent(), /distance/);
+  assert.equal(await page.locator('#mesh-count').textContent(), '8 vertices · 6 faces');
+  await commitInput(page.locator('#extrude-distance'), 1);
+  await page.keyboard.press('e');
+  assert.equal(await page.locator('#mesh-count').textContent(), '12 vertices · 10 faces');
+  await page.keyboard.press('i');
+  assert.equal(await page.locator('#mesh-count').textContent(), '16 vertices · 14 faces');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  assert.equal(await page.locator('#mesh-count').textContent(), '12 vertices · 10 faces');
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  assert.equal(await page.locator('#mesh-count').textContent(), '16 vertices · 14 faces');
+  await page.getByRole('button', { name: 'Subdivide mesh' }).click();
+  assert.equal(await page.locator('#mesh-count').textContent(), '58 vertices · 56 faces');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  assert.equal(await page.locator('#mesh-count').textContent(), '16 vertices · 14 faces');
+  await page.keyboard.press('1');
+  assert.equal(await page.getByRole('button', { name: 'Vertex', exact: true }).getAttribute('aria-pressed'), 'true');
+  await commitInput(page.getByRole('spinbutton', { name: 'Vertex number' }), 7);
+  await commitInput(page.getByRole('spinbutton', { name: 'Vertex X' }), 1);
+  await page.getByRole('checkbox', { name: 'Smooth mesh shading' }).check();
+  await page.getByRole('tab', { name: 'Object', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Enable procedural array' }).check();
+  await commitInput(page.locator('#array-count'), 3);
+  await page.getByRole('button', { name: 'Add keyframe' }).click();
+  await commitInput(page.getByRole('spinbutton', { name: 'Current frame' }), 24);
+  await commitInput(page.getByRole('spinbutton', { name: 'Position X' }), 4);
+  await commitInput(page.getByRole('spinbutton', { name: 'Current frame' }), 12);
+  assert.equal(await page.getByRole('spinbutton', { name: 'Position X' }).inputValue(), '2');
+  await page.getByRole('tab', { name: 'Model', exact: true }).click();
+  assert.equal(await page.locator('#mesh-count').textContent(), '16 vertices · 14 faces');
+  const saved = await downloadFrom(page, () => page.getByRole('button', { name: 'Save project', exact: true }).click());
+  const project = JSON.parse(saved.bytes.toString('utf8'));
+  assert.equal(project.version, 2);
+  const cube = project.objects[0];
+  assert.equal(cube.type, 'mesh'); assert.equal(cube.shading, 'smooth');
+  assert.equal(cube.mesh.vertices.length, 16); assert.equal(cube.mesh.faces.length, 14);
+  assert.equal(cube.mesh.vertices[6][0], 1);
+  assert.equal(cube.array.count, 3);
+  assert.deepEqual(cube.keyframes.map((key) => key.frame), [0, 24]);
+  const glb = await downloadFrom(page, async () => { await page.locator('.export-menu summary').click(); await page.locator('.export-menu [data-export=glb]').click(); });
+  assert.equal(glb.bytes.toString('ascii', 0, 4), 'glTF');
+  const jsonLength = glb.bytes.readUInt32LE(12);
+  const gltf = JSON.parse(glb.bytes.subarray(20, 20 + jsonLength).toString('utf8').trim());
+  assert.equal(gltf.nodes.filter((node) => Number.isInteger(node.mesh)).length, 3, 'array copies are exported; edit overlays are not');
+  assert.equal(gltf.nodes.find((node) => node.name === 'Cube 01').translation[0], 2);
+  assert.equal(gltf.animations, undefined);
+  const primitive = gltf.meshes[0].primitives[0];
+  assert.equal(gltf.accessors[primitive.attributes.POSITION].count, 16, 'the exported smooth mesh uses the edited vertices');
+  const editPng = await downloadFrom(page, async () => { await page.locator('.export-menu summary').click(); await page.locator('.export-menu [data-export=png]').click(); });
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#mesh-mode-indicator').isVisible(), false);
+  const objectPng = await downloadFrom(page, async () => { await page.locator('.export-menu summary').click(); await page.locator('.export-menu [data-export=png]').click(); });
+  assert.deepEqual(editPng.bytes, objectPng.bytes, 'PNG excludes mesh overlays and transform handles');
+  await page.locator('#file-menu summary').click(); await page.locator('#new-project').click();
+  const choose = page.waitForEvent('filechooser');
+  await page.locator('#file-menu summary').click(); await page.locator('#open-project').click();
+  await (await choose).setFiles({ name: 'mesh.forma', mimeType: 'application/json', buffer: saved.bytes });
+  await page.waitForFunction(() => document.querySelector('#status-text').textContent.includes('Project opened'));
+  await page.getByRole('tab', { name: 'Model', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+  assert.equal(await page.locator('#mesh-count').textContent(), '16 vertices · 14 faces');
+  assert.equal(await page.getByRole('checkbox', { name: 'Smooth mesh shading' }).isChecked(), true);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('vertex selection, gizmo drag, snapping and undo operate on real geometry', async () => {
+  const { page, context, errors } = await openPage();
+  await page.locator('#file-menu summary').click(); await page.locator('#new-project').click();
+  await page.getByRole('button', { name: 'Cube', exact: true }).click();
+  await page.getByRole('button', { name: 'Frame selected object' }).click();
+  await page.locator('#view-select').selectOption('front');
+  await page.getByRole('tab', { name: 'Model', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+  await page.getByRole('button', { name: 'Vertex', exact: true }).focus();
+  await page.keyboard.press('Space');
+  assert.equal(await page.getByRole('button', { name: 'Vertex', exact: true }).getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.getByRole('button', { name: 'Play animation' }).isVisible(), true, 'Space activates a focused button instead of starting playback');
+  await page.getByRole('button', { name: 'Toggle transform snapping' }).click();
+  assert.equal(await page.getByRole('button', { name: 'Toggle transform snapping' }).getAttribute('aria-pressed'), 'true');
+  const canvas = await page.locator('#viewport-canvas canvas').boundingBox();
+  // With a framed 1.4-unit cube, the front-facing upper-right vertex projects
+  // to this location. The first click picks it; the next drag hits its red X axis.
+  const extent = canvas.height / 2 * 0.7 / (Math.tan(20 * Math.PI / 180) * (1.4 * 2.6 - 0.7));
+  const x = canvas.x + canvas.width / 2 + extent, y = canvas.y + canvas.height / 2 - extent;
+  await page.mouse.click(x, y);
+  assert.equal(await page.getByRole('spinbutton', { name: 'Vertex number' }).inputValue(), '7');
+  assert.equal(await page.getByRole('spinbutton', { name: 'Vertex X' }).inputValue(), '0.7');
+  await page.mouse.move(x + 38, y); await page.mouse.down();
+  await page.mouse.move(x + 100, y, { steps: 12 }); await page.mouse.up();
+  await page.waitForFunction(() => Number(document.querySelector('[data-vertex-axis="0"]').value) !== 0.7);
+  const moved = Number(await page.getByRole('spinbutton', { name: 'Vertex X' }).inputValue());
+  assert.ok(Math.abs(moved / 0.5 - Math.round(moved / 0.5)) < 1e-6, 'the local vertex position is snapped');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  assert.equal(await page.getByRole('spinbutton', { name: 'Vertex X' }).inputValue(), '0.7');
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  assert.equal(Number(await page.getByRole('spinbutton', { name: 'Vertex X' }).inputValue()), moved);
+  await page.getByRole('button', { name: 'Sphere', exact: true }).click();
+  assert.equal(await page.locator('#mesh-mode-indicator').isVisible(), false, 'selecting a new object exits mesh mode');
+  assert.equal(await page.getByRole('button', { name: 'Move tool' }).isEnabled(), true);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('a selected array copy places the vertex gizmo correctly under object scaling', async () => {
+  const { page, context, errors } = await openPage();
+  await page.locator('#file-menu summary').click(); await page.locator('#new-project').click();
+  await page.getByRole('button', { name: 'Cube', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Enable procedural array' }).check();
+  await commitInput(page.locator('#array-count'), 3);
+  await commitInput(page.getByRole('spinbutton', { name: 'Scale X' }), 1.5);
+  await page.getByRole('button', { name: 'Frame selected object' }).click();
+  await page.locator('#view-select').selectOption('front');
+  await page.getByRole('tab', { name: 'Model', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+  await page.getByRole('button', { name: 'Vertex', exact: true }).click();
+  await page.getByRole('button', { name: 'Toggle transform snapping' }).click();
+  const canvas = await page.locator('#viewport-canvas canvas').boundingBox();
+  // Three copies at offsets -1.8, 0, 1.8, scaled 1.5 on X; framing uses
+  // their 7.5-unit bounding width. Pick vertex 7 on the rightmost copy.
+  const unit = canvas.height / 2 / (Math.tan(20 * Math.PI / 180) * (7.5 * 2.6 - 0.7));
+  const x = canvas.x + canvas.width / 2 + (1.8 + 0.7) * 1.5 * unit;
+  const y = canvas.y + canvas.height / 2 - 0.7 * unit;
+  await page.mouse.click(x, y);
+  assert.equal(await page.getByRole('spinbutton', { name: 'Vertex number' }).inputValue(), '7');
+  await page.mouse.move(x + 55, y); await page.mouse.down();
+  await page.mouse.move(x + 87, y, { steps: 8 }); await page.mouse.up();
+  assert.equal(await page.getByRole('spinbutton', { name: 'Vertex X' }).inputValue(), '1');
+  assert.equal(await page.getByRole('spinbutton', { name: 'Vertex Z' }).inputValue(), '0.7');
+  const { bytes } = await downloadFrom(page, () => page.getByRole('button', { name: 'Save project', exact: true }).click());
+  const object = JSON.parse(bytes.toString('utf8')).objects[0];
+  assert.equal(object.array.count, 3);
+  assert.equal(object.mesh.vertices[6][0], 1, 'every copy shares the edited vertex');
+  assert.deepEqual(object.transform.scale, [1.5, 1, 1]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('editor panels and help dialog have no automated accessibility violations', async () => {
   const { page, context } = await openPage();
-  for (const state of ['Object', 'Material', 'Scene', 'Help']) {
+  for (const state of ['Object', 'Model', 'Model face edit', 'Model vertex edit', 'Material', 'Scene', 'Help']) {
     if (state === 'Help') await page.getByRole('button', { name: 'Help and shortcuts' }).click();
+    else if (state === 'Model face edit') await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+    else if (state === 'Model vertex edit') await page.getByRole('button', { name: 'Vertex', exact: true }).click();
     else await page.getByRole('tab', { name: state, exact: true }).click();
     const { violations } = await new AxeBuilder({ page }).analyze();
     assert.deepEqual(violations.map(({ id, nodes }) => `${id}: ${nodes.map((node) => node.target.join(' ')).join(', ')}`), [], state);
@@ -225,6 +413,12 @@ test('desktop, narrow window and small browser layouts remain usable without hor
     assert.equal(await page.getByRole('button', { name: 'Cube', exact: true }).count(), 1);
     await page.getByRole('button', { name: 'Cube', exact: true }).click();
     assert.equal(await page.getByRole('spinbutton', { name: 'Position X' }).count(), 1);
+    await page.getByRole('tab', { name: 'Model', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit mesh', exact: true }).click();
+    await page.getByRole('button', { name: 'Vertex', exact: true }).click();
+    await commitInput(page.getByRole('spinbutton', { name: 'Vertex number' }), 7);
+    assert.equal(await page.getByRole('spinbutton', { name: 'Vertex X' }).inputValue(), '0.7');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `model tools overflow at ${width}`);
     assert.deepEqual(errors, []);
     await context.close();
   }
