@@ -106,7 +106,16 @@ $appProcess = $null
 $targetProcess = $null
 try {
   $appProcess = Start-Process -FilePath (Resolve-Path $App).Path -PassThru
-  Wait-For { [Native]::FindWindow('TypeBloomWidgetWindow', $null) -ne [IntPtr]::Zero } 'widget window'
+  Wait-For {
+    $appProcess.Refresh()
+    if ($appProcess.HasExited) { throw "TypeBloom exited before creating a window (exit code $($appProcess.ExitCode))." }
+    $initialError = [Native]::FindWindow('#32770', 'TypeBloom')
+    if ($initialError -ne [IntPtr]::Zero) {
+      $static = [Native]::GetDlgItem($initialError, -1)
+      throw "TypeBloom reported a startup error: $([Native]::Text($static))"
+    }
+    [Native]::FindWindow('TypeBloomWidgetWindow', $null) -ne [IntPtr]::Zero
+  } 'widget window'
   $widget = [Native]::FindWindow('TypeBloomWidgetWindow', $null)
   Wait-For { (Text $widget 1001) -eq 'Start tracking' } 'ready state'
   Assert ((Text $widget 1101) -match '^Ready') 'App must start paused.'
