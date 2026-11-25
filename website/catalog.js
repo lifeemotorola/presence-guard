@@ -63,6 +63,22 @@ export const PRODUCTS = [
     keywords: '3d scene model animation procedural array shape render glb png',
   },
   {
+    id: 'typebloom', name: 'TypeBloom', version: '1.0.0', category: 'apps',
+    eyebrow: 'YOUR SPEED, AT A GLANCE', icon: 'keyboard', color: 'mint',
+    description: 'Keep a small, floating typing-speed estimate in view while you work in other apps.',
+    detail: 'A native, offline desktop window with live key-count WPM, pause, reset and an always-on-top toggle. It starts paused and asks before tracking.',
+    compatibility: 'Windows 10 or 11 x64 · Physical keyboard recommended',
+    note: 'Password fields are not detected; pause before sensitive input. The app does not save typed text. WPM is an estimate, not accuracy. The executable is unsigned.',
+    steps: [
+      'Extract the ZIP to a local folder such as Documents\\TypeBloom and open TypeBloom.exe.',
+      'Drag the widget by its top. Choose Start tracking and confirm the privacy prompt, then type in another app.',
+      'Pause before sensitive input. Use Reset to clear the reading and X to exit. Position and the pin preference are saved locally.',
+    ],
+    workflow: 'typebloom.yml', artifact: 'typebloom-windows-x64', asset: 'typebloom-windows-x64.zip',
+    guide: 'typebloom/README.md',
+    keywords: 'typing type speed wpm keyboard floating widget desktop privacy',
+  },
+  {
     id: 'keybloom', name: 'KeyBloom', version: '1.3.0', category: 'apps',
     eyebrow: 'A LITTLE BETTER EVERY DAY', icon: 'keyboard', color: 'peach',
     description: 'Build confidence at the keyboard with friendly lessons, stories, and typing practice.',

@@ -43,11 +43,11 @@ async function openPage({ assets = PRODUCTS.map((product) => product.asset), sta
 
 test('catalog, search, categories and empty state work with public ZIPs', async () => {
   const { page, errors } = await openPage();
-  assert.equal(await page.locator('.tool-card').count(), 14);
+  assert.equal(await page.locator('.tool-card').count(), 15);
   assert.match(await page.locator('#download-status').innerText(), /Direct ZIPs/);
   assert.equal(await page.getByRole('link', { name: 'Download DockBloom ZIP' }).getAttribute('href'), 'https://github.com/lifeemotorola/presence-guard/releases/download/creator-downloads/dockbloom-windows-x64.zip');
   await page.getByRole('button', { name: /Windows apps/ }).click();
-  assert.equal(await page.locator('.tool-card').count(), 3);
+  assert.equal(await page.locator('.tool-card').count(), 4);
   assert.equal(await page.getByRole('button', { name: /Windows apps/ }).getAttribute('aria-pressed'), 'true');
   await page.getByRole('button', { name: /All tools/ }).click();
   await page.getByRole('searchbox', { name: 'Search tools' }).fill('audio mixer');
@@ -57,7 +57,7 @@ test('catalog, search, categories and empty state work with public ZIPs', async 
   assert.equal(await page.locator('.tool-card').count(), 0);
   assert.equal(await page.locator('#empty-state').isVisible(), true);
   await page.getByRole('button', { name: /Show all tools/ }).click();
-  assert.equal(await page.locator('.tool-card').count(), 14);
+  assert.equal(await page.locator('.tool-card').count(), 15);
   assert.deepEqual(errors, []);
   await page.close();
 });
@@ -81,6 +81,10 @@ test('details, accurate requirements, download links, and Escape focus return', 
   assert.match(await page.locator('dialog').innerText(), /There is no autosave or cloud backup/i);
   assert.equal(await page.locator('dialog').getByRole('link', { name: 'Download Forma Studio ZIP' }).getAttribute('href'), 'https://github.com/lifeemotorola/presence-guard/releases/download/creator-downloads/forma-studio-windows-x64.zip');
   await page.getByRole('button', { name: 'Close details' }).click();
+  await page.getByRole('button', { name: 'View TypeBloom details' }).click();
+  assert.match(await page.locator('dialog').innerText(), /password fields are not detected/i);
+  assert.match(await page.locator('dialog').innerText(), /starts paused/i);
+  await page.getByRole('button', { name: 'Close details' }).click();
   await page.getByRole('button', { name: 'View ScreenForge details' }).click();
   assert.match(await page.locator('dialog').innerText(), /ffmpeg\.exe/);
   await page.getByRole('button', { name: 'Close details' }).click();
@@ -102,7 +106,7 @@ test('unavailable and partial releases show honest Actions fallbacks', async () 
   assert.match(await unavailable.page.locator('dialog').innerText(), /obs-dockbloom-windows-x64/);
   await unavailable.page.close();
   const partial = await openPage({ assets: ['dockbloom-windows-x64.zip'], date: '2030-01-01T00:00:00Z' });
-  assert.match(await partial.page.locator('#download-status').innerText(), /1 of 14/);
+  assert.match(await partial.page.locator('#download-status').innerText(), /1 of 15/);
   assert.equal(await partial.page.getByRole('link', { name: 'Open the MixBloom build on GitHub' }).getAttribute('href'), 'https://github.com/lifeemotorola/presence-guard/actions/workflows/mixbloom-windows.yml');
   assert.equal(await partial.page.getByRole('link', { name: 'Open the Forma Studio build on GitHub' }).getAttribute('href'), 'https://github.com/lifeemotorola/presence-guard/actions/workflows/forma-studio.yml');
   await partial.page.close();

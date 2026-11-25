@@ -22,6 +22,7 @@ on:
       - MixBloom
       - DockBloom
       - KeyBloom
+      - TypeBloom
       - Forma Studio
       - ScreenForge
       - Face Retouch

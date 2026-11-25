@@ -1,6 +1,6 @@
 # The Creator Toolkit website
 
-A static download hub for all 14 products in this repository, created for Emmanuel Suah. It includes search, category filters, product-specific requirements and installation steps. The site has no backend, analytics, or framework; JavaScript is required for the catalog.
+A static download hub for all 15 products in this repository, created for Emmanuel Suah. It includes search, category filters, product-specific requirements and installation steps. The site has no backend, analytics, or framework; JavaScript is required for the catalog.
 
 ## Run locally
 
